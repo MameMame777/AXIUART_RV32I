@@ -1,0 +1,162 @@
+# SystemVerilog/FPGA Development .gitignore
+
+# Simulation and Build Files
+*.log
+*.rpt
+*.wdb
+*.jou
+*.jrn
+*.mxd
+*.vcd
+*.fsdb
+*.tr0
+*.lxt
+*.ghw
+*.fst
+*.hier
+*.cache/
+*.hw/
+*.ip_user_files/
+*.runs/
+*.sim/
+*.srcs/
+
+# DSIM Specific Files
+*.db
+metrics.db
+*.so
+*.paths
+dsim_work/
+debug/
+obj/
+sfe/
+sir/
+image.*
+dsim.env
+
+# Compilation and Temporary Files
+work/
+modelsim.ini
+transcript
+vsim.wlf
+*.wlf
+*.mpf
+*.pb
+*.dcp
+*.bit
+*.ltx
+*.prj
+*.xsa
+*.hdf
+
+# Coverage Reports
+coverage_report/
+cov_work/
+*.covdb
+*.covhtmlreports/
+*.cov
+
+# Tool-specific directories
+.Xil/
+.hbs/
+vivado*
+*.backup.log
+*.str
+
+# IDE and Editor Files
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# License Files (DO NOT COMMIT)
+*.lic
+license.dat
+*.license
+xilinx.lic
+
+# Personal and Confidential Files
+**/personal/
+**/private/
+**/confidential/
+**/*.key
+**/*.pem
+**/*.p12
+**/*.pfx
+
+# Environment Variables and Secrets
+.env
+.env.local
+.env.*.local
+secrets/
+credentials/
+auth/
+
+# Hardware-specific Files (may contain sensitive info)
+*.xdc.bak
+*.tcl.bak
+constraint_backup/
+
+# Test Results and Logs
+test_results/
+*_test_*.log
+*_simulation_*.log
+run_*.log
+compile_output.log
+final_compile.log
+
+# Backup Files
+*.bak
+*.backup
+*.orig
+backup/
+old/
+archive/
+
+# OS Generated Files
+.DS_Store?
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Documentation Build
+_build/
+build/
+dist/
+
+# Python (if used for scripting)
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+
+# Node.js (if used for tooling)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Temporary directories commonly created during development
+temp/
+tmp/
+temporary/
+scratch/
+
+# Package manager files
+*.tar.gz
+*.zip
+*.rar
+*.7z
+
+# Local configuration files that may contain sensitive paths
+local_config.*
+user_config.*
+my_settings.*
+
+# Local development documentation and temporary files
+docs/local/
+docs/comprehensive_work_instructions.md
+reference/SyIEEyuIzFWdpNCM.pdf
