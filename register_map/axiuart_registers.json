@@ -1,0 +1,143 @@
+{
+  "block_name": "AXIUART_Register_Block",
+  "base_addr": "0x1000",
+  "addr_stride_bytes": 4,
+  "registers": [
+    {
+      "name": "CONTROL",
+      "offset": "0x000",
+      "access": "RW",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Control register - includes bridge reset control"
+    },
+    {
+      "name": "STATUS",
+      "offset": "0x004",
+      "access": "RO",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Status register - bridge busy and error code"
+    },
+    {
+      "name": "CONFIG",
+      "offset": "0x008",
+      "access": "RW",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Configuration register - baud rate and timeout"
+    },
+    {
+      "name": "DEBUG",
+      "offset": "0x00C",
+      "access": "RW",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Debug control register - debug mode selection"
+    },
+    {
+      "name": "TX_COUNT",
+      "offset": "0x010",
+      "access": "RO",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "TX transaction counter (read-only)"
+    },
+    {
+      "name": "RX_COUNT",
+      "offset": "0x014",
+      "access": "RO",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "RX transaction counter (read-only)"
+    },
+    {
+      "name": "FIFO_STAT",
+      "offset": "0x018",
+      "access": "RO",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "FIFO status flags (read-only)"
+    },
+    {
+      "name": "VERSION",
+      "offset": "0x01C",
+      "access": "RO",
+      "width_bits": 32,
+      "reset": "0x00010000",
+      "description": "Hardware version register (read-only)"
+    },
+    {
+      "name": "TEST_0",
+      "offset": "0x020",
+      "access": "RW",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Test register 0 - pure read/write test"
+    },
+    {
+      "name": "TEST_1",
+      "offset": "0x024",
+      "access": "RW",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Test register 1 - pattern test"
+    },
+    {
+      "name": "TEST_2",
+      "offset": "0x028",
+      "access": "RW",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Test register 2 - increment test"
+    },
+    {
+      "name": "TEST_3",
+      "offset": "0x02C",
+      "access": "RW",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Test register 3 - mirror test"
+    },
+    {
+      "name": "TEST_4",
+      "offset": "0x040",
+      "access": "RW",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Test register 4 - gap test"
+    },
+    {
+      "name": "TEST_LED",
+      "offset": "0x044",
+      "access": "RW",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "4-bit LED control register"
+    },
+    {
+      "name": "TEST_5",
+      "offset": "0x050",
+      "access": "RW",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Test register 5 - larger gap test"
+    },
+    {
+      "name": "TEST_6",
+      "offset": "0x080",
+      "access": "RW",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Test register 6 - even larger gap test"
+    },
+    {
+      "name": "TEST_7",
+      "offset": "0x100",
+      "access": "RW",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Test register 7 - different range test"
+    }
+  ]
+}
