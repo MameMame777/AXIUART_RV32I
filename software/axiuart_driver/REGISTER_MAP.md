@@ -3,7 +3,7 @@
 **AUTO-GENERATED FILE - DO NOT EDIT MANUALLY**
 
 - **Source:** `register_map/axiuart_registers.json`
-- **Generated:** 2025-12-18 22:27:25
+- **Generated:** 2025-12-21 05:19:06
 - **Base Address:** `0x1000`
 - **Stride:** 4 bytes
 
@@ -28,6 +28,21 @@
 | TEST_5 | `0x1050` | `0x050` | RW | `0x00000000` | Test register 5 - larger gap test |
 | TEST_6 | `0x1080` | `0x080` | RW | `0x00000000` | Test register 6 - even larger gap test |
 | TEST_7 | `0x1100` | `0x100` | RW | `0x00000000` | Test register 7 - different range test |
+| CPU_DBG_CTRL | `0x1200` | `0x200` | RW | `0x00000000` | CPU debug control: halt/run/step requests, halt_on_reset, breakpoint global enable |
+| CPU_DBG_STATUS | `0x1204` | `0x204` | RO | `0x00000001` | CPU debug status: halted/running, break/brk hit, halt reason |
+| CPU_PC | `0x1208` | `0x208` | RW | `0x00000000` | CPU program counter (word address). Write allowed only when halted |
+| CPU_SP | `0x120C` | `0x20C` | RW | `0x0000FFFE` | CPU stack pointer (word address). Write allowed only when halted |
+| CPU_FLAGS | `0x1210` | `0x210` | RW | `0x00000000` | CPU flags (Z/N/C in low bits). Write allowed only when halted |
+| CPU_REG_INDEX | `0x1214` | `0x214` | RW | `0x00000000` | CPU register index selector (0..7) |
+| CPU_REG_DATA | `0x1218` | `0x218` | RW | `0x00000000` | CPU selected register data (16-bit). Write allowed only when halted |
+| CPU_BP0_PC | `0x121C` | `0x21C` | RW | `0x00000000` | Breakpoint 0 PC match value (word address) |
+| CPU_BP1_PC | `0x1220` | `0x220` | RW | `0x00000000` | Breakpoint 1 PC match value (word address) |
+| CPU_BP_CTRL | `0x1224` | `0x224` | RW | `0x00000004` | Breakpoint control (BP0_EN/BP1_EN/BP_MATCH_FETCH) |
+| CPU_MEM_ADDR | `0x1228` | `0x228` | RW | `0x00000000` | Debug memory address (word address) |
+| CPU_MEM_WDATA | `0x122C` | `0x22C` | RW | `0x00000000` | Debug memory write data (16-bit in low bits) |
+| CPU_MEM_RDATA | `0x1230` | `0x230` | RO | `0x00000000` | Debug memory read data (16-bit in low bits) |
+| CPU_MEM_CTRL | `0x1234` | `0x234` | RW | `0x00000000` | Debug memory control: read/write request, auto-inc, busy/err |
+| CPU_ID | `0x1238` | `0x238` | RO | `0x54443331` | CPU identification/version (ASCII 'TD31' placeholder) |
 
 ## Regeneration Instructions
 
