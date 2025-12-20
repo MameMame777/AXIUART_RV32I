@@ -1,0 +1,144 @@
+{
+  "isa_name": "TD4CPU16_MinRISC",
+  "isa_version": "0.1",
+  "word_bits": 16,
+  "pc_unit": "word",
+  "gpr_count": 8,
+  "flags": ["Z", "N", "C"],
+
+  "formats": {
+    "R": {
+      "width_bits": 16,
+      "fields": [
+        {"name": "op", "msb": 15, "lsb": 12},
+        {"name": "rd", "msb": 11, "lsb": 9},
+        {"name": "rs", "msb": 8, "lsb": 6},
+        {"name": "funct", "msb": 5, "lsb": 0}
+      ]
+    },
+    "I": {
+      "width_bits": 16,
+      "fields": [
+        {"name": "op", "msb": 15, "lsb": 12},
+        {"name": "rd", "msb": 11, "lsb": 9},
+        {"name": "imm9", "msb": 8, "lsb": 0}
+      ]
+    },
+    "M": {
+      "width_bits": 16,
+      "fields": [
+        {"name": "op", "msb": 15, "lsb": 12},
+        {"name": "rD", "msb": 11, "lsb": 9},
+        {"name": "rB", "msb": 8, "lsb": 6},
+        {"name": "off6", "msb": 5, "lsb": 0}
+      ]
+    },
+    "B": {
+      "width_bits": 16,
+      "fields": [
+        {"name": "op", "msb": 15, "lsb": 12},
+        {"name": "cond", "msb": 11, "lsb": 9},
+        {"name": "off9", "msb": 8, "lsb": 0}
+      ]
+    },
+    "S": {
+      "width_bits": 16,
+      "fields": [
+        {"name": "op", "msb": 15, "lsb": 12},
+        {"name": "r", "msb": 11, "lsb": 9},
+        {"name": "dir", "msb": 8, "lsb": 8},
+        {"name": "z", "msb": 7, "lsb": 0}
+      ],
+      "fixed": {"z": 0}
+    },
+    "X": {
+      "width_bits": 16,
+      "word_count": 2,
+      "fields_word0": [
+        {"name": "op", "msb": 15, "lsb": 12},
+        {"name": "z", "msb": 11, "lsb": 0}
+      ],
+      "fixed_word0": {"z": 0},
+      "fields_word1": [
+        {"name": "imm16", "msb": 15, "lsb": 0}
+      ]
+    },
+    "SYS": {
+      "width_bits": 16,
+      "fields": [
+        {"name": "op", "msb": 15, "lsb": 12},
+        {"name": "sysop3", "msb": 2, "lsb": 0},
+        {"name": "z", "msb": 11, "lsb": 3}
+      ],
+      "fixed": {"z": 0}
+    }
+  },
+
+  "enums": {
+    "OP": {
+      "R_ALU": 0,
+      "LDI": 1,
+      "ADDI": 2,
+      "LD": 3,
+      "ST": 4,
+      "BR": 5,
+      "SYS": 6,
+      "STACK": 7,
+      "JMP16": 10,
+      "CALL16": 11
+    },
+    "COND": {
+      "AL": 0,
+      "Z": 1,
+      "NZ": 2,
+      "C": 3,
+      "NC": 4,
+      "N": 5,
+      "NN": 6
+    },
+    "FUNCT_R": {
+      "ADD": 0,
+      "SUB": 1,
+      "AND": 2,
+      "OR": 3,
+      "XOR": 4,
+      "CMP": 5,
+      "SHL1": 6,
+      "SHR1": 7,
+      "MOV": 8
+    },
+    "SYSOP": {
+      "RET": 0,
+      "BRK": 1
+    }
+  },
+
+  "instructions": [
+    {"mnemonic": "ADD", "format": "R", "op": "R_ALU", "funct": "ADD", "length_words": 1, "operands": ["rd", "rs"], "flags_write": ["Z", "N", "C"]},
+    {"mnemonic": "SUB", "format": "R", "op": "R_ALU", "funct": "SUB", "length_words": 1, "operands": ["rd", "rs"], "flags_write": ["Z", "N", "C"]},
+    {"mnemonic": "AND", "format": "R", "op": "R_ALU", "funct": "AND", "length_words": 1, "operands": ["rd", "rs"], "flags_write": ["Z", "N"]},
+    {"mnemonic": "OR", "format": "R", "op": "R_ALU", "funct": "OR", "length_words": 1, "operands": ["rd", "rs"], "flags_write": ["Z", "N"]},
+    {"mnemonic": "XOR", "format": "R", "op": "R_ALU", "funct": "XOR", "length_words": 1, "operands": ["rd", "rs"], "flags_write": ["Z", "N"]},
+    {"mnemonic": "CMP", "format": "R", "op": "R_ALU", "funct": "CMP", "length_words": 1, "operands": ["rd", "rs"], "flags_write": ["Z", "N", "C"], "writeback": false},
+    {"mnemonic": "SHL1", "format": "R", "op": "R_ALU", "funct": "SHL1", "length_words": 1, "operands": ["rd"], "flags_write": ["Z", "N", "C"]},
+    {"mnemonic": "SHR1", "format": "R", "op": "R_ALU", "funct": "SHR1", "length_words": 1, "operands": ["rd"], "flags_write": ["Z", "N", "C"]},
+    {"mnemonic": "MOV", "format": "R", "op": "R_ALU", "funct": "MOV", "length_words": 1, "operands": ["rd", "rs"], "flags_write": []},
+
+    {"mnemonic": "LDI", "format": "I", "op": "LDI", "length_words": 1, "operands": ["rd", "imm9u"], "flags_write": []},
+    {"mnemonic": "ADDI", "format": "I", "op": "ADDI", "length_words": 1, "operands": ["rd", "imm9s"], "flags_write": ["Z", "N", "C"]},
+
+    {"mnemonic": "LD", "format": "M", "op": "LD", "length_words": 1, "operands": ["rD", "rB", "off6s"], "flags_write": []},
+    {"mnemonic": "ST", "format": "M", "op": "ST", "length_words": 1, "operands": ["rD", "rB", "off6s"], "flags_write": []},
+
+    {"mnemonic": "BR", "format": "B", "op": "BR", "length_words": 1, "operands": ["cond", "off9s"], "flags_write": []},
+
+    {"mnemonic": "RET", "format": "SYS", "op": "SYS", "sysop": "RET", "length_words": 1, "operands": [], "flags_write": []},
+    {"mnemonic": "BRK", "format": "SYS", "op": "SYS", "sysop": "BRK", "length_words": 1, "operands": [], "flags_write": []},
+
+    {"mnemonic": "PUSH", "format": "S", "op": "STACK", "dir": 0, "length_words": 1, "operands": ["r"], "flags_write": []},
+    {"mnemonic": "POP", "format": "S", "op": "STACK", "dir": 1, "length_words": 1, "operands": ["r"], "flags_write": []},
+
+    {"mnemonic": "JMP16", "format": "X", "op": "JMP16", "length_words": 2, "operands": ["imm16"], "flags_write": []},
+    {"mnemonic": "CALL16", "format": "X", "op": "CALL16", "length_words": 2, "operands": ["imm16"], "flags_write": []}
+  ]
+}

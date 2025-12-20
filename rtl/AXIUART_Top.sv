@@ -52,6 +52,51 @@ module AXIUART_Top #(
     logic [7:0]  fifo_status;
     
     logic [3:0]  test_led_internal;  // LED control from register block
+
+    // --------------------------------------------------------------------
+    // TD4CPU debug wiring (Register_Block <-> CPU)
+    // --------------------------------------------------------------------
+    logic        cpu_halt_req_pulse;
+    logic        cpu_run_req_pulse;
+    logic        cpu_step_req_pulse;
+    logic        cpu_clr_halt_reason_pulse;
+    logic        cpu_halt_on_reset;
+    logic        cpu_bp_global_en;
+    logic        cpu_bp0_en;
+    logic        cpu_bp1_en;
+    logic        cpu_bp_match_fetch;
+    logic [15:0] cpu_bp0_pc;
+    logic [15:0] cpu_bp1_pc;
+
+    logic        cpu_halted;
+    logic        cpu_running;
+    logic        cpu_break_hit;
+    logic        cpu_brk_hit;
+    logic [7:0]  cpu_halt_reason;
+
+    logic [15:0] cpu_pc;
+    logic [15:0] cpu_sp;
+    logic [2:0]  cpu_flags;
+    logic        cpu_wr_pc_pulse;
+    logic [15:0] cpu_wr_pc_data;
+    logic        cpu_wr_sp_pulse;
+    logic [15:0] cpu_wr_sp_data;
+    logic        cpu_wr_flags_pulse;
+    logic [2:0]  cpu_wr_flags_data;
+
+    logic [2:0]  cpu_reg_index;
+    logic [15:0] cpu_reg_rdata;
+    logic        cpu_reg_write_pulse;
+    logic [15:0] cpu_reg_wdata;
+
+    logic [15:0] cpu_mem_addr;
+    logic [15:0] cpu_mem_wdata;
+    logic [15:0] cpu_mem_rdata;
+    logic        cpu_mem_read_req_pulse;
+    logic        cpu_mem_write_req_pulse;
+    logic        cpu_mem_auto_inc;
+    logic        cpu_mem_busy;
+    logic        cpu_mem_err;
     
     // Flow control signals
     logic        rx_fifo_full;
@@ -132,6 +177,100 @@ module AXIUART_Top #(
         .tx_count(tx_count),
         .rx_count(rx_count),
         .fifo_status(fifo_status)
+
+        // CPU debug interface
+        , .cpu_halt_req_pulse(cpu_halt_req_pulse)
+        , .cpu_run_req_pulse(cpu_run_req_pulse)
+        , .cpu_step_req_pulse(cpu_step_req_pulse)
+        , .cpu_clr_halt_reason_pulse(cpu_clr_halt_reason_pulse)
+        , .cpu_halt_on_reset(cpu_halt_on_reset)
+        , .cpu_bp_global_en(cpu_bp_global_en)
+        , .cpu_bp0_en(cpu_bp0_en)
+        , .cpu_bp1_en(cpu_bp1_en)
+        , .cpu_bp_match_fetch(cpu_bp_match_fetch)
+        , .cpu_bp0_pc(cpu_bp0_pc)
+        , .cpu_bp1_pc(cpu_bp1_pc)
+
+        , .cpu_halted(cpu_halted)
+        , .cpu_running(cpu_running)
+        , .cpu_break_hit(cpu_break_hit)
+        , .cpu_brk_hit(cpu_brk_hit)
+        , .cpu_halt_reason(cpu_halt_reason)
+
+        , .cpu_pc(cpu_pc)
+        , .cpu_sp(cpu_sp)
+        , .cpu_flags(cpu_flags)
+        , .cpu_wr_pc_pulse(cpu_wr_pc_pulse)
+        , .cpu_wr_pc_data(cpu_wr_pc_data)
+        , .cpu_wr_sp_pulse(cpu_wr_sp_pulse)
+        , .cpu_wr_sp_data(cpu_wr_sp_data)
+        , .cpu_wr_flags_pulse(cpu_wr_flags_pulse)
+        , .cpu_wr_flags_data(cpu_wr_flags_data)
+
+        , .cpu_reg_index(cpu_reg_index)
+        , .cpu_reg_rdata(cpu_reg_rdata)
+        , .cpu_reg_write_pulse(cpu_reg_write_pulse)
+        , .cpu_reg_wdata(cpu_reg_wdata)
+
+        , .cpu_mem_addr(cpu_mem_addr)
+        , .cpu_mem_wdata(cpu_mem_wdata)
+        , .cpu_mem_rdata(cpu_mem_rdata)
+        , .cpu_mem_read_req_pulse(cpu_mem_read_req_pulse)
+        , .cpu_mem_write_req_pulse(cpu_mem_write_req_pulse)
+        , .cpu_mem_auto_inc(cpu_mem_auto_inc)
+        , .cpu_mem_busy(cpu_mem_busy)
+        , .cpu_mem_err(cpu_mem_err)
+    );
+
+    // Minimal TD4CPU core (debug + RAM bring-up)
+    td4cpu_core #(
+        .RAM_WORDS(4096)
+    ) cpu_inst (
+        .clk(clk),
+        .rst(rst),
+
+        .dbg_halt_req_pulse(cpu_halt_req_pulse),
+        .dbg_run_req_pulse(cpu_run_req_pulse),
+        .dbg_step_req_pulse(cpu_step_req_pulse),
+        .dbg_clr_halt_reason_pulse(cpu_clr_halt_reason_pulse),
+        .dbg_halt_on_reset(cpu_halt_on_reset),
+
+        .dbg_bp_global_en(cpu_bp_global_en),
+        .dbg_bp0_en(cpu_bp0_en),
+        .dbg_bp1_en(cpu_bp1_en),
+        .dbg_bp_match_fetch(cpu_bp_match_fetch),
+        .dbg_bp0_pc(cpu_bp0_pc),
+        .dbg_bp1_pc(cpu_bp1_pc),
+
+        .halted(cpu_halted),
+        .running(cpu_running),
+        .break_hit(cpu_break_hit),
+        .brk_hit(cpu_brk_hit),
+        .halt_reason(cpu_halt_reason),
+
+        .pc(cpu_pc),
+        .sp(cpu_sp),
+        .flags(cpu_flags),
+
+        .dbg_wr_pc_pulse(cpu_wr_pc_pulse),
+        .dbg_wr_pc_data(cpu_wr_pc_data),
+        .dbg_wr_sp_pulse(cpu_wr_sp_pulse),
+        .dbg_wr_sp_data(cpu_wr_sp_data),
+        .dbg_wr_flags_pulse(cpu_wr_flags_pulse),
+        .dbg_wr_flags_data(cpu_wr_flags_data),
+
+        .dbg_reg_index(cpu_reg_index),
+        .dbg_reg_rdata(cpu_reg_rdata),
+        .dbg_reg_write_pulse(cpu_reg_write_pulse),
+        .dbg_reg_wdata(cpu_reg_wdata),
+
+        .dbg_mem_addr(cpu_mem_addr),
+        .dbg_mem_wdata(cpu_mem_wdata),
+        .dbg_mem_rdata(cpu_mem_rdata),
+        .dbg_mem_read_req_pulse(cpu_mem_read_req_pulse),
+        .dbg_mem_write_req_pulse(cpu_mem_write_req_pulse),
+        .dbg_mem_busy(cpu_mem_busy),
+        .dbg_mem_err(cpu_mem_err)
     );
     
     // Hardware Flow Control Logic
