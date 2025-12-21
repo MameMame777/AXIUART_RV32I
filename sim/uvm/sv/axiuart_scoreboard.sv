@@ -18,6 +18,15 @@ class axiuart_scoreboard extends uvm_scoreboard;
     // Register write tracking: address -> expected data
     bit [31:0] write_shadow_regs[bit [31:0]];
     
+    // CPU Memory Debug tracking
+    bit [15:0] cpu_memory_shadow[bit [15:0]];  // CPU internal memory shadow
+    bit [15:0] pending_cpu_mem_addr;            // Current CPU_MEM_ADDR value
+    bit [15:0] cpu_mem_read_queue[$];          // Queue of addresses for pending reads
+    int cpu_memory_match_count;
+    int cpu_memory_mismatch_count;
+    int cpu_memory_write_count;
+    int cpu_memory_read_count;
+    
     // Statistics
     int match_count;
     int mismatch_count;
@@ -30,6 +39,11 @@ class axiuart_scoreboard extends uvm_scoreboard;
         mismatch_count = 0;
         write_count = 0;
         read_count = 0;
+        cpu_memory_match_count = 0;
+        cpu_memory_mismatch_count = 0;
+        cpu_memory_write_count = 0;
+        cpu_memory_read_count = 0;
+        pending_cpu_mem_addr = 16'h0000;
     endfunction
     
     virtual function void build_phase(uvm_phase phase);
@@ -84,6 +98,31 @@ class axiuart_scoreboard extends uvm_scoreboard;
     
     // Track write transactions in shadow register
     virtual function void track_write_transaction(uart_transaction trans);
+        // Track CPU memory debug operations
+        if (trans.address == axiuart_reg_pkg::REG_CPU_MEM_ADDR) begin
+            pending_cpu_mem_addr = trans.data[15:0];
+            `uvm_info("SCOREBOARD", 
+                $sformatf("CPU_MEM_ADDR set: 0x%04X", pending_cpu_mem_addr), 
+                UVM_HIGH)
+        end else if (trans.address == axiuart_reg_pkg::REG_CPU_MEM_WDATA) begin
+            cpu_memory_shadow[pending_cpu_mem_addr] = trans.data[15:0];
+            cpu_memory_write_count++;
+            `uvm_info("SCOREBOARD", 
+                $sformatf("CPU_MEM write: ADDR=0x%04X DATA=0x%04X (total: %0d)", 
+                          pending_cpu_mem_addr, trans.data[15:0], cpu_memory_write_count), 
+                UVM_MEDIUM)
+        end else if (trans.address == axiuart_reg_pkg::REG_CPU_MEM_CTRL) begin
+            // If read request (bit 0), enqueue current address for future verification
+            if (trans.data[0] == 1'b1) begin
+                cpu_mem_read_queue.push_back(pending_cpu_mem_addr);
+                `uvm_info("SCOREBOARD", 
+                    $sformatf("CPU_MEM read request queued: ADDR=0x%04X (queue size: %0d)", 
+                              pending_cpu_mem_addr, cpu_mem_read_queue.size()), 
+                    UVM_HIGH)
+            end
+        end
+        
+        // Normal register write tracking
         write_shadow_regs[trans.address] = trans.data;
         write_count++;
         `uvm_info("SCOREBOARD", 
@@ -97,6 +136,48 @@ class axiuart_scoreboard extends uvm_scoreboard;
         
         read_count++;
         
+        // Special handling for CPU_MEM_RDATA
+        if (trans.address == axiuart_reg_pkg::REG_CPU_MEM_RDATA) begin
+            bit [15:0] expected_mem_data;
+            bit [15:0] actual_mem_data;
+            bit [15:0] read_addr;
+            
+            cpu_memory_read_count++;
+            actual_mem_data = trans.read_response_data[15:0];
+            
+            // Pop address from queue for this read response
+            if (cpu_mem_read_queue.size() == 0) begin
+                `uvm_error("SCOREBOARD", 
+                    $sformatf("CPU_MEM_RDATA response with empty read queue! DATA=0x%04X", actual_mem_data))
+                return;
+            end
+            
+            read_addr = cpu_mem_read_queue.pop_front();
+            
+            if (cpu_memory_shadow.exists(read_addr)) begin
+                expected_mem_data = cpu_memory_shadow[read_addr];
+                
+                if (actual_mem_data == expected_mem_data) begin
+                    cpu_memory_match_count++;
+                    `uvm_info("SCOREBOARD", 
+                        $sformatf("CPU_MEM READ MATCH: ADDR=0x%04X Expected=0x%04X Got=0x%04X", 
+                                  read_addr, expected_mem_data, actual_mem_data), 
+                        UVM_MEDIUM)
+                end else begin
+                    cpu_memory_mismatch_count++;
+                    `uvm_error("SCOREBOARD", 
+                        $sformatf("CPU_MEM READ MISMATCH: ADDR=0x%04X Expected=0x%04X Got=0x%04X",
+                                  read_addr, expected_mem_data, actual_mem_data))
+                end
+            end else begin
+                `uvm_warning("SCOREBOARD", 
+                    $sformatf("CPU_MEM read from unwritten address: ADDR=0x%04X DATA=0x%04X",
+                              read_addr, actual_mem_data))
+            end
+            return;  // Skip normal register verification for CPU_MEM_RDATA
+        end
+        
+        // Normal register read verification
         if (write_shadow_regs.exists(trans.address)) begin
             expected_data = write_shadow_regs[trans.address];
             
@@ -128,10 +209,20 @@ class axiuart_scoreboard extends uvm_scoreboard;
         `uvm_info("SCOREBOARD", $sformatf("MATCHES:      %0d", match_count), UVM_LOW)
         `uvm_info("SCOREBOARD", $sformatf("MISMATCHES:   %0d", mismatch_count), UVM_LOW)
         
-        if (mismatch_count == 0 && read_count > 0) begin
-            `uvm_info("SCOREBOARD", "*** TEST PASSED ***", UVM_LOW)
-        end else if (read_count == 0) begin
-            `uvm_warning("SCOREBOARD", "*** NO READ RESPONSES VERIFIED ***")
+        if (cpu_memory_write_count > 0 || cpu_memory_read_count > 0) begin
+            `uvm_info("SCOREBOARD", "=== CPU Memory Debug Verification Results ===", UVM_LOW)
+            `uvm_info("SCOREBOARD", $sformatf("CPU Memory Writes: %0d", cpu_memory_write_count), UVM_LOW)
+            `uvm_info("SCOREBOARD", $sformatf("CPU Memory Reads:  %0d", cpu_memory_read_count), UVM_LOW)
+            `uvm_info("SCOREBOARD", $sformatf("CPU MEM MATCHES:   %0d", cpu_memory_match_count), UVM_LOW)
+            `uvm_info("SCOREBOARD", $sformatf("CPU MEM MISMATCHES: %0d", cpu_memory_mismatch_count), UVM_LOW)
+        end
+        
+        if (mismatch_count == 0 && cpu_memory_mismatch_count == 0) begin
+            if (match_count > 0 || cpu_memory_match_count > 0) begin
+                `uvm_info("SCOREBOARD", "*** TEST PASSED ***", UVM_LOW)
+            end else if (read_count == 0 && cpu_memory_read_count == 0) begin
+                `uvm_warning("SCOREBOARD", "*** NO READ RESPONSES VERIFIED ***")
+            end
         end else begin
             `uvm_error("SCOREBOARD", "*** TEST FAILED ***")
         end

@@ -140,6 +140,7 @@ module Register_Block #(
     logic [31:0] cpu_bp_ctrl_reg;
     logic [31:0] cpu_mem_addr_reg;
     logic [31:0] cpu_mem_wdata_reg;
+    logic [31:0] cpu_mem_rdata_reg;
     logic [31:0] cpu_mem_ctrl_reg;
     
     // AXI4-Lite response codes
@@ -451,6 +452,7 @@ module Register_Block #(
             cpu_bp_ctrl_reg <= 32'h0000_0004;  // BP_MATCH_FETCH default enabled
             cpu_mem_addr_reg <= 32'h0000_0000;
             cpu_mem_wdata_reg <= 32'h0000_0000;
+            cpu_mem_rdata_reg <= 32'h0000_0000;
             cpu_mem_ctrl_reg <= 32'h0000_0000;
 
             // CPU debug pulses (one-cycle)
@@ -482,6 +484,9 @@ module Register_Block #(
             cpu_reg_write_pulse <= 1'b0;
             cpu_mem_read_req_pulse <= 1'b0;
             cpu_mem_write_req_pulse <= 1'b0;
+            
+            // Latch CPU memory read data (always update to capture latest value)
+            cpu_mem_rdata_reg <= {16'h0000, cpu_mem_rdata};
             
             // Clear test register write detection flags
             test_reg_0_write_detect <= 1'b0;
@@ -879,8 +884,7 @@ module Register_Block #(
                 end
 
                 REG_CPU_MEM_RDATA: begin
-                    read_data[15:0] = cpu_mem_rdata;
-                    read_data[31:16] = '0;
+                    read_data = cpu_mem_rdata_reg;
                 end
 
                 REG_CPU_MEM_CTRL: begin

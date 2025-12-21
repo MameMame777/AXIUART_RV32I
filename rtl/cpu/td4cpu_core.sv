@@ -168,7 +168,9 @@ module td4cpu_core #(
                         if (dbg_mem_write_req_pulse) begin
                             ram[dbg_mem_addr] <= dbg_mem_wdata;
                         end
-                        dbg_mem_rdata <= ram[dbg_mem_addr];
+                        if (dbg_mem_read_req_pulse) begin
+                            dbg_mem_rdata <= ram[dbg_mem_addr];
+                        end
                     end
                 end
             end else begin
