@@ -969,13 +969,13 @@ async def check_dsim_environment() -> str:
     # Check workspace structure
     if workspace_root:
         uvm_dir = workspace_root / "sim" / "uvm"
-        config_file = uvm_dir / "config" / "dsim_config.f"
+        config_file = uvm_dir / "tb" / "dsim_config.f"
         
         if config_file.exists():
             report.append(f"{STATUS_OK} DSIM Config: {config_file}")
         else:
             report.append(f"{STATUS_FAIL} DSIM Config not found: {config_file}")
-            report.append(f"{STATUS_WARN} Ensure dsim_config.f exists in sim/uvm/config/")
+            report.append(f"{STATUS_WARN} Ensure dsim_config.f exists in sim/uvm/tb/")
             
         # Check log directory
         log_dir = workspace_root / "sim" / "exec" / "logs"
@@ -1007,7 +1007,7 @@ async def list_available_tests() -> str:
     if not workspace_root:
         return f"{STATUS_FAIL} Workspace root not configured"
     
-    uvm_tests_dir = workspace_root / "sim" / "uvm" / "tb"
+    uvm_tests_dir = workspace_root / "sim" / "tests"
     
     if not uvm_tests_dir.exists():
         return f"{STATUS_FAIL} UVM tests directory not found: {uvm_tests_dir}"

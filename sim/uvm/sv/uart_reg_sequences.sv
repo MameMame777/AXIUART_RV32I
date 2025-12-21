@@ -70,7 +70,8 @@ class uart_reg_read_sequence extends uvm_sequence#(uart_transaction);
         // frame_data remains empty - Driver will auto-convert
         finish_item(tx);
         
-        // Note: Read response handling would require monitor feedback
+        // Note: Read response will be captured by monitor
+        // read_data will be updated by test via monitor feedback
         `uvm_info("REG_RD_SEQ", "Read transaction sent", UVM_HIGH)
     endtask
 endclass
