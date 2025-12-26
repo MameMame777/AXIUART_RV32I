@@ -12,6 +12,16 @@ module axiuart_tb_top;
     // Instantiate interfaces
     uart_if uart_vif(clk);
     
+    // CPU trace signals from DUT
+    logic        cpu_trace_valid;
+    logic [15:0] cpu_trace_insn;
+    logic [15:0] cpu_trace_pc;
+    logic [2:0]  cpu_trace_rd_idx;
+    logic [15:0] cpu_trace_rd_value;
+    logic [2:0]  cpu_trace_rs_idx;
+    logic [15:0] cpu_trace_rs_value;
+    logic [2:0]  cpu_trace_flags;
+    
     // Instantiate DUT (AXIUART_Top has no external AXI ports!)
     AXIUART_Top #(
         .CLK_FREQ_HZ(125_000_000),  // Match actual testbench clock (125MHz)
@@ -31,7 +41,17 @@ module axiuart_tb_top;
         .uart_tx(uart_vif.uart_tx),
         .uart_rts_n(uart_vif.uart_rts_n),
         .uart_cts_n(uart_vif.uart_cts_n),
-        .led()  // Unconnected
+        .led(),  // Unconnected
+        
+        // CPU trace outputs
+        .cpu_trace_valid(cpu_trace_valid),
+        .cpu_trace_insn(cpu_trace_insn),
+        .cpu_trace_pc(cpu_trace_pc),
+        .cpu_trace_rd_idx(cpu_trace_rd_idx),
+        .cpu_trace_rd_value(cpu_trace_rd_value),
+        .cpu_trace_rs_idx(cpu_trace_rs_idx),
+        .cpu_trace_rs_value(cpu_trace_rs_value),
+        .cpu_trace_flags(cpu_trace_flags)
     );
     
     // Clock generation
@@ -43,6 +63,16 @@ module axiuart_tb_top;
     // Set VIFs in config DB
     initial begin
         uvm_config_db#(virtual uart_if)::set(null, "*", "uart_vif", uart_vif);
+        
+        // Make trace signals available to UVM
+        uvm_config_db#(logic)::set(null, "*", "cpu_trace_valid", cpu_trace_valid);
+        uvm_config_db#(logic [15:0])::set(null, "*", "cpu_trace_insn", cpu_trace_insn);
+        uvm_config_db#(logic [15:0])::set(null, "*", "cpu_trace_pc", cpu_trace_pc);
+        uvm_config_db#(logic [2:0])::set(null, "*", "cpu_trace_rd_idx", cpu_trace_rd_idx);
+        uvm_config_db#(logic [15:0])::set(null, "*", "cpu_trace_rd_value", cpu_trace_rd_value);
+        uvm_config_db#(logic [2:0])::set(null, "*", "cpu_trace_rs_idx", cpu_trace_rs_idx);
+        uvm_config_db#(logic [15:0])::set(null, "*", "cpu_trace_rs_value", cpu_trace_rs_value);
+        uvm_config_db#(logic [2:0])::set(null, "*", "cpu_trace_flags", cpu_trace_flags);
         
         // Run test
         run_test("axiuart_basic_test");

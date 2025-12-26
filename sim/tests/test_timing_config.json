@@ -58,6 +58,53 @@
       "status": "validated",
       "validation_date": "2024-12-21"
     },
+    "axiuart_cpu_logic_test": {
+      "timeout": 600,
+      "timeout_debug": 1200,
+      "operations": 18,
+      "measured_time_ms": 90000,
+      "recommended_verbosity": "UVM_MEDIUM",
+      "debug_verbosity": "UVM_HIGH",
+      "description": "Comprehensive CPU ALU and logic verification with trace buffer",
+      "category": "medium",
+      "waves_recommended": true,
+      "test_phases": [
+        {
+          "phase": "arithmetic",
+          "operations": 7,
+          "tests": ["ADD", "SUB"]
+        },
+        {
+          "phase": "logical",
+          "operations": 4,
+          "tests": ["AND", "OR", "XOR"]
+        },
+        {
+          "phase": "comparison",
+          "operations": 3,
+          "tests": ["CMP"]
+        },
+        {
+          "phase": "shift",
+          "operations": 3,
+          "tests": ["SHL1", "SHR1"]
+        },
+        {
+          "phase": "move",
+          "operations": 1,
+          "tests": ["MOV"]
+        }
+      ],
+      "notes": "Uses trace buffer for fast verification, reduced from UART polling overhead",
+      "uart_timing": {
+        "baud_rate": 115200,
+        "transaction_time_us": 313,
+        "polling_overhead_eliminated": true,
+        "note": "Trace buffer provides 50-900x speedup vs UART polling"
+      },
+      "status": "in_validation",
+      "validation_date": "2024-12-26"
+    },
     "axiuart_cpu_memory_test": {
       "timeout": 1200,
       "timeout_debug": 2400,
