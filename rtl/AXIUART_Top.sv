@@ -19,22 +19,22 @@ module AXIUART_Top #(
     output logic        uart_tx,
     output logic        uart_rts_n,         // Request to Send (active low)
     input  logic        uart_cts_n,         // Clear to Send (active low)
-    output logic [3:0]  led,                // 4-bit LED control
+    output logic [3:0]  led                 // 4-bit LED control
     
+    // Simulation-only outputs
+    `ifdef DEFINE_SIM
     // CPU trace outputs for fast UVM verification
-    output logic        cpu_trace_valid,
+    , output logic        cpu_trace_valid,
     output logic [15:0] cpu_trace_insn,
     output logic [15:0] cpu_trace_pc,
     output logic [2:0]  cpu_trace_rd_idx,
     output logic [15:0] cpu_trace_rd_value,
     output logic [2:0]  cpu_trace_rs_idx,
     output logic [15:0] cpu_trace_rs_value,
-    output logic [2:0]  cpu_trace_flags
+    output logic [2:0]  cpu_trace_flags,
     
-    // System status outputs - simulation only
-    `ifdef DEFINE_SIM
-    // Simulation-only system status outputs
-    , output logic        system_busy,
+    // System status outputs
+    output logic        system_busy,
     output logic [7:0]  system_error,
     output logic        system_ready
     `endif
