@@ -163,6 +163,42 @@ dsim -work work \
      tb_top
 ```
 
+## CPU検証のアプローチ (2024-12追加)
+
+### 直接階層アクセスを採用した理由
+
+CPU検証では、UVMインターフェース層を使用せず、**直接階層アクセス**を採用しています。
+
+```systemverilog
+// 例: axiuart_cpu_logic_test.sv
+task read_trace_buffer_direct(input int index, output bit [31:0] data);
+    data = axiuart_tb_top.dut.cpu_inst.trace_buffer[index[7:0]];
+endtask
+```
+
+**採用理由:**
+1. **検証対象が内部状態**: トレースバッファは外部インターフェースではなく、CPU内部のデバッグ機能
+2. **UVMオーバーヘッド回避**: インターフェース/モニター/予測器レイヤーは不要
+3. **高速実行**: 17テストが約200秒で完了（UART経由では900秒以上）
+4. **シンプルさ**: テストコードが明確で保守しやすい
+5. **プロダクション実績**: 17/17 ALU演算テスト成功（2025-12-27検証済）
+
+**削除したUVMコンポーネント:**
+- `cpu_trace_monitor.sv` - 不要なモニタークラス
+- `cpu_trace_predictor.sv` - 不要な予測器クラス  
+- `td4cpu_trace_if.sv` - 不要なインターフェース定義
+
+**適用ガイドライン:**
+- 外部インターフェース（UART, AXI）→ UVM標準アプローチ
+- 内部デバッグ機能（トレースバッファ）→ 直接階層アクセス
+
+### トレースバッファ仕様
+- **容量**: 256エントリ
+- **フォーマット**: `{instruction[31:16], result[15:0]}`
+- **トリガー**: ALU writeback または flag update
+- **アクセス**: `dut.cpu_inst.trace_buffer[index]`
+- **ポインタ**: `dut.cpu_inst.trace_write_ptr`
+
 ## 今後の拡張
 
 必要に応じて以下を追加:
