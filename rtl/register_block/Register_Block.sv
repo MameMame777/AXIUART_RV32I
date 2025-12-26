@@ -65,6 +65,7 @@ module Register_Block #(
 
     , output logic [2:0]  cpu_reg_index
     , input  logic [15:0] cpu_reg_rdata
+    , output logic        cpu_reg_read_pulse   // NEW: Pulse when CPU_DBG_DATA is read
     , output logic        cpu_reg_write_pulse
     , output logic [15:0] cpu_reg_wdata
 
@@ -76,6 +77,11 @@ module Register_Block #(
     , output logic        cpu_mem_auto_inc
     , input  logic        cpu_mem_busy
     , input  logic        cpu_mem_err
+    
+    // Trace buffer interface
+    , output logic [7:0]  cpu_trace_buf_addr
+    , input  logic [31:0] cpu_trace_buf_rdata
+    , input  logic [7:0]  cpu_trace_write_ptr
 );
 
     // Register address map - compute offsets from generated package
@@ -114,6 +120,8 @@ module Register_Block #(
     localparam bit [11:0] REG_CPU_MEM_RDATA  = (axiuart_reg_pkg::REG_CPU_MEM_RDATA - BASE_ADDR);  // 0x230
     localparam bit [11:0] REG_CPU_MEM_CTRL   = (axiuart_reg_pkg::REG_CPU_MEM_CTRL - BASE_ADDR);   // 0x234
     localparam bit [11:0] REG_CPU_ID         = (axiuart_reg_pkg::REG_CPU_ID - BASE_ADDR);         // 0x238
+    localparam bit [11:0] REG_CPU_TRACE_PTR  = (axiuart_reg_pkg::REG_CPU_TRACE_PTR - BASE_ADDR);  // 0x23C
+    localparam bit [11:0] REG_CPU_TRACE_BASE = (axiuart_reg_pkg::REG_CPU_TRACE_BASE - BASE_ADDR); // 0x300
 
     // Register storage
     logic [31:0] control_reg;      // RW - Control register
@@ -466,6 +474,7 @@ module Register_Block #(
             cpu_wr_sp_data <= 16'h0000;
             cpu_wr_flags_pulse <= 1'b0;
             cpu_wr_flags_data <= 3'b000;
+            cpu_reg_read_pulse <= 1'b0;  // NEW: Clear read pulse
             cpu_reg_write_pulse <= 1'b0;
             cpu_reg_wdata <= 16'h0000;
             cpu_mem_read_req_pulse <= 1'b0;
@@ -481,6 +490,7 @@ module Register_Block #(
             cpu_wr_pc_pulse <= 1'b0;
             cpu_wr_sp_pulse <= 1'b0;
             cpu_wr_flags_pulse <= 1'b0;
+            cpu_reg_read_pulse <= 1'b0;  // NEW: Clear read pulse
             cpu_reg_write_pulse <= 1'b0;
             cpu_mem_read_req_pulse <= 1'b0;
             cpu_mem_write_req_pulse <= 1'b0;
@@ -657,6 +667,7 @@ module Register_Block #(
                         end
 
                         REG_CPU_REG_INDEX: begin
+                            // Only update index - latch trigger moved to read time (Solution 1)
                             masked_value = apply_wstrb_mask(cpu_reg_index_reg, axi.wdata, axi.wstrb);
                             cpu_reg_index_reg <= 32'h0;
                             cpu_reg_index_reg[2:0] <= masked_value[2:0];
@@ -861,6 +872,8 @@ module Register_Block #(
                 REG_CPU_REG_DATA: begin
                     read_data[15:0] = cpu_reg_rdata;
                     read_data[31:16] = '0;
+                    // SOLUTION 1: Generate read pulse to trigger latch at read time
+                    cpu_reg_read_pulse <= 1'b1;
                 end
 
                 REG_CPU_BP0_PC: begin
@@ -895,8 +908,18 @@ module Register_Block #(
                     read_data = 32'h5444_3331;  // ASCII 'TD31'
                 end
 
+                REG_CPU_TRACE_PTR: begin
+                    read_data = {24'h0, cpu_trace_write_ptr};
+                end
+
                 default: begin
-                    read_data = '0;
+                    // Trace buffer range check (0x300-0x3FC)
+                    if (aligned_offset >= REG_CPU_TRACE_BASE && aligned_offset < (REG_CPU_TRACE_BASE + 12'h100)) begin
+                        cpu_trace_buf_addr = aligned_offset[9:2];  // Convert byte address to entry index
+                        read_data = cpu_trace_buf_rdata;
+                    end else begin
+                        read_data = '0;
+                    end
                 end
             endcase
         end else begin

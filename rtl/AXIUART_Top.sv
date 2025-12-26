@@ -19,7 +19,18 @@ module AXIUART_Top #(
     output logic        uart_tx,
     output logic        uart_rts_n,         // Request to Send (active low)
     input  logic        uart_cts_n,         // Clear to Send (active low)
-    output logic [3:0]  led                 // 4-bit LED control
+    output logic [3:0]  led,                // 4-bit LED control
+    
+    // CPU trace outputs for fast UVM verification
+    output logic        cpu_trace_valid,
+    output logic [15:0] cpu_trace_insn,
+    output logic [15:0] cpu_trace_pc,
+    output logic [2:0]  cpu_trace_rd_idx,
+    output logic [15:0] cpu_trace_rd_value,
+    output logic [2:0]  cpu_trace_rs_idx,
+    output logic [15:0] cpu_trace_rs_value,
+    output logic [2:0]  cpu_trace_flags
+    
     // System status outputs - simulation only
     `ifdef DEFINE_SIM
     // Simulation-only system status outputs
@@ -86,6 +97,7 @@ module AXIUART_Top #(
 
     logic [2:0]  cpu_reg_index;
     logic [15:0] cpu_reg_rdata;
+    logic        cpu_reg_read_pulse;   // NEW: Read pulse for latch trigger
     logic        cpu_reg_write_pulse;
     logic [15:0] cpu_reg_wdata;
 
@@ -97,6 +109,11 @@ module AXIUART_Top #(
     logic        cpu_mem_auto_inc;
     logic        cpu_mem_busy;
     logic        cpu_mem_err;
+    
+    // Trace buffer interface
+    logic [7:0]  cpu_trace_buf_addr;
+    logic [31:0] cpu_trace_buf_rdata;
+    logic [7:0]  cpu_trace_write_ptr;
     
     // Flow control signals
     logic        rx_fifo_full;
@@ -209,6 +226,7 @@ module AXIUART_Top #(
 
         , .cpu_reg_index(cpu_reg_index)
         , .cpu_reg_rdata(cpu_reg_rdata)
+        , .cpu_reg_read_pulse(cpu_reg_read_pulse)   // NEW: Read pulse output
         , .cpu_reg_write_pulse(cpu_reg_write_pulse)
         , .cpu_reg_wdata(cpu_reg_wdata)
 
@@ -220,6 +238,11 @@ module AXIUART_Top #(
         , .cpu_mem_auto_inc(cpu_mem_auto_inc)
         , .cpu_mem_busy(cpu_mem_busy)
         , .cpu_mem_err(cpu_mem_err)
+        
+        // Trace buffer interface
+        , .cpu_trace_buf_addr(cpu_trace_buf_addr)
+        , .cpu_trace_buf_rdata(cpu_trace_buf_rdata)
+        , .cpu_trace_write_ptr(cpu_trace_write_ptr)
     );
 
     // Minimal TD4CPU core (debug + RAM bring-up)
@@ -261,6 +284,7 @@ module AXIUART_Top #(
 
         .dbg_reg_index(cpu_reg_index),
         .dbg_reg_rdata(cpu_reg_rdata),
+        .dbg_reg_read_pulse(cpu_reg_read_pulse),   // NEW: Read pulse input
         .dbg_reg_write_pulse(cpu_reg_write_pulse),
         .dbg_reg_wdata(cpu_reg_wdata),
 
@@ -270,7 +294,22 @@ module AXIUART_Top #(
         .dbg_mem_read_req_pulse(cpu_mem_read_req_pulse),
         .dbg_mem_write_req_pulse(cpu_mem_write_req_pulse),
         .dbg_mem_busy(cpu_mem_busy),
-        .dbg_mem_err(cpu_mem_err)
+        .dbg_mem_err(cpu_mem_err),
+        
+        // Trace outputs
+        .trace_valid(cpu_trace_valid),
+        .trace_insn(cpu_trace_insn),
+        .trace_pc(cpu_trace_pc),
+        .trace_rd_idx(cpu_trace_rd_idx),
+        .trace_rd_value(cpu_trace_rd_value),
+        .trace_rs_idx(cpu_trace_rs_idx),
+        .trace_rs_value(cpu_trace_rs_value),
+        .trace_flags(cpu_trace_flags),
+        
+        // Trace buffer interface
+        .trace_buf_addr(cpu_trace_buf_addr),
+        .trace_buf_rdata(cpu_trace_buf_rdata),
+        .trace_write_ptr_out(cpu_trace_write_ptr)
     );
     
     // Hardware Flow Control Logic
