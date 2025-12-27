@@ -46,6 +46,17 @@ REG_CPU_MEM_WDATA = 0x122C  # RW - Debug memory write data (16-bit in low bits)
 REG_CPU_MEM_RDATA = 0x1230  # RO - Debug memory read data (16-bit in low bits)
 REG_CPU_MEM_CTRL = 0x1234  # RW - Debug memory control: read/write request, auto-inc, busy/err
 REG_CPU_ID = 0x1238  # RO - CPU identification/version (ASCII 'TD31' placeholder)
+REG_REVISION = 0x123C  # RO - Hardware revision (date-based: 0xYYYYMMDD)
+REG_CPU_TRACE_CTRL = 0x1240  # RW - Trace buffer control: [0]=enable, [1]=clear_pulse
+REG_CPU_TRACE_PTR = 0x1244  # RO - Trace buffer write pointer (0-255)
+REG_CPU_TRACE_BASE = 0x1300  # RO - Trace buffer base address (256 entries × 4 bytes = 0x1300-0x13FC)
 
 # Register count
-REGISTER_COUNT = 32
+REGISTER_COUNT = 36
+
+# Compatibility aliases for test scripts
+CPU_CONTROL = REG_CPU_DBG_CTRL
+CPU_STATUS = REG_CPU_DBG_STATUS
+CPU_MEM_BASE = REG_CPU_MEM_ADDR
+CPU_DEBUG_ADDR = REG_CPU_REG_INDEX
+CPU_DEBUG_DATA = REG_CPU_REG_DATA

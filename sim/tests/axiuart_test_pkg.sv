@@ -19,5 +19,6 @@
 `include "axiuart_cpu_memory_test.sv"
 `include "axiuart_cpu_simple_mem_test.sv"
 `include "axiuart_cpu_logic_test.sv"  // Unified CPU ALU and logic verification
+`include "axiuart_trace_buffer_read_test.sv"  // Trace buffer register read test
 
 `endif // AXIUART_TEST_PKG_SV
