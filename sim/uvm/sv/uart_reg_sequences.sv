@@ -70,8 +70,7 @@ class uart_reg_read_sequence extends uvm_sequence#(uart_transaction);
         // frame_data remains empty - Driver will auto-convert
         finish_item(tx);
         
-        // Note: For trace buffer verification, use direct hierarchical access
-        // instead of UART reads for better performance
+        // Note: Read response handling would require monitor feedback
         `uvm_info("REG_RD_SEQ", "Read transaction sent", UVM_HIGH)
     endtask
 endclass
