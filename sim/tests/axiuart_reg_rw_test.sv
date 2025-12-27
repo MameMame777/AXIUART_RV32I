@@ -49,7 +49,7 @@ class axiuart_reg_rw_test extends axiuart_base_test;
             wr_seq[i].start(env.uart_agt.sequencer);
         end
         
-        #5000ns;  // Wait for DUT processing
+        #50000ns;  // Wait 50us for DUT write processing
         
         // 3. Send read commands (note: read-back verification requires Monitor enhancement)
         `uvm_info(get_type_name(), "Sending read commands for 6 test registers...", UVM_LOW)
@@ -67,7 +67,7 @@ class axiuart_reg_rw_test extends axiuart_base_test;
                 $sformatf("Read command sent for addr=0x%08X", rd_seq[i].reg_addr), UVM_MEDIUM)
         end
         
-        #5000000ns;  // Wait 5ms for all READ responses (5 frames × 694μs each + margin)
+        #500000ns;  // Wait 500us for all READ responses (6 frames × ~70μs each + margin)
         
         // 5. Verify Scoreboard results
         `uvm_info(get_type_name(), "=== Verification Phase: Scoreboard Check ===", UVM_LOW)
