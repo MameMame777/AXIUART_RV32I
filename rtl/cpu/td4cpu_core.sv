@@ -82,6 +82,9 @@ module td4cpu_core #(
 
     logic [15:0] regfile [0:7];
 
+    // RAM: Infer Block RAM with output register for timing
+    (* ram_style = "block" *)
+    (* rw_addr_collision = "yes" *)
     logic [15:0] ram [0:RAM_WORDS-1];
     
     // Trace buffer: 256 entries for capturing instruction execution
@@ -127,11 +130,27 @@ module td4cpu_core #(
     (* keep = "true" *) logic debug_running;
     (* keep = "true" *) logic [7:0] debug_halt_reason;
     
-    // ALU writeback holding registers (separate from automatic function variables)
+    // ALU Pipeline Stage 1: Break critical path (PC→RAM→ALU)
+    // These registers hold ALU computation before flag generation
+    logic [15:0] alu_result_stage1;
+    logic [2:0]  alu_rd_stage1;
+    logic        alu_writeback_en_stage1;
+    logic        alu_flags_update_en_stage1;
+    logic [2:0]  alu_input_flags_stage1;  // Capture input flags for flag computation
+    logic [15:0] alu_operand_a_stage1;    // For CMP flag generation
+    logic [15:0] alu_operand_b_stage1;    // For CMP flag generation
+    logic [5:0]  alu_funct_stage1;        // Function code for stage 2
+    
+    // ALU Pipeline Stage 2 (writeback holding registers)
+    // Timing optimization: Enable register replication and balancing
+    (* max_fanout = 50 *)
     logic [15:0] alu_result_hold;
     logic [2:0]  alu_rd_hold;
+    (* max_fanout = 20 *)
     logic        alu_writeback_en_hold;
+    (* max_fanout = 20 *)
     logic        alu_flags_update_en_hold;  // Track flag updates (for CMP, etc.)
+    (* max_fanout = 30 *)
     logic [2:0]  alu_flags_hold;  // {c, n, z}
     
     // Additional debug signals for writeback tracking
@@ -363,6 +382,66 @@ module td4cpu_core #(
             end
         endcase
     endfunction
+    
+    // ========================================
+    // ALU Flag Computation (Pipeline Stage 2)
+    // ========================================
+    // Separated flag generation for timing optimization
+    function automatic void compute_alu_flags(
+        input  logic [5:0]  funct,
+        input  logic [15:0] alu_result,
+        input  logic [15:0] operand_a,
+        input  logic [15:0] operand_b,
+        input  logic [2:0]  input_flags,
+        output logic        flag_z,
+        output logic        flag_n,
+        output logic        flag_c
+    );
+        logic [16:0] temp_add, temp_sub;
+        
+        // Initialize with input flags (preserved for non-flag-updating ops)
+        flag_c = input_flags[2];
+        flag_z = input_flags[0];
+        flag_n = input_flags[1];
+        
+        case (funct)
+            FUNCT_ADD: begin
+                temp_add = {1'b0, operand_a} + {1'b0, operand_b};
+                flag_z = (alu_result == 16'h0000);
+                flag_n = alu_result[15];
+                flag_c = temp_add[16];
+            end
+            
+            FUNCT_SUB, FUNCT_CMP: begin
+                temp_sub = {1'b0, operand_a} - {1'b0, operand_b};
+                flag_z = (alu_result == 16'h0000);
+                flag_n = alu_result[15];
+                flag_c = ~temp_sub[16];
+            end
+            
+            FUNCT_AND, FUNCT_OR, FUNCT_XOR: begin
+                flag_z = (alu_result == 16'h0000);
+                flag_n = alu_result[15];
+                // flag_c preserved from input
+            end
+            
+            FUNCT_SHL1: begin
+                flag_z = (alu_result == 16'h0000);
+                flag_n = alu_result[15];
+                flag_c = operand_a[15];
+            end
+            
+            FUNCT_SHR1: begin
+                flag_z = (alu_result == 16'h0000);
+                flag_n = alu_result[15];
+                flag_c = operand_a[0];
+            end
+            
+            default: begin
+                // Preserve input flags
+            end
+        endcase
+    endfunction
 
     logic step_pending;
 
@@ -404,6 +483,17 @@ module td4cpu_core #(
             debug_alu_writeback <= 1'b0;
             debug_alu_flags_update <= 1'b0;
             
+            // ALU Stage 1 reset
+            alu_result_stage1 <= 16'd0;
+            alu_rd_stage1 <= 3'd0;
+            alu_writeback_en_stage1 <= 1'b0;
+            alu_flags_update_en_stage1 <= 1'b0;
+            alu_input_flags_stage1 <= 3'd0;
+            alu_operand_a_stage1 <= 16'd0;
+            alu_operand_b_stage1 <= 16'd0;
+            alu_funct_stage1 <= 6'd0;
+            
+            // ALU Stage 2 reset
             alu_result_hold <= 16'd0;
             alu_rd_hold <= 3'd0;
             alu_writeback_en_hold <= 1'b0;            alu_flags_update_en_hold <= 1'b0;            alu_flags_hold <= 3'd0;
@@ -424,7 +514,41 @@ module td4cpu_core #(
                 debug_reg_write_data <= dbg_reg_wdata;
             end
             
-            // ALU writeback stage (uses holding registers from previous cycle)
+            // ========================================
+            // ALU Pipeline Stage 2: Flag Generation
+            // ========================================
+            // Move stage 1 results to holding registers and generate flags
+            // This completes the second half of the critical path
+            if (alu_writeback_en_stage1 || alu_flags_update_en_stage1) begin
+                alu_result_hold <= alu_result_stage1;
+                alu_rd_hold <= alu_rd_stage1;
+                alu_writeback_en_hold <= alu_writeback_en_stage1;
+                alu_flags_update_en_hold <= alu_flags_update_en_stage1;
+                
+                // Generate flags from stage 1 data
+                if (alu_flags_update_en_stage1) begin
+                    logic flag_z, flag_n, flag_c;
+                    compute_alu_flags(
+                        alu_funct_stage1,
+                        alu_result_stage1,
+                        alu_operand_a_stage1,
+                        alu_operand_b_stage1,
+                        alu_input_flags_stage1,
+                        flag_z,
+                        flag_n,
+                        flag_c
+                    );
+                    alu_flags_hold <= {flag_c, flag_n, flag_z};
+                end
+                
+                // Clear stage 1 enables
+                alu_writeback_en_stage1 <= 1'b0;
+                alu_flags_update_en_stage1 <= 1'b0;
+            end
+            
+            // ========================================
+            // ALU Pipeline Stage 3: Writeback
+            // ========================================
             // This must complete BEFORE halt for step execution
             if (alu_writeback_en_hold) begin
                 regfile[alu_rd_hold] <= alu_result_hold;
@@ -548,14 +672,16 @@ module td4cpu_core #(
                                 r_flags_update_en
                             );
                             
-                            // Store to holding registers (writeback happens next cycle)
-                            alu_result_hold <= r_result;
-                            alu_rd_hold <= insn[11:9];
-                            alu_writeback_en_hold <= r_writeback_en;
-                            alu_flags_update_en_hold <= r_flags_update_en;
-                            if (r_flags_update_en) begin
-                                alu_flags_hold <= {r_flag_c, r_flag_n, r_flag_z};
-                            end
+                            // Pipeline Stage 1: Store ALU result to intermediate registers
+                            // This breaks the critical path: pc→ram→alu_stage1 (shorter)
+                            alu_result_stage1 <= r_result;
+                            alu_rd_stage1 <= insn[11:9];
+                            alu_writeback_en_stage1 <= r_writeback_en;
+                            alu_flags_update_en_stage1 <= r_flags_update_en;
+                            alu_input_flags_stage1 <= flags;
+                            alu_operand_a_stage1 <= regfile[insn[11:9]];
+                            alu_operand_b_stage1 <= regfile[insn[8:6]];
+                            alu_funct_stage1 <= insn[5:0];
                             
                             // Debug: Capture ALU result
                             debug_alu_result <= r_result;
