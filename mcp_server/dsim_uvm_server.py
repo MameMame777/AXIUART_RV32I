@@ -295,7 +295,10 @@ def _run_subprocess_sync(cmd: List[str], timeout: int, cwd: Path) -> subprocess.
     )
 
     try:
-        stdout, stderr = proc.communicate(timeout=timeout)
+        if timeout is None:
+            stdout, stderr = proc.communicate()
+        else:
+            stdout, stderr = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired as exc:
         proc.terminate()
         try:
@@ -308,7 +311,7 @@ def _run_subprocess_sync(cmd: List[str], timeout: int, cwd: Path) -> subprocess.
     return subprocess.CompletedProcess(cmd, proc.returncode, stdout, stderr)
 
 
-async def execute_dsim_command(cmd: List[str], timeout: int = 300, cwd: Optional[Path] = None) -> str:
+async def execute_dsim_command(cmd: List[str], timeout: Optional[int] = None, cwd: Optional[Path] = None) -> str:
     """Execute DSIM command with enhanced error handling and diagnostics."""
     
     logger.info(f"Executing DSIM: {' '.join(cmd)}")
@@ -349,10 +352,13 @@ async def execute_dsim_command(cmd: List[str], timeout: int = 300, cwd: Optional
                 stderr=asyncio.subprocess.PIPE,
                 cwd=uvm_work_dir
             )
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(), 
-                timeout=timeout
-            )
+            if timeout is None:
+                stdout, stderr = await process.communicate()
+            else:
+                stdout, stderr = await asyncio.wait_for(
+                    process.communicate(), 
+                    timeout=timeout
+                )
             return_code = process.returncode
             
             # CRITICAL: Wait for DSIM to flush log file buffers (non-Windows)
@@ -442,7 +448,7 @@ async def run_uvm_simulation(
     wave_format: Literal["VCD", "MXD"] = "MXD",
     coverage: bool = True,
     seed: int = 1,
-    timeout: int = 300,
+    timeout: Optional[int] = None,
     plusargs: Optional[List[str]] = None,
     use_simplified: bool = True
 ) -> str:
@@ -465,6 +471,8 @@ async def run_uvm_simulation(
     Raises:
         DSIMError: Enhanced DSIM-specific errors with actionable suggestions
     """
+    
+    logger.info(f"[DEBUG] run_uvm_simulation called with timeout={timeout}")
     
     # Environment validation
     if not setup_dsim_environment():
@@ -1089,7 +1097,7 @@ async def run_simulation(
     test_name: str = "uart_axi4_basic_test",
     verbosity: Literal["UVM_NONE", "UVM_LOW", "UVM_MEDIUM", "UVM_HIGH", "UVM_FULL", "UVM_DEBUG"] = "UVM_DEBUG",
     seed: int = 1,
-    timeout: int = 300
+    timeout: Optional[int] = None
 ) -> str:
     """Execute simulation using pre-compiled design for faster iteration.
     
