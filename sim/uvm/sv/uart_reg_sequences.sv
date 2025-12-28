@@ -56,7 +56,7 @@ class uart_reg_read_sequence extends uvm_sequence#(uart_transaction);
     endfunction
     
     virtual task body();
-        uart_transaction tx;
+        uart_transaction tx, rsp;
         
         `uvm_info("REG_RD_SEQ", 
             $sformatf("Reading from addr=0x%08X", reg_addr), 
@@ -70,7 +70,12 @@ class uart_reg_read_sequence extends uvm_sequence#(uart_transaction);
         // frame_data remains empty - Driver will auto-convert
         finish_item(tx);
         
-        // Note: Read response handling would require monitor feedback
-        `uvm_info("REG_RD_SEQ", "Read transaction sent", UVM_HIGH)
+        // Wait for read response from driver
+        get_response(rsp);
+        read_data = rsp.data;
+        
+        `uvm_info("REG_RD_SEQ", 
+            $sformatf("Read response received: DATA=0x%08X", read_data), 
+            UVM_HIGH)
     endtask
 endclass

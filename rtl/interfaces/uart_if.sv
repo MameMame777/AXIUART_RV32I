@@ -254,7 +254,8 @@ interface uart_if (
                         if (uart_tx == 1) begin  // Valid stop bit
                             rx_data <= tx_shift_reg[8:1];
                             rx_valid <= 1;
-                            $display("[TX_DECODER @ %0t] Decoded byte: 0x%02X", $time, tx_shift_reg[8:1]);
+                            // Suppress debug output - too verbose even at UVM_LOW
+                            // $display("[TX_DECODER @ %0t] Decoded byte: 0x%02X", $time, tx_shift_reg[8:1]);
                         end else begin
                             rx_error <= 1;  // Framing error
                             $display("[TX_DECODER @ %0t] FRAMING ERROR - stop bit=%b", $time, uart_tx);

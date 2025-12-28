@@ -13,12 +13,16 @@ class uart_driver extends uvm_driver #(uart_transaction);
     // Analysis port to broadcast write commands to scoreboard
     uvm_analysis_port #(uart_transaction) item_sent_port;
     
+    // Mailbox for read responses from monitor
+    mailbox #(uart_transaction) read_response_mbx;
+    
     // Baud rate timing
     int bit_period_ns = 8680;  // 115200 baud default
     
     function new(string name = "uart_driver", uvm_component parent = null);
         super.new(name, parent);
         item_sent_port = new("item_sent_port", this);
+        read_response_mbx = new();
     endfunction
     
     virtual function void build_phase(uvm_phase phase);
@@ -46,6 +50,34 @@ class uart_driver extends uvm_driver #(uart_transaction);
                 handle_reset(req);
             end else begin
                 drive_transaction(req);
+                
+                // For read transactions, wait for response and send back to sequence
+                if (req.is_read) begin
+                    uart_transaction rsp;
+                    int timeout_cycles = 0;
+                    bit got_response = 0;
+                    
+                    // Wait for response with timeout (max 100ms simulation time)
+                    fork
+                        begin
+                            read_response_mbx.get(rsp);
+                            got_response = 1;
+                        end
+                        begin
+                            #100ms;
+                        end
+                    join_any
+                    disable fork;
+                    
+                    if (got_response) begin
+                        rsp.set_id_info(req);
+                        seq_item_port.put_response(rsp);
+                    end else begin
+                        `uvm_warning("UART_DRIVER", 
+                            $sformatf("Read response timeout for address 0x%08X - sequence may not have called get_response()", 
+                            req.address))
+                    end
+                end
             end
             
             seq_item_port.item_done();

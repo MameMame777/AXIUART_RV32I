@@ -35,6 +35,8 @@ class uart_agent extends uvm_agent;
         
         if (is_active == UVM_ACTIVE) begin
             driver.seq_item_port.connect(sequencer.seq_item_export);
+            // Connect mailbox for read responses from monitor to driver
+            monitor.read_response_mbx = driver.read_response_mbx;
         end
     endfunction
     

@@ -46,7 +46,7 @@ def _parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
         help="Waveform format: MXD (default) or VCD",
     )
     parser.add_argument("--coverage", action="store_true", help="Collect coverage")
-    parser.add_argument("--timeout", type=int, default=300, help="Timeout in seconds")
+    parser.add_argument("--timeout", type=int, default=None, help="Timeout in seconds (auto-select from config if not specified)")
     parser.add_argument("--compile-timeout", type=int, default=120, help="Compile timeout in seconds (batch mode only)")
     parser.add_argument(
         "--plusarg",
@@ -99,8 +99,10 @@ def _resolve_tool_invocation(args: argparse.Namespace) -> Tuple[str, Dict[str, A
             "waves": waves_setting,
             "wave_format": args.wave_format,
             "coverage": args.coverage,
-            "timeout": args.timeout,
         }
+        # Only include timeout if explicitly specified
+        if args.timeout is not None:
+            tool_args["timeout"] = args.timeout
         if plusargs:
             tool_args["plusargs"] = plusargs
         return "run_uvm_simulation", tool_args
@@ -109,16 +111,18 @@ def _resolve_tool_invocation(args: argparse.Namespace) -> Tuple[str, Dict[str, A
         tool_args = {
             "test_name": _default_test_name(args),
             "verbosity": args.verbosity,
-            "timeout": args.timeout,
         }
+        if args.timeout is not None:
+            tool_args["timeout"] = args.timeout
         return args.tool, tool_args
 
     if args.tool == "run_simulation":
         tool_args = {
             "test_name": _default_test_name(args),
             "verbosity": args.verbosity,
-            "timeout": args.timeout,
         }
+        if args.timeout is not None:
+            tool_args["timeout"] = args.timeout
         if plusargs:
             tool_args["plusargs"] = plusargs
         return args.tool, tool_args

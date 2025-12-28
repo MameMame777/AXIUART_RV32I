@@ -31,6 +31,58 @@ module Register_Block #(
     
     // LED control output
     output logic [3:0]  test_led               // 4-bit LED control
+
+    // --------------------------------------------------------------------
+    // CPU debug interface (for TD4CPU16_MinRISC)
+    // --------------------------------------------------------------------
+    , output logic        cpu_halt_req_pulse
+    , output logic        cpu_run_req_pulse
+    , output logic        cpu_step_req_pulse
+    , output logic        cpu_clr_halt_reason_pulse
+    , output logic        cpu_halt_on_reset
+    , output logic        cpu_bp_global_en
+    , output logic        cpu_bp0_en
+    , output logic        cpu_bp1_en
+    , output logic        cpu_bp_match_fetch
+    , output logic [15:0] cpu_bp0_pc
+    , output logic [15:0] cpu_bp1_pc
+
+    , input  logic        cpu_halted
+    , input  logic        cpu_running
+    , input  logic        cpu_break_hit
+    , input  logic        cpu_brk_hit
+    , input  logic [7:0]  cpu_halt_reason
+
+    , input  logic [15:0] cpu_pc
+    , input  logic [15:0] cpu_sp
+    , input  logic [2:0]  cpu_flags
+    , output logic        cpu_wr_pc_pulse
+    , output logic [15:0] cpu_wr_pc_data
+    , output logic        cpu_wr_sp_pulse
+    , output logic [15:0] cpu_wr_sp_data
+    , output logic        cpu_wr_flags_pulse
+    , output logic [2:0]  cpu_wr_flags_data
+
+    , output logic [2:0]  cpu_reg_index
+    , input  logic [15:0] cpu_reg_rdata
+    , output logic        cpu_reg_read_pulse   // NEW: Pulse when CPU_DBG_DATA is read
+    , output logic        cpu_reg_write_pulse
+    , output logic [15:0] cpu_reg_wdata
+
+    , output logic [15:0] cpu_mem_addr
+    , output logic [15:0] cpu_mem_wdata
+    , input  logic [15:0] cpu_mem_rdata
+    , output logic        cpu_mem_read_req_pulse
+    , output logic        cpu_mem_write_req_pulse
+    , output logic        cpu_mem_auto_inc
+    , input  logic        cpu_mem_busy
+    , input  logic        cpu_mem_err
+    
+    // Trace buffer interface (read-only access pattern like CPU_MEM)
+    , input  logic [31:0] cpu_trace_buf_rdata  // Input: data from trace buffer at trace_addr
+    , input  logic [7:0]  cpu_trace_write_ptr
+    , output logic        cpu_trace_enable      // NEW: Enable trace recording
+    , output logic        cpu_trace_clear_pulse // NEW: Clear trace buffer
 );
 
     // Register address map - compute offsets from generated package
@@ -53,6 +105,28 @@ module Register_Block #(
     localparam bit [11:0] REG_TEST_6     = (axiuart_reg_pkg::REG_TEST_6 - BASE_ADDR);      // 0x080
     localparam bit [11:0] REG_TEST_7     = (axiuart_reg_pkg::REG_TEST_7 - BASE_ADDR);      // 0x100
 
+    // CPU debug registers (from SSOT JSON)
+    localparam bit [11:0] REG_CPU_DBG_CTRL   = (axiuart_reg_pkg::REG_CPU_DBG_CTRL - BASE_ADDR);   // 0x200
+    localparam bit [11:0] REG_CPU_DBG_STATUS = (axiuart_reg_pkg::REG_CPU_DBG_STATUS - BASE_ADDR); // 0x204
+    localparam bit [11:0] REG_CPU_PC         = (axiuart_reg_pkg::REG_CPU_PC - BASE_ADDR);         // 0x208
+    localparam bit [11:0] REG_CPU_SP         = (axiuart_reg_pkg::REG_CPU_SP - BASE_ADDR);         // 0x20C
+    localparam bit [11:0] REG_CPU_FLAGS      = (axiuart_reg_pkg::REG_CPU_FLAGS - BASE_ADDR);      // 0x210
+    localparam bit [11:0] REG_CPU_REG_INDEX  = (axiuart_reg_pkg::REG_CPU_REG_INDEX - BASE_ADDR);  // 0x214
+    localparam bit [11:0] REG_CPU_REG_DATA   = (axiuart_reg_pkg::REG_CPU_REG_DATA - BASE_ADDR);   // 0x218
+    localparam bit [11:0] REG_CPU_BP0_PC     = (axiuart_reg_pkg::REG_CPU_BP0_PC - BASE_ADDR);     // 0x21C
+    localparam bit [11:0] REG_CPU_BP1_PC     = (axiuart_reg_pkg::REG_CPU_BP1_PC - BASE_ADDR);     // 0x220
+    localparam bit [11:0] REG_CPU_BP_CTRL    = (axiuart_reg_pkg::REG_CPU_BP_CTRL - BASE_ADDR);    // 0x224
+    localparam bit [11:0] REG_CPU_MEM_ADDR   = (axiuart_reg_pkg::REG_CPU_MEM_ADDR - BASE_ADDR);   // 0x228
+    localparam bit [11:0] REG_CPU_MEM_WDATA  = (axiuart_reg_pkg::REG_CPU_MEM_WDATA - BASE_ADDR);  // 0x22C
+    localparam bit [11:0] REG_CPU_MEM_RDATA  = (axiuart_reg_pkg::REG_CPU_MEM_RDATA - BASE_ADDR);  // 0x230
+    localparam bit [11:0] REG_CPU_MEM_CTRL   = (axiuart_reg_pkg::REG_CPU_MEM_CTRL - BASE_ADDR);   // 0x234
+    localparam bit [11:0] REG_CPU_ID         = (axiuart_reg_pkg::REG_CPU_ID - BASE_ADDR);         // 0x238
+    localparam bit [11:0] REG_REVISION     = (axiuart_reg_pkg::REG_REVISION - BASE_ADDR);     // 0x23C
+    localparam bit [11:0] REG_CPU_TRACE_ADDR = (axiuart_reg_pkg::REG_CPU_TRACE_ADDR - BASE_ADDR); // 0x238
+    localparam bit [11:0] REG_CPU_TRACE_RDATA = (axiuart_reg_pkg::REG_CPU_TRACE_RDATA - BASE_ADDR); // 0x23C
+    localparam bit [11:0] REG_CPU_TRACE_CTRL = (axiuart_reg_pkg::REG_CPU_TRACE_CTRL - BASE_ADDR); // 0x240
+    localparam bit [11:0] REG_CPU_TRACE_PTR  = (axiuart_reg_pkg::REG_CPU_TRACE_PTR - BASE_ADDR);  // 0x244
+
     // Register storage
     logic [31:0] control_reg;      // RW - Control register
     logic [31:0] config_reg;       // RW - Configuration register  
@@ -69,6 +143,19 @@ module Register_Block #(
     logic [31:0] test_reg_6;       // RW - Test register 6 (even larger gap)
     logic [31:0] test_reg_7;       // RW - Test register 7 (different range)
     logic [31:0] test_led_reg;     // RW - Test LED register (4-bit LED control)
+
+    // CPU debug register storage (RW parts live here; RO is derived from CPU inputs)
+    logic [31:0] cpu_dbg_ctrl_reg;
+    logic [31:0] cpu_reg_index_reg;
+    logic [31:0] cpu_bp0_pc_reg;
+    logic [31:0] cpu_bp1_pc_reg;
+    logic [31:0] cpu_bp_ctrl_reg;
+    logic [31:0] cpu_mem_addr_reg;
+    logic [31:0] cpu_mem_wdata_reg;
+    logic [31:0] cpu_mem_rdata_reg;
+    logic [31:0] cpu_mem_ctrl_reg;
+    logic [31:0] cpu_trace_addr_reg;   // NEW: Trace buffer address (entry index)
+    logic [31:0] cpu_trace_ctrl_reg;  // NEW: Trace control [0]=enable, [1]=clear_pulse
     
     // AXI4-Lite response codes
     localparam bit [1:0] RESP_OKAY   = 2'b00;
@@ -202,7 +289,13 @@ module Register_Block #(
             REG_CONTROL, REG_STATUS, REG_CONFIG, REG_DEBUG,
             REG_TX_COUNT, REG_RX_COUNT, REG_FIFO_STAT, REG_VERSION,
             REG_TEST_0, REG_TEST_1, REG_TEST_2, REG_TEST_3,
-            REG_TEST_4, REG_TEST_5, REG_TEST_6, REG_TEST_7, REG_TEST_LED: begin
+            REG_TEST_4, REG_TEST_5, REG_TEST_6, REG_TEST_7, REG_TEST_LED,
+            REG_CPU_DBG_CTRL, REG_CPU_PC, REG_CPU_SP, REG_CPU_FLAGS,
+            REG_CPU_REG_INDEX, REG_CPU_REG_DATA,
+            REG_CPU_BP0_PC, REG_CPU_BP1_PC, REG_CPU_BP_CTRL,
+            REG_CPU_MEM_ADDR, REG_CPU_MEM_WDATA, REG_CPU_MEM_CTRL,
+            REG_CPU_TRACE_ADDR, REG_CPU_TRACE_CTRL,
+            REG_CPU_ID, REG_REVISION, REG_CPU_TRACE_CTRL, REG_CPU_TRACE_PTR: begin
                 within_register_range = 1'b1;
             end
             default: begin
@@ -231,7 +324,13 @@ module Register_Block #(
             REG_CONTROL, REG_STATUS, REG_CONFIG, REG_DEBUG,
             REG_TX_COUNT, REG_RX_COUNT, REG_FIFO_STAT, REG_VERSION,
             REG_TEST_0, REG_TEST_1, REG_TEST_2, REG_TEST_3,
-            REG_TEST_4, REG_TEST_5, REG_TEST_6, REG_TEST_7, REG_TEST_LED: begin
+            REG_TEST_4, REG_TEST_5, REG_TEST_6, REG_TEST_7, REG_TEST_LED,
+            REG_CPU_DBG_CTRL, REG_CPU_DBG_STATUS, REG_CPU_PC, REG_CPU_SP, REG_CPU_FLAGS,
+            REG_CPU_REG_INDEX, REG_CPU_REG_DATA,
+            REG_CPU_BP0_PC, REG_CPU_BP1_PC, REG_CPU_BP_CTRL,
+            REG_CPU_MEM_ADDR, REG_CPU_MEM_WDATA, REG_CPU_MEM_RDATA, REG_CPU_MEM_CTRL,
+            REG_CPU_TRACE_ADDR, REG_CPU_TRACE_RDATA, REG_CPU_TRACE_CTRL, REG_CPU_TRACE_PTR,
+            REG_CPU_ID, REG_REVISION: begin
                 // Valid register found
             end
             default: begin
@@ -251,6 +350,22 @@ module Register_Block #(
     // Control signals derived from handshake
     wire write_enable = (axi_state == WRITE_DATA) && w_handshake;
     wire read_enable = (axi_state == READ_DATA);
+
+    // CPU debug configuration outputs from stored regs
+    assign cpu_halt_on_reset = cpu_dbg_ctrl_reg[3];
+    assign cpu_bp_global_en = cpu_dbg_ctrl_reg[8];
+    assign cpu_bp0_en = cpu_bp_ctrl_reg[0];
+    assign cpu_bp1_en = cpu_bp_ctrl_reg[1];
+    assign cpu_bp_match_fetch = cpu_bp_ctrl_reg[2];
+    assign cpu_bp0_pc = cpu_bp0_pc_reg[15:0];
+    assign cpu_bp1_pc = cpu_bp1_pc_reg[15:0];
+
+    assign cpu_reg_index = cpu_reg_index_reg[2:0];
+    assign cpu_mem_addr = cpu_mem_addr_reg[15:0];
+    assign cpu_mem_wdata = cpu_mem_wdata_reg[15:0];
+    assign cpu_mem_auto_inc = cpu_mem_ctrl_reg[2];
+    assign cpu_trace_enable = cpu_trace_ctrl_reg[0];
+    assign cpu_trace_clear_pulse = cpu_trace_ctrl_reg[1];
     
     // Core AXI debug signals 
     wire axi_awvalid_debug = axi.awvalid;               // CRITICAL: Master awvalid reaches slave
@@ -258,6 +373,27 @@ module Register_Block #(
     
     // AXI4-Lite data and address debug
     wire [31:0] axi_awaddr_debug = axi.awaddr;          // CRITICAL: Write address
+
+    // CPU status packed for RO reads
+    logic [31:0] cpu_dbg_status_ro;
+    always_comb begin
+        cpu_dbg_status_ro = 32'h0;
+        cpu_dbg_status_ro[0] = cpu_halted;
+        cpu_dbg_status_ro[1] = cpu_running;
+        cpu_dbg_status_ro[2] = cpu_break_hit;
+        cpu_dbg_status_ro[3] = cpu_brk_hit;
+        cpu_dbg_status_ro[15:8] = cpu_halt_reason;
+    end
+
+    logic [31:0] cpu_mem_ctrl_ro;
+    always_comb begin
+        cpu_mem_ctrl_ro = cpu_mem_ctrl_reg;
+        cpu_mem_ctrl_ro[8] = cpu_mem_busy;
+        cpu_mem_ctrl_ro[9] = cpu_mem_err;
+        // request bits are write-1-to-pulse; read as 0 for software clarity
+        cpu_mem_ctrl_ro[0] = 1'b0;
+        cpu_mem_ctrl_ro[1] = 1'b0;
+    end
     wire [31:0] axi_wdata_debug = axi.wdata;            // CRITICAL: Write data
     wire [3:0] axi_wstrb_debug = axi.wstrb;
     
@@ -326,8 +462,51 @@ module Register_Block #(
             write_error_code_reg <= 8'h00;
             read_addr_reg <= BASE_ADDR;
             reset_stats_pulse <= 1'b0;
+
+            // CPU debug register init (match SSOT reset intent)
+            cpu_dbg_ctrl_reg <= 32'h0000_0000;
+            cpu_reg_index_reg <= 32'h0000_0000;
+            cpu_bp0_pc_reg <= 32'h0000_0000;
+            cpu_bp1_pc_reg <= 32'h0000_0000;
+            cpu_bp_ctrl_reg <= 32'h0000_0004;  // BP_MATCH_FETCH default enabled
+            cpu_mem_addr_reg <= 32'h0000_0000;
+            cpu_mem_wdata_reg <= 32'h0000_0000;
+            cpu_mem_rdata_reg <= 32'h0000_0000;
+            cpu_mem_ctrl_reg <= 32'h0000_0000;
+            cpu_trace_ctrl_reg <= 32'h0000_0001;  // Trace enabled by default
+
+            // CPU debug pulses (one-cycle)
+            cpu_halt_req_pulse <= 1'b0;
+            cpu_run_req_pulse <= 1'b0;
+            cpu_step_req_pulse <= 1'b0;
+            cpu_clr_halt_reason_pulse <= 1'b0;
+            cpu_wr_pc_pulse <= 1'b0;
+            cpu_wr_pc_data <= 16'h0000;
+            cpu_wr_sp_pulse <= 1'b0;
+            cpu_wr_sp_data <= 16'h0000;
+            cpu_wr_flags_pulse <= 1'b0;
+            cpu_wr_flags_data <= 3'b000;
+            cpu_reg_write_pulse <= 1'b0;
+            cpu_reg_wdata <= 16'h0000;
+            cpu_mem_read_req_pulse <= 1'b0;
+            cpu_mem_write_req_pulse <= 1'b0;
         end else begin
             reset_stats_pulse <= 1'b0;
+
+            // Default: clear one-cycle pulses
+            cpu_halt_req_pulse <= 1'b0;
+            cpu_run_req_pulse <= 1'b0;
+            cpu_step_req_pulse <= 1'b0;
+            cpu_clr_halt_reason_pulse <= 1'b0;
+            cpu_wr_pc_pulse <= 1'b0;
+            cpu_wr_sp_pulse <= 1'b0;
+            cpu_wr_flags_pulse <= 1'b0;
+            cpu_reg_write_pulse <= 1'b0;
+            cpu_mem_read_req_pulse <= 1'b0;
+            cpu_mem_write_req_pulse <= 1'b0;
+            
+            // Latch CPU memory read data (always update to capture latest value)
+            cpu_mem_rdata_reg <= {16'h0000, cpu_mem_rdata};
             
             // Clear test register write detection flags
             test_reg_0_write_detect <= 1'b0;
@@ -459,6 +638,124 @@ module Register_Block #(
                             test_led_reg <= masked_value;
                         end
 
+                        // ----------------------------------------------------------------
+                        // CPU debug register writes
+                        // ----------------------------------------------------------------
+                        REG_CPU_DBG_CTRL: begin
+                            masked_value = apply_wstrb_mask(cpu_dbg_ctrl_reg, axi.wdata, axi.wstrb);
+                            cpu_dbg_ctrl_reg <= 32'h0000_0000;
+                            cpu_dbg_ctrl_reg[3] <= masked_value[3];  // HALT_ON_RESET
+                            cpu_dbg_ctrl_reg[8] <= masked_value[8];  // BP_GLOBAL_EN
+
+                            // write-1-to-pulse bits (byte 0)
+                            if (axi.wstrb[0] && axi.wdata[0]) cpu_halt_req_pulse <= 1'b1;
+                            if (axi.wstrb[0] && axi.wdata[1]) cpu_run_req_pulse <= 1'b1;
+                            if (axi.wstrb[0] && axi.wdata[2]) cpu_step_req_pulse <= 1'b1;
+                            if (axi.wstrb[0] && axi.wdata[4]) cpu_clr_halt_reason_pulse <= 1'b1;
+                        end
+
+                        REG_CPU_PC: begin
+                            // Write allowed only when CPU is halted (enforced in CPU core as well)
+                            if (cpu_halted) begin
+                                cpu_wr_pc_data <= axi.wdata[15:0];
+                                cpu_wr_pc_pulse <= 1'b1;
+                            end
+                        end
+
+                        REG_CPU_SP: begin
+                            if (cpu_halted) begin
+                                cpu_wr_sp_data <= axi.wdata[15:0];
+                                cpu_wr_sp_pulse <= 1'b1;
+                            end
+                        end
+
+                        REG_CPU_FLAGS: begin
+                            if (cpu_halted) begin
+                                cpu_wr_flags_data <= axi.wdata[2:0];
+                                cpu_wr_flags_pulse <= 1'b1;
+                            end
+                        end
+
+                        REG_CPU_REG_INDEX: begin
+                            // Update index and trigger register value latch in CPU
+                            // This allows repeated reads of same register to work correctly
+                            masked_value = apply_wstrb_mask(cpu_reg_index_reg, axi.wdata, axi.wstrb);
+                            cpu_reg_index_reg <= 32'h0;
+                            cpu_reg_index_reg[2:0] <= masked_value[2:0];
+                            // Generate write pulse to trigger CPU register latch
+                            cpu_reg_write_pulse <= 1'b1;
+                        end
+
+                        REG_CPU_REG_DATA: begin
+                            if (cpu_halted) begin
+                                cpu_reg_wdata <= axi.wdata[15:0];
+                                cpu_reg_write_pulse <= 1'b1;
+                            end
+                        end
+
+                        REG_CPU_BP0_PC: begin
+                            masked_value = apply_wstrb_mask(cpu_bp0_pc_reg, axi.wdata, axi.wstrb);
+                            cpu_bp0_pc_reg <= 32'h0;
+                            cpu_bp0_pc_reg[15:0] <= masked_value[15:0];
+                        end
+
+                        REG_CPU_BP1_PC: begin
+                            masked_value = apply_wstrb_mask(cpu_bp1_pc_reg, axi.wdata, axi.wstrb);
+                            cpu_bp1_pc_reg <= 32'h0;
+                            cpu_bp1_pc_reg[15:0] <= masked_value[15:0];
+                        end
+
+                        REG_CPU_BP_CTRL: begin
+                            masked_value = apply_wstrb_mask(cpu_bp_ctrl_reg, axi.wdata, axi.wstrb);
+                            cpu_bp_ctrl_reg <= 32'h0;
+                            cpu_bp_ctrl_reg[2:0] <= masked_value[2:0];
+                        end
+
+                        REG_CPU_MEM_ADDR: begin
+                            masked_value = apply_wstrb_mask(cpu_mem_addr_reg, axi.wdata, axi.wstrb);
+                            cpu_mem_addr_reg <= 32'h0;
+                            cpu_mem_addr_reg[15:0] <= masked_value[15:0];
+                        end
+
+                        REG_CPU_MEM_WDATA: begin
+                            masked_value = apply_wstrb_mask(cpu_mem_wdata_reg, axi.wdata, axi.wstrb);
+                            cpu_mem_wdata_reg <= 32'h0;
+                            cpu_mem_wdata_reg[15:0] <= masked_value[15:0];
+                        end
+
+                        REG_CPU_MEM_CTRL: begin
+                            masked_value = apply_wstrb_mask(cpu_mem_ctrl_reg, axi.wdata, axi.wstrb);
+                            cpu_mem_ctrl_reg <= 32'h0;
+                            cpu_mem_ctrl_reg[2] <= masked_value[2]; // AUTO_INC
+
+                            // write-1-to-pulse request bits (byte 0)
+                            if (axi.wstrb[0] && axi.wdata[0]) begin
+                                cpu_mem_read_req_pulse <= 1'b1;
+                                if (cpu_halted && cpu_mem_ctrl_reg[2]) begin
+                                    cpu_mem_addr_reg[15:0] <= cpu_mem_addr_reg[15:0] + 16'd1;
+                                end
+                            end
+                            if (axi.wstrb[0] && axi.wdata[1]) begin
+                                cpu_mem_write_req_pulse <= 1'b1;
+                                if (cpu_halted && cpu_mem_ctrl_reg[2]) begin
+                                    cpu_mem_addr_reg[15:0] <= cpu_mem_addr_reg[15:0] + 16'd1;
+                                end
+                            end
+                        end
+
+                        REG_CPU_TRACE_ADDR: begin
+                            masked_value = apply_wstrb_mask(cpu_trace_addr_reg, axi.wdata, axi.wstrb);
+                            cpu_trace_addr_reg <= 32'h0;
+                            cpu_trace_addr_reg[7:0] <= masked_value[7:0];  // Only 8 bits for 256 entries
+                        end
+
+                        REG_CPU_TRACE_CTRL: begin
+                            // Bit [0]: trace_enable (persistent)
+                            // Bit [1]: trace_clear_pulse (write-1-to-pulse)
+                            masked_value = apply_wstrb_mask(cpu_trace_ctrl_reg, axi.wdata, axi.wstrb);
+                            cpu_trace_ctrl_reg[0] <= masked_value[0];  // Enable bit persists
+                        end
+
                         default: begin
                             // Writes to RO registers succeed but have no effect
                         end
@@ -490,6 +787,7 @@ module Register_Block #(
 
         read_resp = RESP_OKAY;
         read_data = '0;
+        cpu_reg_read_pulse = 1'b0;  // Default: no read pulse
 
         if (read_ok) begin
             case (aligned_offset)
@@ -566,6 +864,96 @@ module Register_Block #(
                 REG_TEST_LED: begin
                     read_data[3:0] = test_led_reg[3:0];  // Only lower 4 bits are used
                     read_data[31:4] = '0;
+                end
+
+                // ----------------------------------------------------------------
+                // CPU debug register reads
+                // ----------------------------------------------------------------
+                REG_CPU_DBG_CTRL: begin
+                    read_data = cpu_dbg_ctrl_reg;
+                end
+
+                REG_CPU_DBG_STATUS: begin
+                    read_data = cpu_dbg_status_ro;
+                end
+
+                REG_CPU_PC: begin
+                    read_data[15:0] = cpu_pc;
+                    read_data[31:16] = '0;
+                end
+
+                REG_CPU_SP: begin
+                    read_data[15:0] = cpu_sp;
+                    read_data[31:16] = '0;
+                end
+
+                REG_CPU_FLAGS: begin
+                    read_data[2:0] = cpu_flags;
+                    read_data[31:3] = '0;
+                end
+
+                REG_CPU_REG_INDEX: begin
+                    read_data = cpu_reg_index_reg;
+                end
+
+                REG_CPU_REG_DATA: begin
+                    read_data[15:0] = cpu_reg_rdata;
+                    read_data[31:16] = '0;
+                    // Generate read pulse to trigger CPU register latch (combinational only)
+                    cpu_reg_read_pulse = 1'b1;
+                end
+
+                REG_CPU_BP0_PC: begin
+                    read_data = cpu_bp0_pc_reg;
+                end
+
+                REG_CPU_BP1_PC: begin
+                    read_data = cpu_bp1_pc_reg;
+                end
+
+                REG_CPU_BP_CTRL: begin
+                    read_data = cpu_bp_ctrl_reg;
+                end
+
+                REG_CPU_MEM_ADDR: begin
+                    read_data = cpu_mem_addr_reg;
+                end
+
+                REG_CPU_MEM_WDATA: begin
+                    read_data = cpu_mem_wdata_reg;
+                end
+
+                REG_CPU_MEM_RDATA: begin
+                    read_data = cpu_mem_rdata_reg;
+                end
+
+                REG_CPU_MEM_CTRL: begin
+                    read_data = cpu_mem_ctrl_ro;
+                end
+
+                REG_CPU_TRACE_ADDR: begin
+                    read_data = cpu_trace_addr_reg;
+                end
+
+                REG_CPU_TRACE_RDATA: begin
+                    // Read trace buffer data at address set in cpu_trace_addr_reg
+                    read_data = cpu_trace_buf_rdata;
+                end
+
+                REG_CPU_TRACE_CTRL: begin
+                    read_data = {31'h0, cpu_trace_ctrl_reg[0]};  // Only enable bit is readable
+                end
+
+                REG_CPU_TRACE_PTR: begin
+                    read_data = {24'h0, cpu_trace_write_ptr};
+                end
+
+                REG_CPU_ID: begin
+                    read_data = 32'h5444_3331;  // ASCII 'TD31'
+                end
+
+                REG_REVISION: begin
+                    read_data = 32'h2025_1228;  // Hardware revision: 2025-12-28
                 end
 
                 default: begin
