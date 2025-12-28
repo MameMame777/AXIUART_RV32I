@@ -67,7 +67,7 @@ class CPUTestRunner:
         """Reset CPU to known state"""
         print(f"{Colors.YELLOW}Resetting CPU...{Colors.END}")
         # Halt CPU first (bit 0 of CPU_DBG_CTRL is HALT pulse)
-        self.driver.write_reg32(registers.CPU_CONTROL, 0x00000001)
+        self.driver.write_reg32(registers.REG_CPU_DBG_CTRL, 0x00000001)
         time.sleep(0.01)
         
         # Clear all general-purpose registers (R0-R7)
@@ -77,12 +77,12 @@ class CPUTestRunner:
     def halt_cpu(self):
         """Halt CPU execution"""
         # Write 1 to bit 0 (HALT pulse bit)
-        self.driver.write_reg32(registers.CPU_CONTROL, 0x00000001)
+        self.driver.write_reg32(registers.REG_CPU_DBG_CTRL, 0x00000001)
         
     def run_cpu(self):
         """Resume CPU execution"""
         # Write 1 to bit 1 (RUN pulse bit)
-        self.driver.write_reg32(registers.CPU_CONTROL, 0x00000002)
+        self.driver.write_reg32(registers.REG_CPU_DBG_CTRL, 0x00000002)
         
     def write_register(self, reg_index: int, value: int):
         """
@@ -148,8 +148,12 @@ class CPUTestRunner:
         if not (0 <= index <= 255):
             raise ValueError(f"Invalid trace index: {index}")
         
-        addr = registers.REG_CPU_TRACE_BASE + (index * 4)
-        data = self.driver.read_reg32(addr)
+        # Set trace buffer read address
+        self.driver.write_reg32(registers.REG_CPU_TRACE_ADDR, index)
+        time.sleep(0.001)  # Small delay for address setup
+        
+        # Read trace data (format: [31:16]=instruction, [15:0]=result)
+        data = self.driver.read_reg32(registers.REG_CPU_TRACE_RDATA)
         
         # Format: [31:16]=instruction, [15:0]=result
         instruction = (data >> 16) & 0xFFFF
@@ -224,7 +228,7 @@ class CPUTestRunner:
         self.driver.write_reg32(registers.REG_CPU_PC, 0x0000)
         
         # 4. Execute one step (bit 2 = STEP pulse bit)
-        self.driver.write_reg32(registers.CPU_CONTROL, 0x00000004)
+        self.driver.write_reg32(registers.REG_CPU_DBG_CTRL, 0x00000004)
         time.sleep(0.05)  # Wait for execution (Phase 3: 4-stage pipeline + writeback cycle)
         
         # 5. Verify CPU halted and pipeline drained
@@ -351,7 +355,7 @@ class CPUTestRunner:
             self.driver.write_reg32(registers.REG_CPU_PC, 0x0000)
             for i in range(len(ALU_TESTS)):
                 # STEP command (bit 2 of CPU_DBG_CTRL)
-                self.driver.write_reg32(registers.CPU_CONTROL, 0x00000004)
+                self.driver.write_reg32(registers.REG_CPU_DBG_CTRL, 0x00000004)
                 time.sleep(0.01)  # Allow instruction execution
             
             # Wait for pipeline drain
