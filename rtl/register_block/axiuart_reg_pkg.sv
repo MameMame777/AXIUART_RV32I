@@ -4,7 +4,7 @@
 //
 // AUTO-GENERATED FILE - DO NOT EDIT MANUALLY
 // Generated from: register_map/axiuart_registers.json
-// Generation time: 2025-12-21T05:19:06.158716
+// Generation time: 2025-12-28T04:52:08.465847
 //
 // To regenerate:
 //     python software/axiuart_driver/tools/gen_registers.py --in register_map/axiuart_registers.json
@@ -46,13 +46,14 @@ package axiuart_reg_pkg;
     parameter int REG_CPU_MEM_WDATA = 32'h0000122C;  // RW - Debug memory write data (16-bit in low bits)
     parameter int REG_CPU_MEM_RDATA = 32'h00001230;  // RO - Debug memory read data (16-bit in low bits)
     parameter int REG_CPU_MEM_CTRL = 32'h00001234;  // RW - Debug memory control: read/write request, auto-inc, busy/err
-    parameter int REG_CPU_ID       = 32'h00001238;  // RO - CPU identification/version (ASCII 'TD31' placeholder)
-    parameter int REG_REVISION     = 32'h0000123C;  // RO - Hardware revision (date-based: 0xYYYYMMDD)
-    parameter int REG_CPU_TRACE_CTRL = 32'h00001240;  // RW - Trace control: [0]=enable, [1]=clear_pulse
-    parameter int REG_CPU_TRACE_PTR = 32'h00001244;  // RO - Trace buffer write pointer (0-255)
-    parameter int REG_CPU_TRACE_BASE = 32'h00001300;  // RO - Trace buffer base (256 entries × 4 bytes = 0x1300-0x13FC)
+    parameter int REG_CPU_TRACE_ADDR = 32'h00001238;  // RW - Trace buffer read address (entry index 0-255)
+    parameter int REG_CPU_TRACE_RDATA = 32'h0000123C;  // RO - Trace buffer read data (32-bit: [31:16]=insn, [15:0]=result)
+    parameter int REG_CPU_TRACE_CTRL = 32'h00001240;  // RW - Trace control: [0]=enable (default 1), [1]=clear_pulse
+    parameter int REG_CPU_TRACE_PTR = 32'h00001244;  // RO - Trace buffer write pointer (0-255, increments on each execution)
+    parameter int REG_CPU_ID       = 32'h00001248;  // RO - CPU identification/version (ASCII 'TD31' placeholder)
+    parameter int REG_REVISION     = 32'h0000124C;  // RO - Hardware revision (date-based: 0xYYYYMMDD)
 
     // Register count
-    parameter int REGISTER_COUNT = 36;
+    parameter int REGISTER_COUNT = 37;
 
 endpackage : axiuart_reg_pkg

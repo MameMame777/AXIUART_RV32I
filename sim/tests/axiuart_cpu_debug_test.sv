@@ -26,7 +26,8 @@ class axiuart_cpu_debug_test extends axiuart_base_test;
     localparam bit [31:0] CPU_MEM_WDATA    = REG_CPU_MEM_WDATA;
     localparam bit [31:0] CPU_MEM_RDATA    = REG_CPU_MEM_RDATA;
     localparam bit [31:0] CPU_MEM_CTRL     = REG_CPU_MEM_CTRL;
-    localparam bit [31:0] CPU_ID           = REG_CPU_ID;
+    localparam bit [31:0] CPU_ID           = REG_CPU_ID;        // 0x1248 (relocated)
+    localparam bit [31:0] CPU_TRACE_PTR    = REG_CPU_TRACE_PTR; // 0x1244 (relocated)
     
     // CPU_DBG_CTRL bit positions
     localparam int HALT_REQ_BIT  = 0;
