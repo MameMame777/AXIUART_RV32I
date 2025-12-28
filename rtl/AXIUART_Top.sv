@@ -20,10 +20,21 @@ module AXIUART_Top #(
     output logic        uart_rts_n,         // Request to Send (active low)
     input  logic        uart_cts_n,         // Clear to Send (active low)
     output logic [3:0]  led                 // 4-bit LED control
-    // System status outputs - simulation only
+    
+    // Simulation-only outputs
     `ifdef DEFINE_SIM
-    // Simulation-only system status outputs
-    , output logic        system_busy,
+    // CPU trace outputs for fast UVM verification
+    , output logic        cpu_trace_valid,
+    output logic [15:0] cpu_trace_insn,
+    output logic [15:0] cpu_trace_pc,
+    output logic [2:0]  cpu_trace_rd_idx,
+    output logic [15:0] cpu_trace_rd_value,
+    output logic [2:0]  cpu_trace_rs_idx,
+    output logic [15:0] cpu_trace_rs_value,
+    output logic [2:0]  cpu_trace_flags,
+    
+    // System status outputs
+    output logic        system_busy,
     output logic [7:0]  system_error,
     output logic        system_ready
     `endif
@@ -52,6 +63,59 @@ module AXIUART_Top #(
     logic [7:0]  fifo_status;
     
     logic [3:0]  test_led_internal;  // LED control from register block
+
+    // --------------------------------------------------------------------
+    // TD4CPU debug wiring (Register_Block <-> CPU)
+    // --------------------------------------------------------------------
+    logic        cpu_halt_req_pulse;
+    logic        cpu_run_req_pulse;
+    logic        cpu_step_req_pulse;
+    logic        cpu_clr_halt_reason_pulse;
+    logic        cpu_halt_on_reset;
+    logic        cpu_bp_global_en;
+    logic        cpu_bp0_en;
+    logic        cpu_bp1_en;
+    logic        cpu_bp_match_fetch;
+    logic [15:0] cpu_bp0_pc;
+    logic [15:0] cpu_bp1_pc;
+
+    logic        cpu_halted;
+    logic        cpu_running;
+    logic        cpu_break_hit;
+    logic        cpu_brk_hit;
+    logic [7:0]  cpu_halt_reason;
+
+    logic [15:0] cpu_pc;
+    logic [15:0] cpu_sp;
+    logic [2:0]  cpu_flags;
+    logic        cpu_wr_pc_pulse;
+    logic [15:0] cpu_wr_pc_data;
+    logic        cpu_wr_sp_pulse;
+    logic [15:0] cpu_wr_sp_data;
+    logic        cpu_wr_flags_pulse;
+    logic [2:0]  cpu_wr_flags_data;
+
+    logic [2:0]  cpu_reg_index;
+    logic [15:0] cpu_reg_rdata;
+    logic        cpu_reg_read_pulse;   // NEW: Read pulse for latch trigger
+    logic        cpu_reg_write_pulse;
+    logic [15:0] cpu_reg_wdata;
+
+    logic [15:0] cpu_mem_addr;
+    logic [15:0] cpu_mem_wdata;
+    logic [15:0] cpu_mem_rdata;
+    logic        cpu_mem_read_req_pulse;
+    logic        cpu_mem_write_req_pulse;
+    logic        cpu_mem_auto_inc;
+    logic        cpu_mem_busy;
+    logic        cpu_mem_err;
+    
+    // Trace buffer interface (register-based like CPU_MEM)
+    logic [7:0]  cpu_trace_buf_addr;  // Derived from Register_Block.cpu_trace_addr_reg
+    logic [31:0] cpu_trace_buf_rdata;
+    logic [7:0]  cpu_trace_write_ptr;
+    logic        cpu_trace_enable;
+    logic        cpu_trace_clear_pulse;
     
     // Flow control signals
     logic        rx_fifo_full;
@@ -132,6 +196,126 @@ module AXIUART_Top #(
         .tx_count(tx_count),
         .rx_count(rx_count),
         .fifo_status(fifo_status)
+
+        // CPU debug interface
+        , .cpu_halt_req_pulse(cpu_halt_req_pulse)
+        , .cpu_run_req_pulse(cpu_run_req_pulse)
+        , .cpu_step_req_pulse(cpu_step_req_pulse)
+        , .cpu_clr_halt_reason_pulse(cpu_clr_halt_reason_pulse)
+        , .cpu_halt_on_reset(cpu_halt_on_reset)
+        , .cpu_bp_global_en(cpu_bp_global_en)
+        , .cpu_bp0_en(cpu_bp0_en)
+        , .cpu_bp1_en(cpu_bp1_en)
+        , .cpu_bp_match_fetch(cpu_bp_match_fetch)
+        , .cpu_bp0_pc(cpu_bp0_pc)
+        , .cpu_bp1_pc(cpu_bp1_pc)
+
+        , .cpu_halted(cpu_halted)
+        , .cpu_running(cpu_running)
+        , .cpu_break_hit(cpu_break_hit)
+        , .cpu_brk_hit(cpu_brk_hit)
+        , .cpu_halt_reason(cpu_halt_reason)
+
+        , .cpu_pc(cpu_pc)
+        , .cpu_sp(cpu_sp)
+        , .cpu_flags(cpu_flags)
+        , .cpu_wr_pc_pulse(cpu_wr_pc_pulse)
+        , .cpu_wr_pc_data(cpu_wr_pc_data)
+        , .cpu_wr_sp_pulse(cpu_wr_sp_pulse)
+        , .cpu_wr_sp_data(cpu_wr_sp_data)
+        , .cpu_wr_flags_pulse(cpu_wr_flags_pulse)
+        , .cpu_wr_flags_data(cpu_wr_flags_data)
+
+        , .cpu_reg_index(cpu_reg_index)
+        , .cpu_reg_rdata(cpu_reg_rdata)
+        , .cpu_reg_read_pulse(cpu_reg_read_pulse)   // NEW: Read pulse output
+        , .cpu_reg_write_pulse(cpu_reg_write_pulse)
+        , .cpu_reg_wdata(cpu_reg_wdata)
+
+        , .cpu_mem_addr(cpu_mem_addr)
+        , .cpu_mem_wdata(cpu_mem_wdata)
+        , .cpu_mem_rdata(cpu_mem_rdata)
+        , .cpu_mem_read_req_pulse(cpu_mem_read_req_pulse)
+        , .cpu_mem_write_req_pulse(cpu_mem_write_req_pulse)
+        , .cpu_mem_auto_inc(cpu_mem_auto_inc)
+        , .cpu_mem_busy(cpu_mem_busy)
+        , .cpu_mem_err(cpu_mem_err)
+        
+        // Trace buffer interface (register-based access like CPU_MEM)
+        , .cpu_trace_buf_rdata(cpu_trace_buf_rdata)
+        , .cpu_trace_write_ptr(cpu_trace_write_ptr)
+        , .cpu_trace_enable(cpu_trace_enable)
+        , .cpu_trace_clear_pulse(cpu_trace_clear_pulse)
+    );
+
+    // Derive trace buffer address from Register_Block's internal register
+    assign cpu_trace_buf_addr = register_block_inst.cpu_trace_addr_reg[7:0];
+
+    // Minimal TD4CPU core (debug + RAM bring-up)
+    td4cpu_core #(
+        .RAM_WORDS(4096)
+    ) cpu_inst (
+        .clk(clk),
+        .rst(rst),
+
+        .dbg_halt_req_pulse(cpu_halt_req_pulse),
+        .dbg_run_req_pulse(cpu_run_req_pulse),
+        .dbg_step_req_pulse(cpu_step_req_pulse),
+        .dbg_clr_halt_reason_pulse(cpu_clr_halt_reason_pulse),
+        .dbg_halt_on_reset(cpu_halt_on_reset),
+
+        .dbg_bp_global_en(cpu_bp_global_en),
+        .dbg_bp0_en(cpu_bp0_en),
+        .dbg_bp1_en(cpu_bp1_en),
+        .dbg_bp_match_fetch(cpu_bp_match_fetch),
+        .dbg_bp0_pc(cpu_bp0_pc),
+        .dbg_bp1_pc(cpu_bp1_pc),
+
+        .halted(cpu_halted),
+        .running(cpu_running),
+        .break_hit(cpu_break_hit),
+        .brk_hit(cpu_brk_hit),
+        .halt_reason(cpu_halt_reason),
+
+        .pc(cpu_pc),
+        .sp(cpu_sp),
+        .flags(cpu_flags),
+
+        .dbg_wr_pc_pulse(cpu_wr_pc_pulse),
+        .dbg_wr_pc_data(cpu_wr_pc_data),
+        .dbg_wr_sp_pulse(cpu_wr_sp_pulse),
+        .dbg_wr_sp_data(cpu_wr_sp_data),
+        .dbg_wr_flags_pulse(cpu_wr_flags_pulse),
+        .dbg_wr_flags_data(cpu_wr_flags_data),
+
+        .dbg_reg_index(cpu_reg_index),
+        .dbg_reg_rdata(cpu_reg_rdata),
+        .dbg_reg_read_pulse(cpu_reg_read_pulse),   // NEW: Read pulse input
+        .dbg_reg_write_pulse(cpu_reg_write_pulse),
+        .dbg_reg_wdata(cpu_reg_wdata),
+
+        .dbg_mem_addr(cpu_mem_addr),
+        .dbg_mem_wdata(cpu_mem_wdata),
+        .dbg_mem_rdata(cpu_mem_rdata),
+        .dbg_mem_read_req_pulse(cpu_mem_read_req_pulse),
+        .dbg_mem_write_req_pulse(cpu_mem_write_req_pulse),
+        .dbg_mem_busy(cpu_mem_busy),
+        .dbg_mem_err(cpu_mem_err),
+        
+        // Trace outputs
+        .trace_valid(cpu_trace_valid),
+        .trace_insn(cpu_trace_insn),
+        .trace_pc(cpu_trace_pc),
+        .trace_rd_idx(cpu_trace_rd_idx),
+        .trace_rd_value(cpu_trace_rd_value),
+        .trace_rs_idx(cpu_trace_rs_idx),
+        .trace_rs_value(cpu_trace_rs_value),
+        .trace_flags(cpu_trace_flags),
+        
+        // Trace buffer interface
+        .trace_buf_addr(cpu_trace_buf_addr),
+        .trace_buf_rdata(cpu_trace_buf_rdata),
+        .trace_write_ptr_out(cpu_trace_write_ptr)
     );
     
     // Hardware Flow Control Logic

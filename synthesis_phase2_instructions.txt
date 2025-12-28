@@ -1,0 +1,28 @@
+Vivado synthesis steps for Phase 2:
+
+1. Launch Vivado:
+   vivado -mode tcl
+
+2. In Vivado TCL console:
+   cd E:/Nautilus/workspace/fpgawork/TD4UART/PandR/cpu
+   source cpu.tcl
+   
+3. Or use GUI:
+   vivado PandR/cpu/cpu.xpr
+   
+4. Run synthesis:
+   - Click "Run Synthesis"
+   - Wait for completion
+   
+5. Generate timing report:
+   - Open Synthesized Design
+   - Reports > Timing > Report Timing Summary
+   - Check WNS (target: positive slack for 125MHz)
+   
+Expected improvement:
+- Phase 1: WNS = -2.779ns (10.7ns path)
+- Phase 2: WNS = positive (two ~5ns paths)
+
+Critical path should now be split:
+  OLD: pc → ram → alu → flags (10.7ns, 13 levels)
+  NEW: pc → ram → alu_stage1 (~5ns) AND stage1 → flags → hold (~3-4ns)

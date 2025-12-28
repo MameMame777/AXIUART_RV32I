@@ -13,6 +13,9 @@ class uart_monitor extends uvm_monitor;
     // Analysis port
     uvm_analysis_port #(uart_transaction) item_collected_port;
     
+    // Mailbox for sending read responses to driver
+    mailbox #(uart_transaction) read_response_mbx;
+    
     function new(string name = "uart_monitor", uvm_component parent = null);
         super.new(name, parent);
         item_collected_port = new("item_collected_port", this);
@@ -77,6 +80,14 @@ class uart_monitor extends uvm_monitor;
             trans.read_response_data = {data_bytes[3], data_bytes[2], data_bytes[1], data_bytes[0]};
             trans.is_response = 1;
             trans.response_valid = 1;
+            
+            // Send read response to driver for sequence response
+            if (read_response_mbx != null) begin
+                uart_transaction rsp_copy;
+                $cast(rsp_copy, trans.clone());
+                rsp_copy.data = trans.read_response_data;  // Put read data in .data field
+                read_response_mbx.put(rsp_copy);
+            end
             
             `uvm_info("UART_MONITOR",
                 $sformatf("READ_RESP: STATUS=0x%02X ADDR=0x%08X DATA=0x%08X CRC=0x%02X",

@@ -107,6 +107,9 @@ run_*.log
 compile_output.log
 final_compile.log
 
+# Regression Test Reports
+sim/reports/
+
 # Backup Files
 *.bak
 *.backup
@@ -160,3 +163,4 @@ my_settings.*
 docs/local/
 docs/comprehensive_work_instructions.md
 reference/SyIEEyuIzFWdpNCM.pdf
+PandR/cpu/cpu.xpr

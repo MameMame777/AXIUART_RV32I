@@ -42,6 +42,108 @@ logging.basicConfig(
 logger = logging.getLogger("dsim-fastmcp-unified")
 
 # ===============================================================================
+# Test Timing Configuration
+# ===============================================================================
+
+# Global test timing configuration
+_test_timing_config: Optional[Dict[str, Any]] = None
+
+def load_test_timing_config(workspace: Path) -> Dict[str, Any]:
+    """
+    Load test timing configuration from JSON file.
+    
+    Args:
+        workspace: Workspace root path
+        
+    Returns:
+        Configuration dictionary
+    """
+    config_path = workspace / "sim" / "tests" / "test_timing_config.json"
+    
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+            logger.info(f"Loaded test timing config from {config_path}")
+            return config
+    except FileNotFoundError:
+        logger.warning(f"Test timing config not found: {config_path}, using defaults")
+        return {
+            "default_timeout": 300,
+            "default_verbosity": "UVM_LOW",
+            "tests": {}
+        }
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse test timing config: {e}")
+        return {
+            "default_timeout": 300,
+            "default_verbosity": "UVM_LOW",
+            "tests": {}
+        }
+
+def get_test_config(test_name: str) -> Dict[str, Any]:
+    """
+    Get configuration for a specific test.
+    
+    Args:
+        test_name: Name of the test
+        
+    Returns:
+        Test configuration dictionary
+    """
+    global _test_timing_config
+    
+    if _test_timing_config is None:
+        workspace = get_workspace_path()
+        _test_timing_config = load_test_timing_config(workspace)
+    
+    return _test_timing_config.get("tests", {}).get(test_name, {})
+
+def get_test_timeout(test_name: str, user_timeout: Optional[int] = None, debug_mode: bool = False) -> int:
+    """
+    Get the recommended timeout for a test.
+    
+    Args:
+        test_name: Name of the test
+        user_timeout: User-specified timeout (takes precedence if provided)
+        debug_mode: Whether running in debug mode (uses timeout_debug if available)
+        
+    Returns:
+        Timeout in seconds
+    """
+    if user_timeout is not None:
+        return user_timeout
+    
+    test_config = get_test_config(test_name)
+    
+    if debug_mode and "timeout_debug" in test_config:
+        return test_config["timeout_debug"]
+    
+    if "timeout" in test_config:
+        return test_config["timeout"]
+    
+    # Fallback to default
+    global _test_timing_config
+    if _test_timing_config is None:
+        workspace = get_workspace_path()
+        _test_timing_config = load_test_timing_config(workspace)
+    
+    return _test_timing_config.get("default_timeout", 300)
+
+def get_recommended_verbosity(test_name: str) -> str:
+    """
+    Get recommended verbosity level for a test.
+    
+    Args:
+        test_name: Name of the test
+        
+    Returns:
+        Recommended verbosity level
+    """
+    test_config = get_test_config(test_name)
+    
+    return test_config.get("recommended_verbosity", "UVM_LOW")
+
+# ===============================================================================
 # Global State Management
 # ===============================================================================
 
@@ -275,9 +377,57 @@ def create_fastmcp_server() -> FastMCP:
             }
 
     @mcp.tool
+    def get_test_timing_info(test_name: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Get timeout and configuration recommendations for tests.
+        
+        Args:
+            test_name: Optional test name to query. If None, returns all test configurations.
+            
+        Returns:
+            Timeout and configuration information from test_timing_config.json
+        """
+        global _test_timing_config
+        
+        if _test_timing_config is None:
+            workspace = get_workspace_path()
+            _test_timing_config = load_test_timing_config(workspace)
+        
+        if test_name:
+            test_config = get_test_config(test_name)
+            if not test_config:
+                return {
+                    "test_name": test_name,
+                    "timeout": _test_timing_config.get("default_timeout", 300),
+                    "source": "default",
+                    "message": "Test not found in configuration",
+                }
+            
+            return {
+                "test_name": test_name,
+                "config": test_config,
+                "timeout_normal": test_config.get("timeout", _test_timing_config.get("default_timeout", 300)),
+                "timeout_debug": test_config.get("timeout_debug", test_config.get("timeout", _test_timing_config.get("default_timeout", 300))),
+                "recommended_verbosity": test_config.get("recommended_verbosity", "UVM_LOW"),
+                "source": "config",
+            }
+        else:
+            return {
+                "config_file": "sim/tests/test_timing_config.json",
+                "version": _test_timing_config.get("version", "unknown"),
+                "last_updated": _test_timing_config.get("last_updated", "unknown"),
+                "default_timeout": _test_timing_config.get("default_timeout", 300),
+                "default_verbosity": _test_timing_config.get("default_verbosity", "UVM_LOW"),
+                "tests": _test_timing_config.get("tests", {}),
+                "categories": _test_timing_config.get("categories", {}),
+                "verbosity_levels": _test_timing_config.get("verbosity_levels", {}),
+                "total_tests": len(_test_timing_config.get("tests", {})),
+            }
+
+    @mcp.tool
     def list_available_tests() -> Dict[str, Any]:
         """Enumerate available UVM tests without spawning helper scripts."""
-        tests_dir = workspace / "sim" / "uvm" / "tb"
+        tests_dir = workspace / "sim" / "tests"
 
         if not tests_dir.exists():
             return {
@@ -315,10 +465,16 @@ def create_fastmcp_server() -> FastMCP:
     wave_format: Literal["VPD", "MXD", "VCD"] = "MXD",
         coverage: bool = False,
         seed: Optional[int] = None,
-        timeout: int = 300,
+        timeout: Optional[int] = None,
         plusargs: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
-        """Execute a DSIM UVM simulation via the unified async API."""
+        """
+        Execute a DSIM UVM simulation via the unified async API.
+        
+        The timeout parameter is optional. If not provided, the system will automatically
+        select an appropriate timeout based on the test configuration from test_timing_config.json.
+        Debug mode automatically selects timeout_debug if available and verbosity is UVM_DEBUG.
+        """
         # Ensure PHASE_TRACE and OBJECTION_TRACE are always enabled
         if plusargs is None:
             plusargs = []
@@ -328,6 +484,24 @@ def create_fastmcp_server() -> FastMCP:
         if "+UVM_OBJECTION_TRACE" not in plusargs:
             plusargs.append("+UVM_OBJECTION_TRACE")
         
+        # Determine if debug mode (affects timeout selection)
+        debug_mode = (verbosity == "UVM_DEBUG")
+        
+        # Get recommended timeout from configuration if not specified
+        actual_timeout = get_test_timeout(test_name, timeout, debug_mode)
+        
+        # Get test configuration for logging
+        test_config = get_test_config(test_name)
+        config_source = "user-specified" if timeout is not None else \
+                       ("config[debug]" if debug_mode and "timeout_debug" in test_config else \
+                        ("config" if "timeout" in test_config else "default"))
+        
+        logger.info(f"Test: {test_name}, Timeout: {actual_timeout}s ({config_source})")
+        if test_config:
+            logger.info(f"Test info: {test_config.get('description', 'N/A')}, " +
+                       f"Operations: {test_config.get('operations', 'N/A')}, " +
+                       f"Category: {test_config.get('category', 'N/A')}")
+        
         return await _execute_simulation(
             test_name=test_name,
             mode=mode,
@@ -336,7 +510,7 @@ def create_fastmcp_server() -> FastMCP:
             wave_format=wave_format,
             coverage=coverage,
             seed=seed,
-            timeout=timeout,
+            timeout=actual_timeout,
             plusargs=plusargs,
         )
 
@@ -558,6 +732,93 @@ def create_fastmcp_server() -> FastMCP:
             }
         
         return logs_data
+
+    @mcp.tool
+    def run_regression_suite(
+        suite: str = "smoke",
+        stop_on_failure: bool = False,
+        report_format: str = "json"
+    ) -> Dict[str, Any]:
+        """
+        Run regression test suite
+        
+        Args:
+            suite: Test suite to run (smoke, register, cpu, full)
+            stop_on_failure: Stop execution on first test failure
+            report_format: Report format (json, html, junit)
+            
+        Returns:
+            Regression test results with summary
+        """
+        import subprocess
+        
+        workspace = get_workspace_path()
+        regression_script = workspace / "mcp_server" / "run_regression.py"
+        
+        if not regression_script.exists():
+            return {
+                "status": "error",
+                "error": f"Regression script not found: {regression_script}"
+            }
+        
+        # Build command
+        cmd = [
+            sys.executable,
+            str(regression_script),
+            "--workspace", str(workspace),
+            "--suite", suite,
+            "--format", report_format
+        ]
+        
+        if stop_on_failure:
+            cmd.append("--stop-on-failure")
+        
+        try:
+            logger.info(f"Running regression suite: {suite}")
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                cwd=str(workspace)
+            )
+            
+            # Parse output
+            output_lines = result.stdout.split('\n')
+            
+            # Extract summary
+            summary_data = {
+                "suite": suite,
+                "exit_code": result.returncode,
+                "status": "success" if result.returncode == 0 else "failure"
+            }
+            
+            # Try to parse JSON report if generated
+            try:
+                reports_dir = workspace / "sim" / "reports"
+                if reports_dir.exists():
+                    report_files = sorted(reports_dir.glob("regression_report_*.json"))
+                    if report_files:
+                        latest_report = report_files[-1]
+                        with open(latest_report, 'r') as f:
+                            report_data = json.load(f)
+                            summary_data.update(report_data.get('summary', {}))
+                            summary_data['report_file'] = str(latest_report)
+            except Exception as e:
+                logger.warning(f"Could not parse report: {e}")
+            
+            # Add output
+            summary_data['stdout'] = result.stdout
+            summary_data['stderr'] = result.stderr
+            
+            return summary_data
+            
+        except Exception as e:
+            logger.error(f"Regression execution failed: {e}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "suite": suite
+            }
 
     return mcp
 

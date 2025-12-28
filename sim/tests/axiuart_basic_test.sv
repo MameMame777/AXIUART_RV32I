@@ -16,10 +16,15 @@ class axiuart_basic_test extends axiuart_base_test;
     endfunction
     
     task run_phase(uvm_phase phase);
+        uart_reset_sequence reset_seq;
         uart_basic_sequence seq;
         
         phase.raise_objection(this, "Starting basic test");
         `uvm_info(get_type_name(), "=== AXIUART Basic Test Started ===", UVM_LOW)
+        
+        // Reset DUT before sequence execution
+        reset_seq = uart_reset_sequence::type_id::create("reset_seq");
+        reset_seq.start(env.uart_agt.sequencer);
         
         seq = uart_basic_sequence::type_id::create("seq");
         seq.start(env.uart_agt.sequencer);
