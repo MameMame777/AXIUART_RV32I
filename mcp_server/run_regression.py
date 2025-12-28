@@ -61,18 +61,15 @@ class RegressionRunner:
         
         for idx, test in enumerate(suite['tests'], 1):
             test_name = test['name']
-            timeout = test.get('timeout', 300)
             
             print(f"\n[{idx}/{len(suite['tests'])}] Running: {test_name}")
             print(f"  Description: {test['description']}")
-            print(f"  Timeout: {timeout}s")
             
             result = self._run_single_test(
                 test_name=test_name,
                 verbosity=default_config['verbosity'],
                 waves=default_config['waves'],
-                coverage=default_config['coverage'],
-                timeout=timeout
+                coverage=default_config['coverage']
             )
             
             result['description'] = test['description']
@@ -113,11 +110,10 @@ class RegressionRunner:
         test_name: str,
         verbosity: str,
         waves: bool,
-        coverage: bool,
-        timeout: int
+        coverage: bool
     ) -> Dict:
         """
-        Run a single test
+        Run a single test without timeout (prevents license issues)
         
         Returns:
             Dictionary with test result
@@ -141,13 +137,13 @@ class RegressionRunner:
         if coverage:
             cmd.append('--coverage')
         
-        # Execute test
+        # Execute test (no timeout - prevent license issues from interrupted processes)
         try:
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=timeout,
+                timeout=None,  # No timeout - let tests run to completion
                 cwd=str(self.workspace),
                 encoding='utf-8',
                 errors='replace'
@@ -224,15 +220,6 @@ class RegressionRunner:
                         'stdout': result.stdout[:500],
                         'stderr': result.stderr[:500]
                     }
-        
-        except subprocess.TimeoutExpired:
-            duration = time.time() - start
-            return {
-                'test': test_name,
-                'status': 'FAIL',
-                'duration': duration,
-                'error': f'Timeout after {timeout}s'
-            }
         
         except Exception as e:
             duration = time.time() - start

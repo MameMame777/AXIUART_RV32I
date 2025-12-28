@@ -193,12 +193,12 @@ python mcp_server/mcp_client.py --workspace . --tool run_uvm_simulation_batch --
 #### Step-by-Step Mode (For Debugging)
 1. Compile only:
 ```powershell
-python mcp_server/mcp_client.py --workspace . --tool run_uvm_simulation --test-name axiuart_basic_test --mode compile --verbosity UVM_LOW --timeout 120
+python mcp_server/mcp_client.py --workspace . --tool run_uvm_simulation --test-name axiuart_basic_test --mode compile --verbosity UVM_LOW
 ```
 
 2. Run simulation:
 ```powershell
-python mcp_server/mcp_client.py --workspace . --tool run_uvm_simulation --test-name axiuart_basic_test --mode run --verbosity UVM_MEDIUM --timeout 300
+python mcp_server/mcp_client.py --workspace . --tool run_uvm_simulation --test-name axiuart_basic_test --mode run --verbosity UVM_MEDIUM
 ```
 
 #### Available MCP Tools
