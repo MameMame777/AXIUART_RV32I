@@ -14,10 +14,7 @@ set_property -dict {PACKAGE_PIN K17 IOSTANDARD LVCMOS33} [get_ports clk]
 create_clock -period 8.000 -name sys_clk_pin -waveform {0.000 4.000} -add [get_ports clk]
 
 # Timing optimization directives
-set_property PHYS_OPT_DESIGN.CRITICAL_CELL_OPT true [current_design]
-set_property PHYS_OPT_DESIGN.CRITICAL_PIN_OPT true [current_design]
-set_property PHYS_OPT_DESIGN.REWIRE true [current_design]
-set_property PHYS_OPT_DESIGN.HOLD_FIX true [current_design]
+
 
 ###################################################################################
 # Reset Constraints
