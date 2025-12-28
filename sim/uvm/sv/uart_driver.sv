@@ -48,7 +48,6 @@ class uart_driver extends uvm_driver #(uart_transaction);
             
             if (req.is_reset) begin
                 handle_reset(req);
-                seq_item_port.item_done();
             end else begin
                 drive_transaction(req);
                 
@@ -78,11 +77,10 @@ class uart_driver extends uvm_driver #(uart_transaction);
                             $sformatf("Read response timeout for address 0x%08X - sequence may not have called get_response()", 
                             req.address))
                     end
-                    seq_item_port.item_done();
-                end else begin
-                    seq_item_port.item_done();
                 end
             end
+            
+            seq_item_port.item_done();
         end
     endtask
     

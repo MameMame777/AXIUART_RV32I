@@ -64,8 +64,8 @@ module axiuart_tb_top;
     initial begin
         uvm_config_db#(virtual uart_if)::set(null, "*", "uart_vif", uart_vif);
         
-        // Run test
-        run_test("axiuart_basic_test");
+        // Run test (test name specified via +UVM_TESTNAME= command line argument)
+        run_test();
     end
     
 endmodule
