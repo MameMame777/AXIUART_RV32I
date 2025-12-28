@@ -733,6 +733,93 @@ def create_fastmcp_server() -> FastMCP:
         
         return logs_data
 
+    @mcp.tool
+    def run_regression_suite(
+        suite: str = "smoke",
+        stop_on_failure: bool = False,
+        report_format: str = "json"
+    ) -> Dict[str, Any]:
+        """
+        Run regression test suite
+        
+        Args:
+            suite: Test suite to run (smoke, register, cpu, full)
+            stop_on_failure: Stop execution on first test failure
+            report_format: Report format (json, html, junit)
+            
+        Returns:
+            Regression test results with summary
+        """
+        import subprocess
+        
+        workspace = get_workspace_path()
+        regression_script = workspace / "mcp_server" / "run_regression.py"
+        
+        if not regression_script.exists():
+            return {
+                "status": "error",
+                "error": f"Regression script not found: {regression_script}"
+            }
+        
+        # Build command
+        cmd = [
+            sys.executable,
+            str(regression_script),
+            "--workspace", str(workspace),
+            "--suite", suite,
+            "--format", report_format
+        ]
+        
+        if stop_on_failure:
+            cmd.append("--stop-on-failure")
+        
+        try:
+            logger.info(f"Running regression suite: {suite}")
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                cwd=str(workspace)
+            )
+            
+            # Parse output
+            output_lines = result.stdout.split('\n')
+            
+            # Extract summary
+            summary_data = {
+                "suite": suite,
+                "exit_code": result.returncode,
+                "status": "success" if result.returncode == 0 else "failure"
+            }
+            
+            # Try to parse JSON report if generated
+            try:
+                reports_dir = workspace / "sim" / "reports"
+                if reports_dir.exists():
+                    report_files = sorted(reports_dir.glob("regression_report_*.json"))
+                    if report_files:
+                        latest_report = report_files[-1]
+                        with open(latest_report, 'r') as f:
+                            report_data = json.load(f)
+                            summary_data.update(report_data.get('summary', {}))
+                            summary_data['report_file'] = str(latest_report)
+            except Exception as e:
+                logger.warning(f"Could not parse report: {e}")
+            
+            # Add output
+            summary_data['stdout'] = result.stdout
+            summary_data['stderr'] = result.stderr
+            
+            return summary_data
+            
+        except Exception as e:
+            logger.error(f"Regression execution failed: {e}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "suite": suite
+            }
+
     return mcp
 
 # ===============================================================================

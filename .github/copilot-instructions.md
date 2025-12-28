@@ -27,8 +27,12 @@
 - Standard sequence for any UVM test:
   1. `python mcp_server/mcp_client.py --workspace e:\\Nautilus\\workspace\\fpgawork\\AXIUART_ --tool check_dsim_environment`
   2. `python mcp_server/mcp_client.py --workspace e:\\Nautilus\\workspace\\fpgawork\\AXIUART_ --tool list_available_tests`
-  3. `python mcp_server/mcp_client.py --workspace e:\\Nautilus\\workspace\\fpgawork\\AXIUART_ --tool run_uvm_simulation --test-name <test> --mode compile --verbosity UVM_LOW --timeout 180`
-  4. `python mcp_server/mcp_client.py --workspace e:\\Nautilus\\workspace\\fpgawork\\AXIUART_ --tool run_uvm_simulation --test-name <test> --mode run --verbosity UVM_MEDIUM --waves --timeout 300`
+  3. `python mcp_server/mcp_client.py --workspace e:\\Nautilus\\workspace\\fpgawork\\AXIUART_ --tool run_uvm_simulation --test-name <test> --mode compile --verbosity UVM_LOW`
+  4. `python mcp_server/mcp_client.py --workspace e:\\Nautilus\\workspace\\fpgawork\\AXIUART_ --tool run_uvm_simulation --test-name <test> --mode run --verbosity UVM_MEDIUM --waves`
+- Regression testing:
+  - `python mcp_server/run_regression.py --suite smoke` - Quick validation (2 tests, ~40s)
+  - `python mcp_server/run_regression.py --suite full --format html` - Complete regression with HTML report
+  - `python mcp_server/mcp_client.py --workspace . --tool run_regression_suite --suite smoke` - Via MCP tool
 - Prefer VS Code tasks (`DSIM: Run Basic Test (Compile Only - MCP)`, then `DSIM: Run Basic Test (Full Simulation - MCP)`) which wrap the same calls.
 - Consume JSON outputs (logs, coverage, telemetry) instead of raw text whenever possible; store results under `sim/logs/` or `sim/reports/`.
 - Start the MCP server with the background task `🚀 Start Enhanced MCP Server (FastMCP Edition)` when required; do not launch alternate servers.
