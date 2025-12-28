@@ -311,9 +311,10 @@ class CPUTestRunner:
             # Phase 1: Prepare trace buffer
             # ============================================================
             print(f"\n{Colors.CYAN}[Phase 1/4] Preparing trace buffer...{Colors.END}")
-            self.clear_trace_buffer()
+            # Save starting pointer (hardware clear not implemented, use delta instead)
+            trace_ptr_start = self.read_trace_count()
             self.enable_trace(True)
-            print(f"    ✓ Trace buffer cleared and enabled")
+            print(f"    ✓ Trace enabled (starting pointer: {trace_ptr_start})")
             
             # ============================================================
             # Phase 2: Halt CPU and load test program
@@ -326,16 +327,13 @@ class CPUTestRunner:
             self.driver.write_reg32(registers.REG_CPU_PC, 0x0000)
             
             # Load all 17 test instructions into memory (PC 0-16)
+            # NOTE: Only load instructions, NOT register setup (setup happens per-test)
             for i, test in enumerate(ALU_TESTS):
                 # Write instruction to memory at address i
                 self.driver.write_reg32(registers.REG_CPU_MEM_ADDR, i)
                 self.driver.write_reg32(registers.REG_CPU_MEM_WDATA, test.instruction)
-                self.driver.write_reg32(registers.REG_CPU_MEM_CTRL, 0x00000001)  # Write request
+                self.driver.write_reg32(registers.REG_CPU_MEM_CTRL, 0x00000002)  # WRITE bit=1
                 time.sleep(0.002)
-                
-                # Setup registers for this test
-                for reg_idx, value in test.setup:
-                    self.write_register(reg_idx, value)
                 
                 print(f"    [{i:2d}] {test.name}: insn=0x{test.instruction:04X}", end="")
                 if test.setup:
@@ -347,38 +345,50 @@ class CPUTestRunner:
             print(f"    ✓ Loaded {len(ALU_TESTS)} test instructions")
             
             # ============================================================
-            # Phase 3: Execute test batch
+            # Phase 3: Execute test batch (setup + execute per test)
             # ============================================================
             print(f"\n{Colors.CYAN}[Phase 3/4] Executing test batch...{Colors.END}")
             
-            # Set PC=0 and execute 17 STEP commands
+            # Set PC=0 before starting
             self.driver.write_reg32(registers.REG_CPU_PC, 0x0000)
-            for i in range(len(ALU_TESTS)):
-                # STEP command (bit 2 of CPU_DBG_CTRL)
+            
+            # Execute each test individually with proper setup
+            for i, test in enumerate(ALU_TESTS):
+                # Setup registers for THIS specific test
+                for reg_idx, value in test.setup:
+                    self.write_register(reg_idx, value)
+                
+                # Execute ONE instruction via STEP (bit 2 of CPU_DBG_CTRL)
                 self.driver.write_reg32(registers.REG_CPU_DBG_CTRL, 0x00000004)
-                time.sleep(0.01)  # Allow instruction execution
+                time.sleep(0.01)  # Allow instruction execution and trace write
             
             # Wait for pipeline drain
             time.sleep(0.1)
             
-            trace_count = self.read_trace_count()
-            print(f"    ✓ Executed {len(ALU_TESTS)} instructions, trace entries: {trace_count}")
+            trace_ptr_end = self.read_trace_count()
+            num_new_entries = (trace_ptr_end - trace_ptr_start) % 256
+            print(f"    ✓ Executed {len(ALU_TESTS)} instructions, new entries: {num_new_entries} (ptr: {trace_ptr_start}→{trace_ptr_end})")
+
             
             # ============================================================
             # Phase 4: Validate results from trace buffer
             # ============================================================
             print(f"\n{Colors.CYAN}[Phase 4/4] Validating results...{Colors.END}\n")
             
+            # Read entries starting from trace_ptr_start
+            num_tests = len(ALU_TESTS)
+            
             for i, test in enumerate(ALU_TESTS):
                 try:
-                    if i >= trace_count:
+                    if i >= num_new_entries:
                         result = {
                             'passed': False,
-                            'message': f"✗ No trace entry (count={trace_count})"
+                            'message': f"✗ No trace entry (new_count={num_new_entries})"
                         }
                     else:
-                        # Read trace entry
-                        insn_trace, result_trace = self.read_trace_entry(i)
+                        # Read from starting pointer + offset
+                        trace_idx = (trace_ptr_start + i) % 256
+                        insn_trace, result_trace = self.read_trace_entry(trace_idx)
                         
                         # Validate instruction match
                         if insn_trace != test.instruction:

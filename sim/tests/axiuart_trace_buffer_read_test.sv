@@ -136,9 +136,8 @@ class axiuart_trace_buffer_read_test extends axiuart_base_test;
         write_reg(REG_CPU_TRACE_ADDR, 32'h00000000);  // Entry index 0
         #1us;  // Wait for address to stabilize
         
-        // Read trace data from hierarchical path (UART read via Monitor not yet implemented)
-        // TODO: Implement Scoreboard-based verification when Monitor supports read responses
-        read_data = axiuart_tb_top.dut.cpu_inst.trace_buffer[0];
+        // Read trace data via UART register interface (matching hardware usage)
+        read_reg(REG_CPU_TRACE_RDATA, read_data);
         
         `uvm_info("TRACE_BUF_READ", $sformatf("  Read data: 0x%08h", read_data), UVM_LOW)
         `uvm_info("TRACE_BUF_READ", $sformatf("  Instruction[31:16]: 0x%04h", read_data[31:16]), UVM_LOW)
@@ -167,7 +166,7 @@ class axiuart_trace_buffer_read_test extends axiuart_base_test;
             `uvm_info("TRACE_BUF_READ", "Step 6: Test reading entry #1", UVM_LOW)
             write_reg(REG_CPU_TRACE_ADDR, 32'h00000001);  // Entry index 1
             #1us;
-            read_data = axiuart_tb_top.dut.cpu_inst.trace_buffer[1];
+            read_reg(REG_CPU_TRACE_RDATA, read_data);
             `uvm_info("TRACE_BUF_READ", $sformatf("  Entry #1 data: 0x%08h", read_data), UVM_LOW)
         end
         

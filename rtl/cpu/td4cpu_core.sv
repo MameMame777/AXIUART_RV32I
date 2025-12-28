@@ -491,7 +491,6 @@ module td4cpu_core #(
                 alu_writeback_en_hold <= alu_writeback_en_stage2;
                 alu_flags_update_en_hold <= alu_flags_update_en_stage2;
                 alu_insn_hold <= alu_insn_stage2;  // Propagate instruction for trace
-                alu_insn_hold <= alu_insn_stage2;  // Propagate instruction for trace
                 
                 // Generate flags from stage 2 data
                 if (alu_flags_update_en_stage2) begin
@@ -651,10 +650,7 @@ module td4cpu_core #(
                         alu_input_flags_stage1 <= flags;
                         alu_valid_stage1 <= 1'b1;
                         alu_insn_stage1 <= insn_fetched;  // Propagate instruction
-                        alu_insn_stage1 <= insn_fetched;  // Propagate instruction
-                        
-                        // Debug: Mark as ALU operation
-                        debug_alu_writeback <= 1'b1;
+
                         debug_alu_flags_update <= 1'b1;
                     end
                     
