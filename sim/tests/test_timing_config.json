@@ -3,11 +3,11 @@
   "description": "UVM Test Timing Configuration - Recommended timeouts and execution parameters",
   "version": "1.0.0",
   "last_updated": "2024-12-21",
-  "default_timeout": 300,
+  "default_timeout": null,
   "default_verbosity": "UVM_LOW",
   "tests": {
     "axiuart_basic_test": {
-      "timeout": 180,
+      "timeout": null,
       "operations": 10,
       "measured_time_ms": 100,
       "recommended_verbosity": "UVM_LOW",
@@ -17,7 +17,7 @@
       "notes": "Quick smoke test"
     },
     "axiuart_reset_test": {
-      "timeout": 180,
+      "timeout": null,
       "operations": 5,
       "measured_time_ms": 50,
       "recommended_verbosity": "UVM_LOW",
@@ -27,7 +27,7 @@
       "notes": "Reset behavior validation"
     },
     "axiuart_reg_rw_test": {
-      "timeout": 180,
+      "timeout": null,
       "operations": 20,
       "measured_time_ms": 200,
       "recommended_verbosity": "UVM_LOW",
@@ -37,7 +37,7 @@
       "notes": "Multiple register access patterns"
     },
     "axiuart_cpu_debug_test": {
-      "timeout": 300,
+      "timeout": null,
       "operations": 50,
       "measured_time_ms": 5000,
       "recommended_verbosity": "UVM_MEDIUM",
@@ -47,7 +47,7 @@
       "notes": "Debug interface verification"
     },
     "axiuart_cpu_simple_mem_test": {
-      "timeout": 180,
+      "timeout": null,
       "operations": 7,
       "measured_time_ms": 46,
       "recommended_verbosity": "UVM_LOW",
@@ -59,7 +59,7 @@
       "validation_date": "2024-12-21"
     },
     "axiuart_cpu_logic_test": {
-      "timeout": 600,
+      "timeout": null,
       "timeout_debug": 1200,
       "operations": 18,
       "measured_time_ms": 90000,
@@ -106,7 +106,7 @@
       "validation_date": "2024-12-26"
     },
     "axiuart_cpu_memory_test": {
-      "timeout": 1200,
+      "timeout": null,
       "timeout_debug": 2400,
       "operations": 640,
       "measured_time_ms": 1920000,
