@@ -113,13 +113,56 @@ dsim_config.f:
 
 **ソース:** `register_map/axiuart_registers.json` (Single Source of Truth)
 
-## UBUS参考ポイント
+## UVM標準パターンの実装 (2024-12更新)
+
+### 1. Mailboxベースの応答メカニズム
+
+**課題**: UARTのread操作では、コマンド送信後にデバイスからの応答を待つ必要がある。
+
+**解決策**: SystemVerilogのmailboxを使用したDriver-Monitor間通信
+
+```systemverilog
+// データフロー:
+Test Sequence
+  ↓ read_reg(addr, data)
+  ↓ get_response() を呼び出し
+  ↓
+Driver (送信 + 待機)
+  ↓ UART送信
+  ↓ mailbox.get(rsp) ← ★応答待機★
+  ←─┐
+     │
+Monitor (別スレッド)
+  ↓ UART受信
+  ↓ mailbox.put(rsp) → Driverに通知
+  └──┘
+  ↓
+Driver
+  ↓ put_response(rsp) → Sequenceに返却
+  ↓
+Sequence
+  ↓ 正しいデータ取得！
+```
+
+**実装箇所:**
+- `sim/uvm/sv/uart_driver.sv` - mailbox初期化、応答待機
+- `sim/uvm/sv/uart_monitor.sv` - 応答検出、mailbox送信
+- `sim/uvm/sv/uart_agent.sv` - mailbox参照の接続
+- `sim/uvm/sv/uart_reg_sequences.sv` - get_response()実装
+
+**効果:**
+- タイミング依存の問題を完全に解決
+- 全テストで自動的に正しい応答を取得
+- ハードコードされた遅延（#2us, #3us等）が不要に
+
+### 2. UBUS参考ポイント
 
 1. **1パッケージファイル**: すべてのコンポーネントを`axiuart_pkg.sv`に集約
 2. **シンプルな階層**: Agent → Driver/Monitor/Sequencer → Env
 3. **VIF設定**: `uvm_config_db`でVirtual Interfaceを渡すだけ
 4. **スコアボード**: FIFOベースの単純な比較
 5. **テスト**: Sequence→Agent→Driverの明確なフロー
+6. **応答メカニズム**: Mailbox + get_response()パターン
 
 ## テスト構造の改善 (2024-12リファクタリング)
 
@@ -147,8 +190,20 @@ dsim_config.f:
 
 ## 使用方法
 
-### コンパイル
+### MCP経由での実行（推奨）
 ```bash
+# FastMCP統合による標準ワークフロー
+python mcp_server/mcp_client.py --workspace . --tool run_uvm_simulation \
+  --test-name axiuart_basic_test --mode run --verbosity UVM_MEDIUM
+
+# CPU検証テスト
+python mcp_server/mcp_client.py --workspace . --tool run_uvm_simulation \
+  --test-name axiuart_cpu_mem_simple_rw_test --mode run --verbosity UVM_MEDIUM
+```
+
+### 直接コンパイル・実行
+```bash
+# コンパイル
 dsim -work work \
      +incdir+sv \
      sv/axiuart_pkg.sv \

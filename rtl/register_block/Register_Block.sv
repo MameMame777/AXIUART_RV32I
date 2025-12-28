@@ -78,9 +78,8 @@ module Register_Block #(
     , input  logic        cpu_mem_busy
     , input  logic        cpu_mem_err
     
-    // Trace buffer interface
-    , output logic [7:0]  cpu_trace_buf_addr
-    , input  logic [31:0] cpu_trace_buf_rdata
+    // Trace buffer interface (read-only access pattern like CPU_MEM)
+    , input  logic [31:0] cpu_trace_buf_rdata  // Input: data from trace buffer at trace_addr
     , input  logic [7:0]  cpu_trace_write_ptr
     , output logic        cpu_trace_enable      // NEW: Enable trace recording
     , output logic        cpu_trace_clear_pulse // NEW: Clear trace buffer
@@ -123,9 +122,10 @@ module Register_Block #(
     localparam bit [11:0] REG_CPU_MEM_CTRL   = (axiuart_reg_pkg::REG_CPU_MEM_CTRL - BASE_ADDR);   // 0x234
     localparam bit [11:0] REG_CPU_ID         = (axiuart_reg_pkg::REG_CPU_ID - BASE_ADDR);         // 0x238
     localparam bit [11:0] REG_REVISION     = (axiuart_reg_pkg::REG_REVISION - BASE_ADDR);     // 0x23C
+    localparam bit [11:0] REG_CPU_TRACE_ADDR = (axiuart_reg_pkg::REG_CPU_TRACE_ADDR - BASE_ADDR); // 0x238
+    localparam bit [11:0] REG_CPU_TRACE_RDATA = (axiuart_reg_pkg::REG_CPU_TRACE_RDATA - BASE_ADDR); // 0x23C
     localparam bit [11:0] REG_CPU_TRACE_CTRL = (axiuart_reg_pkg::REG_CPU_TRACE_CTRL - BASE_ADDR); // 0x240
     localparam bit [11:0] REG_CPU_TRACE_PTR  = (axiuart_reg_pkg::REG_CPU_TRACE_PTR - BASE_ADDR);  // 0x244
-    localparam bit [11:0] REG_CPU_TRACE_BASE = (axiuart_reg_pkg::REG_CPU_TRACE_BASE - BASE_ADDR); // 0x300
 
     // Register storage
     logic [31:0] control_reg;      // RW - Control register
@@ -154,6 +154,7 @@ module Register_Block #(
     logic [31:0] cpu_mem_wdata_reg;
     logic [31:0] cpu_mem_rdata_reg;
     logic [31:0] cpu_mem_ctrl_reg;
+    logic [31:0] cpu_trace_addr_reg;   // NEW: Trace buffer address (entry index)
     logic [31:0] cpu_trace_ctrl_reg;  // NEW: Trace control [0]=enable, [1]=clear_pulse
     
     // AXI4-Lite response codes
@@ -293,6 +294,7 @@ module Register_Block #(
             REG_CPU_REG_INDEX, REG_CPU_REG_DATA,
             REG_CPU_BP0_PC, REG_CPU_BP1_PC, REG_CPU_BP_CTRL,
             REG_CPU_MEM_ADDR, REG_CPU_MEM_WDATA, REG_CPU_MEM_CTRL,
+            REG_CPU_TRACE_ADDR, REG_CPU_TRACE_CTRL,
             REG_CPU_ID, REG_REVISION, REG_CPU_TRACE_CTRL, REG_CPU_TRACE_PTR: begin
                 within_register_range = 1'b1;
             end
@@ -317,11 +319,6 @@ module Register_Block #(
         logic [11:0] aligned_offset;
         aligned_offset = {offset[11:2], 2'b00};
         
-        // Check trace buffer range first (0x300-0x3FC, 256 entries)
-        if (aligned_offset >= REG_CPU_TRACE_BASE && aligned_offset < (REG_CPU_TRACE_BASE + 12'h100)) begin
-            return (offset[1:0] == 2'b00);  // Word-aligned
-        end
-        
         // Check if aligned offset matches any valid register
         case (aligned_offset)
             REG_CONTROL, REG_STATUS, REG_CONFIG, REG_DEBUG,
@@ -332,7 +329,8 @@ module Register_Block #(
             REG_CPU_REG_INDEX, REG_CPU_REG_DATA,
             REG_CPU_BP0_PC, REG_CPU_BP1_PC, REG_CPU_BP_CTRL,
             REG_CPU_MEM_ADDR, REG_CPU_MEM_WDATA, REG_CPU_MEM_RDATA, REG_CPU_MEM_CTRL,
-            REG_CPU_ID, REG_REVISION, REG_CPU_TRACE_CTRL, REG_CPU_TRACE_PTR: begin
+            REG_CPU_TRACE_ADDR, REG_CPU_TRACE_RDATA, REG_CPU_TRACE_CTRL, REG_CPU_TRACE_PTR,
+            REG_CPU_ID, REG_REVISION: begin
                 // Valid register found
             end
             default: begin
@@ -742,6 +740,12 @@ module Register_Block #(
                             end
                         end
 
+                        REG_CPU_TRACE_ADDR: begin
+                            masked_value = apply_wstrb_mask(cpu_trace_addr_reg, axi.wdata, axi.wstrb);
+                            cpu_trace_addr_reg <= 32'h0;
+                            cpu_trace_addr_reg[7:0] <= masked_value[7:0];  // Only 8 bits for 256 entries
+                        end
+
                         REG_CPU_TRACE_CTRL: begin
                             // Bit [0]: trace_enable (persistent)
                             // Bit [1]: trace_clear_pulse (write-1-to-pulse)
@@ -924,12 +928,13 @@ module Register_Block #(
                     read_data = cpu_mem_ctrl_ro;
                 end
 
-                REG_CPU_ID: begin
-                    read_data = 32'h5444_3331;  // ASCII 'TD31'
+                REG_CPU_TRACE_ADDR: begin
+                    read_data = cpu_trace_addr_reg;
                 end
 
-                REG_REVISION: begin
-                    read_data = 32'h2025_1227;  // Hardware revision: 2025-12-27
+                REG_CPU_TRACE_RDATA: begin
+                    // Read trace buffer data at address set in cpu_trace_addr_reg
+                    read_data = cpu_trace_buf_rdata;
                 end
 
                 REG_CPU_TRACE_CTRL: begin
@@ -940,14 +945,16 @@ module Register_Block #(
                     read_data = {24'h0, cpu_trace_write_ptr};
                 end
 
+                REG_CPU_ID: begin
+                    read_data = 32'h5444_3331;  // ASCII 'TD31'
+                end
+
+                REG_REVISION: begin
+                    read_data = 32'h2025_1228;  // Hardware revision: 2025-12-28
+                end
+
                 default: begin
-                    // Trace buffer range check (0x300-0x3FC)
-                    if (aligned_offset >= REG_CPU_TRACE_BASE && aligned_offset < (REG_CPU_TRACE_BASE + 12'h100)) begin
-                        cpu_trace_buf_addr = (aligned_offset - REG_CPU_TRACE_BASE) >> 2;  // Convert to entry index
-                        read_data = cpu_trace_buf_rdata;
-                    end else begin
-                        read_data = '0;
-                    end
+                    read_data = '0;
                 end
             endcase
         end else begin

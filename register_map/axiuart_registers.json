@@ -252,12 +252,52 @@
       "description": "Debug memory control: read/write request, auto-inc, busy/err"
     },
     {
-      "name": "CPU_ID",
+      "name": "CPU_TRACE_ADDR",
       "offset": "0x238",
+      "access": "RW",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Trace buffer read address (entry index 0-255)"
+    },
+    {
+      "name": "CPU_TRACE_RDATA",
+      "offset": "0x23C",
+      "access": "RO",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Trace buffer read data (32-bit: [31:16]=insn, [15:0]=result)"
+    },
+    {
+      "name": "CPU_TRACE_CTRL",
+      "offset": "0x240",
+      "access": "RW",
+      "width_bits": 32,
+      "reset": "0x00000001",
+      "description": "Trace control: [0]=enable (default 1), [1]=clear_pulse"
+    },
+    {
+      "name": "CPU_TRACE_PTR",
+      "offset": "0x244",
+      "access": "RO",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Trace buffer write pointer (0-255, increments on each execution)"
+    },
+    {
+      "name": "CPU_ID",
+      "offset": "0x248",
       "access": "RO",
       "width_bits": 32,
       "reset": "0x54443331",
       "description": "CPU identification/version (ASCII 'TD31' placeholder)"
+    },
+    {
+      "name": "REVISION",
+      "offset": "0x24C",
+      "access": "RO",
+      "width_bits": 32,
+      "reset": "0x20251228",
+      "description": "Hardware revision (date-based: 0xYYYYMMDD)"
     }
   ]
 }

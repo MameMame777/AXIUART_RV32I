@@ -3,7 +3,7 @@
 **AUTO-GENERATED FILE - DO NOT EDIT MANUALLY**
 
 - **Source:** `register_map/axiuart_registers.json`
-- **Generated:** 2025-12-21 05:19:06
+- **Generated:** 2025-12-28 04:52:08
 - **Base Address:** `0x1000`
 - **Stride:** 4 bytes
 
@@ -42,7 +42,12 @@
 | CPU_MEM_WDATA | `0x122C` | `0x22C` | RW | `0x00000000` | Debug memory write data (16-bit in low bits) |
 | CPU_MEM_RDATA | `0x1230` | `0x230` | RO | `0x00000000` | Debug memory read data (16-bit in low bits) |
 | CPU_MEM_CTRL | `0x1234` | `0x234` | RW | `0x00000000` | Debug memory control: read/write request, auto-inc, busy/err |
-| CPU_ID | `0x1238` | `0x238` | RO | `0x54443331` | CPU identification/version (ASCII 'TD31' placeholder) |
+| CPU_TRACE_ADDR | `0x1238` | `0x238` | RW | `0x00000000` | Trace buffer read address (entry index 0-255) |
+| CPU_TRACE_RDATA | `0x123C` | `0x23C` | RO | `0x00000000` | Trace buffer read data (32-bit: [31:16]=insn, [15:0]=result) |
+| CPU_TRACE_CTRL | `0x1240` | `0x240` | RW | `0x00000001` | Trace control: [0]=enable (default 1), [1]=clear_pulse |
+| CPU_TRACE_PTR | `0x1244` | `0x244` | RO | `0x00000000` | Trace buffer write pointer (0-255, increments on each execution) |
+| CPU_ID | `0x1248` | `0x248` | RO | `0x54443331` | CPU identification/version (ASCII 'TD31' placeholder) |
+| REVISION | `0x124C` | `0x24C` | RO | `0x20251228` | Hardware revision (date-based: 0xYYYYMMDD) |
 
 ## Regeneration Instructions
 

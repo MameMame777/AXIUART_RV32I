@@ -110,10 +110,12 @@ module AXIUART_Top #(
     logic        cpu_mem_busy;
     logic        cpu_mem_err;
     
-    // Trace buffer interface
-    logic [7:0]  cpu_trace_buf_addr;
+    // Trace buffer interface (register-based like CPU_MEM)
+    logic [7:0]  cpu_trace_buf_addr;  // Derived from Register_Block.cpu_trace_addr_reg
     logic [31:0] cpu_trace_buf_rdata;
     logic [7:0]  cpu_trace_write_ptr;
+    logic        cpu_trace_enable;
+    logic        cpu_trace_clear_pulse;
     
     // Flow control signals
     logic        rx_fifo_full;
@@ -239,11 +241,15 @@ module AXIUART_Top #(
         , .cpu_mem_busy(cpu_mem_busy)
         , .cpu_mem_err(cpu_mem_err)
         
-        // Trace buffer interface
-        , .cpu_trace_buf_addr(cpu_trace_buf_addr)
+        // Trace buffer interface (register-based access like CPU_MEM)
         , .cpu_trace_buf_rdata(cpu_trace_buf_rdata)
         , .cpu_trace_write_ptr(cpu_trace_write_ptr)
+        , .cpu_trace_enable(cpu_trace_enable)
+        , .cpu_trace_clear_pulse(cpu_trace_clear_pulse)
     );
+
+    // Derive trace buffer address from Register_Block's internal register
+    assign cpu_trace_buf_addr = register_block_inst.cpu_trace_addr_reg[7:0];
 
     // Minimal TD4CPU core (debug + RAM bring-up)
     td4cpu_core #(
