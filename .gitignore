@@ -107,6 +107,9 @@ run_*.log
 compile_output.log
 final_compile.log
 
+# Regression Test Reports
+sim/reports/
+
 # Backup Files
 *.bak
 *.backup
