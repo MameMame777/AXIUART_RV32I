@@ -130,18 +130,35 @@ module td4cpu_core #(
     (* keep = "true" *) logic debug_running;
     (* keep = "true" *) logic [7:0] debug_halt_reason;
     
-    // ALU Pipeline Stage 1: Break critical path (PC→RAM→ALU)
-    // These registers hold ALU computation before flag generation
-    logic [15:0] alu_result_stage1;
-    logic [2:0]  alu_rd_stage1;
-    logic        alu_writeback_en_stage1;
-    logic        alu_flags_update_en_stage1;
-    logic [2:0]  alu_input_flags_stage1;  // Capture input flags for flag computation
-    logic [15:0] alu_operand_a_stage1;    // For CMP flag generation
-    logic [15:0] alu_operand_b_stage1;    // For CMP flag generation
-    logic [5:0]  alu_funct_stage1;        // Function code for stage 2
+    // Instruction Fetch/Decode Pipeline Stage
+    // Break critical path: PC→RAM fetch (cycle N) → decode (cycle N+1)
+    logic [15:0] insn_fetched;          // Fetched instruction from RAM
+    logic        insn_valid;            // Valid instruction fetched
+    logic [15:0] fetch_pc;              // PC of fetched instruction
     
-    // ALU Pipeline Stage 2 (writeback holding registers)
+    // ALU Pipeline Stage 1: Operand Fetch + Simple Decode
+    // Break critical path: PC→RAM→decode→operand_fetch (no ALU computation yet)
+    logic [15:0] alu_operand_a_stage1;    // Operand A from register file
+    logic [15:0] alu_operand_b_stage1;    // Operand B from register file
+    logic [5:0]  alu_funct_stage1;        // ALU function code
+    logic [2:0]  alu_rd_stage1;           // Destination register
+    logic [2:0]  alu_input_flags_stage1;  // Input flags for operations
+    logic        alu_valid_stage1;        // Valid ALU operation
+    logic [15:0] alu_insn_stage1;         // Instruction code (for trace)
+    
+    // ALU Pipeline Stage 2: Arithmetic Computation
+    // Complex operations (ADD/SUB/CMP) happen here with carry chains
+    logic [15:0] alu_result_stage2;
+    logic [2:0]  alu_rd_stage2;
+    logic        alu_writeback_en_stage2;
+    logic        alu_flags_update_en_stage2;
+    logic [2:0]  alu_input_flags_stage2;  // For flag computation
+    logic [15:0] alu_operand_a_stage2;    // Forwarded for flag calc
+    logic [15:0] alu_operand_b_stage2;    // Forwarded for flag calc
+    logic [5:0]  alu_funct_stage2;        // Forwarded function code
+    logic [15:0] alu_insn_stage2;         // Instruction code (for trace)
+    
+    // ALU Pipeline Stage 3 (writeback holding registers)
     // Timing optimization: Enable register replication and balancing
     (* max_fanout = 50 *)
     logic [15:0] alu_result_hold;
@@ -152,6 +169,7 @@ module td4cpu_core #(
     logic        alu_flags_update_en_hold;  // Track flag updates (for CMP, etc.)
     (* max_fanout = 30 *)
     logic [2:0]  alu_flags_hold;  // {c, n, z}
+    logic [15:0] alu_insn_hold;   // Instruction code (for trace)
     
     // Additional debug signals for writeback tracking
     (* keep = "true" *) logic [15:0] debug_alu_result_hold;
@@ -242,149 +260,44 @@ module td4cpu_core #(
         return is_sys && z_ok && (insn[2:0] == SYSOP_BRK);
     endfunction
 
-    // Instruction decoder signals
-    logic [3:0]  opcode;
-    logic [2:0]  rd_idx;
-    logic [2:0]  rs_idx;
-    logic [5:0]  funct;
-    logic [15:0] rd_val;
-    logic [15:0] rs_val;
-    
-    // ALU outputs
-    logic [15:0] alu_result;
-    logic        alu_flag_z;
-    logic        alu_flag_n;
-    logic        alu_flag_c;
-    logic        alu_writeback_en;
-    logic        alu_flags_update_en;
-
-    // Decode instruction fields (combinational)
-    always_comb begin
-        opcode  = 4'h0;
-        rd_idx  = 3'h0;
-        rs_idx  = 3'h0;
-        funct   = 6'h00;
-        rd_val  = 16'h0000;
-        rs_val  = 16'h0000;
-        
-        alu_result = 16'h0000;
-        alu_flag_z = 1'b0;
-        alu_flag_n = 1'b0;
-        alu_flag_c = 1'b0;
-        alu_writeback_en = 1'b0;
-        alu_flags_update_en = 1'b0;
-    end
-
-    // ALU execution logic (combinational)
-    function automatic void decode_and_execute_r_alu(
-        input logic [15:0] insn,
-        input logic [15:0] regfile_array [0:7],
-        input logic [2:0]  current_flags,
-        output logic [15:0] result,
-        output logic        flag_z,
-        output logic        flag_n,
-        output logic        flag_c,
-        output logic        writeback_en,
-        output logic        flags_update_en
+    // ========================================
+    // ALU Stage 2: Arithmetic Computation Only
+    // ========================================
+    // Simplified function that only does arithmetic - no decode, no flag compute
+    function automatic logic [15:0] alu_compute_stage2(
+        input logic [5:0]  funct,
+        input logic [15:0] operand_a,
+        input logic [15:0] operand_b
     );
-        logic [2:0]  rd;
-        logic [2:0]  rs;
-        logic [5:0]  fn;
-        logic [15:0] rd_value;
-        logic [15:0] rs_value;
-        logic [16:0] temp_sum;
-        logic [16:0] temp_sub;
+        logic [16:0] temp_sum, temp_sub;
+        logic [15:0] result;
         
-        rd = insn[11:9];
-        rs = insn[8:6];
-        fn = insn[5:0];
-        rd_value = regfile_array[rd];
-        rs_value = regfile_array[rs];
-        
-        // Default outputs
-        result = 16'h0000;
-        flag_z = 1'b0;
-        flag_n = 1'b0;
-        flag_c = current_flags[2]; // Preserve carry by default
-        writeback_en = 1'b1;
-        flags_update_en = 1'b1;
-        
-        case (fn)
+        case (funct)
             FUNCT_ADD: begin
-                temp_sum = {1'b0, rd_value} + {1'b0, rs_value};
+                temp_sum = {1'b0, operand_a} + {1'b0, operand_b};
                 result = temp_sum[15:0];
-                flag_z = (result == 16'h0000);
-                flag_n = result[15];
-                flag_c = temp_sum[16];
             end
             
-            FUNCT_SUB: begin
-                temp_sub = {1'b0, rd_value} - {1'b0, rs_value};
+            FUNCT_SUB, FUNCT_CMP: begin
+                temp_sub = {1'b0, operand_a} - {1'b0, operand_b};
                 result = temp_sub[15:0];
-                flag_z = (result == 16'h0000);
-                flag_n = result[15];
-                flag_c = ~temp_sub[16]; // C=1 if no borrow (rd >= rs)
             end
             
-            FUNCT_AND: begin
-                result = rd_value & rs_value;
-                flag_z = (result == 16'h0000);
-                flag_n = result[15];
-                // flag_c preserved
-            end
+            FUNCT_AND: result = operand_a & operand_b;
+            FUNCT_OR:  result = operand_a | operand_b;
+            FUNCT_XOR: result = operand_a ^ operand_b;
+            FUNCT_SHL1: result = {operand_a[14:0], 1'b0};
+            FUNCT_SHR1: result = {1'b0, operand_a[15:1]};
+            FUNCT_MOV: result = operand_b;
             
-            FUNCT_OR: begin
-                result = rd_value | rs_value;
-                flag_z = (result == 16'h0000);
-                flag_n = result[15];
-                // flag_c preserved
-            end
-            
-            FUNCT_XOR: begin
-                result = rd_value ^ rs_value;
-                flag_z = (result == 16'h0000);
-                flag_n = result[15];
-                // flag_c preserved
-            end
-            
-            FUNCT_CMP: begin
-                temp_sub = {1'b0, rd_value} - {1'b0, rs_value};
-                result = temp_sub[15:0];
-                flag_z = (result == 16'h0000);
-                flag_n = result[15];
-                flag_c = ~temp_sub[16];
-                writeback_en = 1'b0; // CMP does not write back
-            end
-            
-            FUNCT_SHL1: begin
-                result = {rd_value[14:0], 1'b0};
-                flag_z = (result == 16'h0000);
-                flag_n = result[15];
-                flag_c = rd_value[15]; // Shift-out bit
-            end
-            
-            FUNCT_SHR1: begin
-                result = {1'b0, rd_value[15:1]};
-                flag_z = (result == 16'h0000);
-                flag_n = result[15];
-                flag_c = rd_value[0]; // Shift-out bit
-            end
-            
-            FUNCT_MOV: begin
-                result = rs_value;
-                flags_update_en = 1'b0; // MOV does not update flags
-            end
-            
-            default: begin
-                result = 16'h0000;
-                writeback_en = 1'b0;
-                flags_update_en = 1'b0;
-            end
+            default: result = 16'h0000;
         endcase
+        
+        return result;
     endfunction
     
     // ========================================
-    // ALU Flag Computation (Pipeline Stage 2)
+    // ALU Flag Computation (Pipeline Stage 3)
     // ========================================
     // Separated flag generation for timing optimization
     function automatic void compute_alu_flags(
@@ -483,20 +396,38 @@ module td4cpu_core #(
             debug_alu_writeback <= 1'b0;
             debug_alu_flags_update <= 1'b0;
             
-            // ALU Stage 1 reset
-            alu_result_stage1 <= 16'd0;
-            alu_rd_stage1 <= 3'd0;
-            alu_writeback_en_stage1 <= 1'b0;
-            alu_flags_update_en_stage1 <= 1'b0;
-            alu_input_flags_stage1 <= 3'd0;
+            // Instruction fetch pipeline reset
+            insn_fetched <= 16'h0000;
+            insn_valid <= 1'b0;
+            fetch_pc <= 16'h0000;
+            
+            // ALU Pipeline Stage 1 reset (operand fetch)
             alu_operand_a_stage1 <= 16'd0;
             alu_operand_b_stage1 <= 16'd0;
             alu_funct_stage1 <= 6'd0;
+            alu_rd_stage1 <= 3'd0;
+            alu_input_flags_stage1 <= 3'd0;
+            alu_valid_stage1 <= 1'b0;
+            alu_insn_stage1 <= 16'd0;
             
-            // ALU Stage 2 reset
+            // ALU Pipeline Stage 2 reset (arithmetic)
+            alu_result_stage2 <= 16'd0;
+            alu_rd_stage2 <= 3'd0;
+            alu_writeback_en_stage2 <= 1'b0;
+            alu_flags_update_en_stage2 <= 1'b0;
+            alu_input_flags_stage2 <= 3'd0;
+            alu_operand_a_stage2 <= 16'd0;
+            alu_operand_b_stage2 <= 16'd0;
+            alu_funct_stage2 <= 6'd0;
+            alu_insn_stage2 <= 16'd0;
+            
+            // ALU Pipeline Stage 3 reset (writeback)
             alu_result_hold <= 16'd0;
             alu_rd_hold <= 3'd0;
-            alu_writeback_en_hold <= 1'b0;            alu_flags_update_en_hold <= 1'b0;            alu_flags_hold <= 3'd0;
+            alu_writeback_en_hold <= 1'b0;
+            alu_flags_update_en_hold <= 1'b0;
+            alu_flags_hold <= 3'd0;
+            alu_insn_hold <= 16'd0;
 
             // RAM contents are left uninitialized by default.
             // In simulation, use $readmemh from a testbench if needed.
@@ -515,25 +446,62 @@ module td4cpu_core #(
             end
             
             // ========================================
-            // ALU Pipeline Stage 2: Flag Generation
+            // ALU Pipeline Stage 2: Arithmetic Computation
             // ========================================
-            // Move stage 1 results to holding registers and generate flags
-            // This completes the second half of the critical path
-            if (alu_writeback_en_stage1 || alu_flags_update_en_stage1) begin
-                alu_result_hold <= alu_result_stage1;
-                alu_rd_hold <= alu_rd_stage1;
-                alu_writeback_en_hold <= alu_writeback_en_stage1;
-                alu_flags_update_en_hold <= alu_flags_update_en_stage1;
+            // Take operands from Stage 1 and compute result
+            if (alu_valid_stage1) begin
+                alu_result_stage2 <= alu_compute_stage2(
+                    alu_funct_stage1,
+                    alu_operand_a_stage1,
+                    alu_operand_b_stage1
+                );
+                alu_rd_stage2 <= alu_rd_stage1;
+                alu_input_flags_stage2 <= alu_input_flags_stage1;
+                alu_operand_a_stage2 <= alu_operand_a_stage1;
+                alu_operand_b_stage2 <= alu_operand_b_stage1;
+                alu_funct_stage2 <= alu_funct_stage1;
+                alu_insn_stage2 <= alu_insn_stage1;  // Propagate instruction
                 
-                // Generate flags from stage 1 data
-                if (alu_flags_update_en_stage1) begin
+                // Determine writeback/flags enable
+                case (alu_funct_stage1)
+                    FUNCT_CMP: begin
+                        alu_writeback_en_stage2 <= 1'b0;
+                        alu_flags_update_en_stage2 <= 1'b1;
+                    end
+                    FUNCT_MOV: begin
+                        alu_writeback_en_stage2 <= 1'b1;
+                        alu_flags_update_en_stage2 <= 1'b0;
+                    end
+                    default: begin
+                        alu_writeback_en_stage2 <= 1'b1;
+                        alu_flags_update_en_stage2 <= 1'b1;
+                    end
+                endcase
+                
+                alu_valid_stage1 <= 1'b0;  // Clear valid
+            end
+            
+            // ========================================
+            // ALU Pipeline Stage 3: Flag Generation & Hold
+            // ========================================
+            // Move stage 2 results to holding registers and generate flags
+            if (alu_writeback_en_stage2 || alu_flags_update_en_stage2) begin
+                alu_result_hold <= alu_result_stage2;
+                alu_rd_hold <= alu_rd_stage2;
+                alu_writeback_en_hold <= alu_writeback_en_stage2;
+                alu_flags_update_en_hold <= alu_flags_update_en_stage2;
+                alu_insn_hold <= alu_insn_stage2;  // Propagate instruction for trace
+                alu_insn_hold <= alu_insn_stage2;  // Propagate instruction for trace
+                
+                // Generate flags from stage 2 data
+                if (alu_flags_update_en_stage2) begin
                     logic flag_z, flag_n, flag_c;
                     compute_alu_flags(
-                        alu_funct_stage1,
-                        alu_result_stage1,
-                        alu_operand_a_stage1,
-                        alu_operand_b_stage1,
-                        alu_input_flags_stage1,
+                        alu_funct_stage2,
+                        alu_result_stage2,
+                        alu_operand_a_stage2,
+                        alu_operand_b_stage2,
+                        alu_input_flags_stage2,
                         flag_z,
                         flag_n,
                         flag_c
@@ -541,13 +509,13 @@ module td4cpu_core #(
                     alu_flags_hold <= {flag_c, flag_n, flag_z};
                 end
                 
-                // Clear stage 1 enables
-                alu_writeback_en_stage1 <= 1'b0;
-                alu_flags_update_en_stage1 <= 1'b0;
+                // Clear stage 2 enables
+                alu_writeback_en_stage2 <= 1'b0;
+                alu_flags_update_en_stage2 <= 1'b0;
             end
             
             // ========================================
-            // ALU Pipeline Stage 3: Writeback
+            // ALU Pipeline Stage 4: Writeback
             // ========================================
             // This must complete BEFORE halt for step execution
             if (alu_writeback_en_hold) begin
@@ -573,17 +541,25 @@ module td4cpu_core #(
                 running <= 1'b0;
                 halt_reason <= HALT_REASON_EXTERNAL_HALT;
                 step_pending <= 1'b0;
+                // Flush fetch pipeline on halt
+                insn_valid <= 1'b0;
             end
 
             if (dbg_run_req_pulse) begin
                 halted <= 1'b0;
                 running <= 1'b1;
                 step_pending <= 1'b0;
+                // Flush fetch pipeline on run
+                insn_valid <= 1'b0;
             end
 
             // Debug writes into state are accepted only while halted
             if (halted) begin
-                if (dbg_wr_pc_pulse) pc <= dbg_wr_pc_data;
+                if (dbg_wr_pc_pulse) begin
+                    pc <= dbg_wr_pc_data;
+                    // Flush fetch pipeline on PC write
+                    insn_valid <= 1'b0;
+                end
                 if (dbg_wr_sp_pulse) sp <= dbg_wr_sp_data;
                 if (dbg_wr_flags_pulse) flags <= dbg_wr_flags_data;
                 if (dbg_reg_write_pulse) regfile[dbg_reg_index] <= dbg_reg_wdata;
@@ -621,94 +597,81 @@ module td4cpu_core #(
 
             // Execution (minimal bring-up): advance PC and stop on BRK/breakpoints
             if (running) begin
-                // Breakpoint at fetch boundary
+                // Fetch stage: Read instruction from RAM
+                // Breakpoint/validity checks happen here (simplified)
                 if (pc_matches_breakpoint(pc)) begin
                     halted <= 1'b1;
                     running <= 1'b0;
                     break_hit <= 1'b1;
                     halt_reason <= HALT_REASON_BREAKPOINT;
                     step_pending <= 1'b0;
+                    insn_valid <= 1'b0;
                 end else if (!is_ram_addr_valid(pc)) begin
                     halted <= 1'b1;
                     running <= 1'b0;
                     halt_reason <= HALT_REASON_PC_OOB;
                     step_pending <= 1'b0;
+                    insn_valid <= 1'b0;
                 end else begin
-                    logic [15:0] insn;
-                    logic [3:0]  insn_opcode;
-                    insn = ram[pc];
-                    insn_opcode = insn[15:12];
-                    
-                    // Debug: Capture current instruction
-                    debug_current_insn <= insn;
-                    debug_current_opcode <= insn_opcode;
-
-                    // Default: increment PC
+                    // Fetch instruction - decode happens next cycle
+                    insn_fetched <= ram[pc];
+                    insn_valid <= 1'b1;
+                    fetch_pc <= pc;
                     pc <= pc + 16'd1;
-
-                    // Execute instruction based on opcode
-                    case (insn_opcode)
-                        OP_R_ALU: begin
-                            logic [15:0] r_result;
-                            logic        r_flag_z, r_flag_n, r_flag_c;
-                            logic        r_writeback_en, r_flags_update_en;
-                            
-                            // Debug: Capture operands and operation
-                            debug_current_rd <= insn[11:9];
-                            debug_current_rs <= insn[8:6];
-                            debug_current_funct <= insn[5:0];
-                            debug_alu_operand_a <= regfile[insn[11:9]];
-                            debug_alu_operand_b <= regfile[insn[8:6]];
-                            
-                            decode_and_execute_r_alu(
-                                insn,
-                                regfile,
-                                flags,
-                                r_result,
-                                r_flag_z,
-                                r_flag_n,
-                                r_flag_c,
-                                r_writeback_en,
-                                r_flags_update_en
-                            );
-                            
-                            // Pipeline Stage 1: Store ALU result to intermediate registers
-                            // This breaks the critical path: pc→ram→alu_stage1 (shorter)
-                            alu_result_stage1 <= r_result;
-                            alu_rd_stage1 <= insn[11:9];
-                            alu_writeback_en_stage1 <= r_writeback_en;
-                            alu_flags_update_en_stage1 <= r_flags_update_en;
-                            alu_input_flags_stage1 <= flags;
-                            alu_operand_a_stage1 <= regfile[insn[11:9]];
-                            alu_operand_b_stage1 <= regfile[insn[8:6]];
-                            alu_funct_stage1 <= insn[5:0];
-                            
-                            // Debug: Capture ALU result
-                            debug_alu_result <= r_result;
-                            debug_alu_writeback <= r_writeback_en;
-                            debug_alu_flags_update <= r_flags_update_en;
-                        end
-                        
-                        OP_SYS: begin
-                            if (is_brk_insn(insn)) begin
-                                halted <= 1'b1;
-                                running <= 1'b0;
-                                brk_hit <= 1'b1;
-                                halt_reason <= HALT_REASON_BRK;
-                                step_pending <= 1'b0;
-                            end
-                        end
-                        
-                        default: begin
-                            // Unimplemented opcodes treated as NOP
-                        end
-                    endcase
-
-                    // If we were stepping, halt AFTER next cycle (allows writeback)
-                    // Don't halt immediately - let writeback happen first
-                    // (Halt will occur in next cycle when step_pending is still set
-                    //  but alu_writeback_en_hold becomes 0)
                 end
+            end else begin
+                insn_valid <= 1'b0;
+            end
+            
+            // Decode/Execute stage: Process fetched instruction
+            if (insn_valid) begin
+                logic [3:0]  insn_opcode;
+                insn_opcode = insn_fetched[15:12];
+                
+                // Debug: Capture current instruction
+                debug_current_insn <= insn_fetched;
+                debug_current_opcode <= insn_opcode;
+
+                // Execute instruction based on opcode
+                case (insn_opcode)
+                    OP_R_ALU: begin
+                        // Debug: Capture operands and operation
+                        debug_current_rd <= insn_fetched[11:9];
+                        debug_current_rs <= insn_fetched[8:6];
+                        debug_current_funct <= insn_fetched[5:0];
+                        debug_alu_operand_a <= regfile[insn_fetched[11:9]];
+                        debug_alu_operand_b <= regfile[insn_fetched[8:6]];
+                        
+                        // ALU Pipeline Stage 1: Fetch operands only
+                        // No arithmetic computation - just decode and register read
+                        alu_operand_a_stage1 <= regfile[insn_fetched[11:9]];
+                        alu_operand_b_stage1 <= regfile[insn_fetched[8:6]];
+                        alu_funct_stage1 <= insn_fetched[5:0];
+                        alu_rd_stage1 <= insn_fetched[11:9];
+                        alu_input_flags_stage1 <= flags;
+                        alu_valid_stage1 <= 1'b1;
+                        alu_insn_stage1 <= insn_fetched;  // Propagate instruction
+                        alu_insn_stage1 <= insn_fetched;  // Propagate instruction
+                        
+                        // Debug: Mark as ALU operation
+                        debug_alu_writeback <= 1'b1;
+                        debug_alu_flags_update <= 1'b1;
+                    end
+                    
+                    OP_SYS: begin
+                        if (is_brk_insn(insn_fetched)) begin
+                            halted <= 1'b1;
+                            running <= 1'b0;
+                            brk_hit <= 1'b1;
+                            halt_reason <= HALT_REASON_BRK;
+                            step_pending <= 1'b0;
+                        end
+                    end
+                    
+                    default: begin
+                        // Unimplemented opcodes treated as NOP
+                    end
+                endcase
             end
             
             // Check step_pending AFTER potential writeback completes
@@ -744,7 +707,7 @@ module td4cpu_core #(
             // and flag-only instructions (CMP)
             if (alu_writeback_en_hold || alu_flags_update_en_hold) begin
                 trace_valid <= 1'b1;
-                trace_insn <= debug_current_insn;
+                trace_insn <= alu_insn_hold;  // Use pipelined instruction
                 trace_pc <= pc - 1;  // PC already incremented, show original
                 trace_rd_idx <= alu_rd_hold;
                 trace_rd_value <= alu_result_hold;
@@ -754,7 +717,7 @@ module td4cpu_core #(
                 
                 // Store in trace buffer for UVM readback
                 // Format: [31:16]=insn, [15:0]=result
-                trace_buffer[trace_write_ptr] <= {debug_current_insn, alu_result_hold};
+                trace_buffer[trace_write_ptr] <= {alu_insn_hold, alu_result_hold};
                 trace_write_ptr <= trace_write_ptr + 1;
             end
         end

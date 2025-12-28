@@ -677,10 +677,13 @@ module Register_Block #(
                         end
 
                         REG_CPU_REG_INDEX: begin
-                            // Only update index - latch trigger moved to read time (Solution 1)
+                            // Update index and trigger register value latch in CPU
+                            // This allows repeated reads of same register to work correctly
                             masked_value = apply_wstrb_mask(cpu_reg_index_reg, axi.wdata, axi.wstrb);
                             cpu_reg_index_reg <= 32'h0;
                             cpu_reg_index_reg[2:0] <= masked_value[2:0];
+                            // Generate write pulse to trigger CPU register latch
+                            cpu_reg_write_pulse <= 1'b1;
                         end
 
                         REG_CPU_REG_DATA: begin
