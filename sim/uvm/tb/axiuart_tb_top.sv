@@ -22,6 +22,9 @@ module axiuart_tb_top;
     logic [15:0] cpu_trace_rs_value;
     logic [2:0]  cpu_trace_flags;
     
+    // LED output from DUT
+    logic [3:0] led;
+    
     // Instantiate DUT (AXIUART_Top has no external AXI ports!)
     AXIUART_Top #(
         .CLK_FREQ_HZ(125_000_000),  // Match actual testbench clock (125MHz)
@@ -41,7 +44,7 @@ module axiuart_tb_top;
         .uart_tx(uart_vif.uart_tx),
         .uart_rts_n(uart_vif.uart_rts_n),
         .uart_cts_n(uart_vif.uart_cts_n),
-        .led(),  // Unconnected
+        .led(led),  // Connect LED output to testbench signal
         
         // CPU trace outputs
         .cpu_trace_valid(cpu_trace_valid),

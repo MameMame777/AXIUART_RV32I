@@ -4,7 +4,7 @@
 //
 // AUTO-GENERATED FILE - DO NOT EDIT MANUALLY
 // Generated from: register_map/axiuart_registers.json
-// Generation time: 2025-12-28T04:52:08.465847
+// Generation time: 2025-12-29T08:10:42.247911
 //
 // To regenerate:
 //     python software/axiuart_driver/tools/gen_registers.py --in register_map/axiuart_registers.json
@@ -28,10 +28,6 @@ package axiuart_reg_pkg;
     parameter int REG_TEST_2       = 32'h00001028;  // RW - Test register 2 - increment test
     parameter int REG_TEST_3       = 32'h0000102C;  // RW - Test register 3 - mirror test
     parameter int REG_TEST_4       = 32'h00001040;  // RW - Test register 4 - gap test
-    parameter int REG_TEST_LED     = 32'h00001044;  // RW - 4-bit LED control register
-    parameter int REG_TEST_5       = 32'h00001050;  // RW - Test register 5 - larger gap test
-    parameter int REG_TEST_6       = 32'h00001080;  // RW - Test register 6 - even larger gap test
-    parameter int REG_TEST_7       = 32'h00001100;  // RW - Test register 7 - different range test
     parameter int REG_CPU_DBG_CTRL = 32'h00001200;  // RW - CPU debug control: halt/run/step requests, halt_on_reset, breakpoint global enable
     parameter int REG_CPU_DBG_STATUS = 32'h00001204;  // RO - CPU debug status: halted/running, break/brk hit, halt reason
     parameter int REG_CPU_PC       = 32'h00001208;  // RW - CPU program counter (word address). Write allowed only when halted
@@ -54,6 +50,6 @@ package axiuart_reg_pkg;
     parameter int REG_REVISION     = 32'h0000124C;  // RO - Hardware revision (date-based: 0xYYYYMMDD)
 
     // Register count
-    parameter int REGISTER_COUNT = 37;
+    parameter int REGISTER_COUNT = 33;
 
 endpackage : axiuart_reg_pkg

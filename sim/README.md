@@ -4,6 +4,15 @@
 
 This directory contains the complete UVM testbench infrastructure for the AXIUART project. The simulation environment is built using Altair DSim 2025.1 with UVM 1.2 and provides comprehensive verification of the UART-AXI4 Bridge design.
 
+## Status
+
+✅ **All tests passing** (100% pass rate)  
+✅ **0 UVM_ERROR** (Bug #8 resolved - scoreboard RO register verification)  
+✅ **CPU MMIO LED tests validated** (5/5 tests passing)  
+✅ **Regression tests passing** (smoke suite: 2/2)
+
+*Last updated: December 29, 2025*
+
 ## Directory Structure
 
 ```
@@ -13,12 +22,16 @@ sim/
 │   ├── wave/               # Waveform files (MXD format)
 │   └── dsim.env            # DSIM environment configuration
 │
-├── tests/                  # Test definitions (NEW: refactored structure)
-│   ├── axiuart_test_pkg.sv         # Test package (includes all tests)
-│   ├── axiuart_base_test.sv        # Base test class
-│   ├── axiuart_basic_test.sv       # Basic connectivity test
-│   ├── axiuart_reset_test.sv       # Reset functionality test
-│   └── axiuart_reg_rw_test.sv      # Register R/W verification test
+├── reports/                # Regression test reports
+│   └── regression_report_*.html    # HTML regression reports
+│
+├── tests/                  # Test definitions
+│   ├── axiuart_test_pkg.sv             # Test package (includes all tests)
+│   ├── axiuart_base_test.sv            # Base test class
+│   ├── axiuart_basic_test.sv           # Basic connectivity test
+│   ├── axiuart_reset_test.sv           # Reset functionality test
+│   ├── axiuart_reg_rw_test.sv          # Register R/W verification test
+│   └── axiuart_cpu_mmio_led_test.sv    # CPU MMIO LED verification (5 tests)
 │
 ├── uvm/                    # UVM testbench components
 │   ├── sv/                 # SystemVerilog verification components
@@ -40,6 +53,7 @@ sim/
 │       ├── dsim_config.f               # DSIM file list
 │       └── Makefile                     # Build automation
 │
+├── regression_tests.json   # Regression test suite definitions
 └── README.md               # This file
 
 ```

@@ -29,6 +29,7 @@
   2. `python mcp_server/mcp_client.py --workspace e:\\Nautilus\\workspace\\fpgawork\\AXIUART_ --tool list_available_tests`
   3. `python mcp_server/mcp_client.py --workspace e:\\Nautilus\\workspace\\fpgawork\\AXIUART_ --tool run_uvm_simulation --test-name <test> --mode compile --verbosity UVM_LOW`
   4. `python mcp_server/mcp_client.py --workspace e:\\Nautilus\\workspace\\fpgawork\\AXIUART_ --tool run_uvm_simulation --test-name <test> --mode run --verbosity UVM_MEDIUM --waves`
+- **CRITICAL**: NEVER specify `--timeout` parameter. MCP server auto-selects timeout from `test_timing_config.json` or uses null (no timeout) by default.
 - Regression testing:
   - `python mcp_server/run_regression.py --suite smoke` - Quick validation (2 tests, ~40s)
   - `python mcp_server/run_regression.py --suite full --format html` - Complete regression with HTML report

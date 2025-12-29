@@ -27,10 +27,7 @@ module Register_Block #(
     input  logic [7:0]  error_code,            // Current error code
     input  logic [15:0] tx_count,              // TX transaction counter
     input  logic [15:0] rx_count,              // RX transaction counter
-    input  logic [7:0]  fifo_status,           // FIFO status flags
-    
-    // LED control output
-    output logic [3:0]  test_led               // 4-bit LED control
+    input  logic [7:0]  fifo_status            // FIFO status flags
 
     // --------------------------------------------------------------------
     // CPU debug interface (for TD4CPU16_MinRISC)
@@ -100,10 +97,6 @@ module Register_Block #(
     localparam bit [11:0] REG_TEST_2     = (axiuart_reg_pkg::REG_TEST_2 - BASE_ADDR);      // 0x028
     localparam bit [11:0] REG_TEST_3     = (axiuart_reg_pkg::REG_TEST_3 - BASE_ADDR);      // 0x02C
     localparam bit [11:0] REG_TEST_4     = (axiuart_reg_pkg::REG_TEST_4 - BASE_ADDR);      // 0x040
-    localparam bit [11:0] REG_TEST_LED   = (axiuart_reg_pkg::REG_TEST_LED - BASE_ADDR);    // 0x044
-    localparam bit [11:0] REG_TEST_5     = (axiuart_reg_pkg::REG_TEST_5 - BASE_ADDR);      // 0x050
-    localparam bit [11:0] REG_TEST_6     = (axiuart_reg_pkg::REG_TEST_6 - BASE_ADDR);      // 0x080
-    localparam bit [11:0] REG_TEST_7     = (axiuart_reg_pkg::REG_TEST_7 - BASE_ADDR);      // 0x100
 
     // CPU debug registers (from SSOT JSON)
     localparam bit [11:0] REG_CPU_DBG_CTRL   = (axiuart_reg_pkg::REG_CPU_DBG_CTRL - BASE_ADDR);   // 0x200
@@ -139,14 +132,11 @@ module Register_Block #(
     logic [31:0] test_reg_2;       // RW - Test register 2 (increment test)
     logic [31:0] test_reg_3;       // RW - Test register 3 (mirror test)
     logic [31:0] test_reg_4;       // RW - Test register 4 (gap test)
-    logic [31:0] test_reg_5;       // RW - Test register 5 (larger gap)
-    logic [31:0] test_reg_6;       // RW - Test register 6 (even larger gap)
-    logic [31:0] test_reg_7;       // RW - Test register 7 (different range)
-    logic [31:0] test_led_reg;     // RW - Test LED register (4-bit LED control)
 
     // CPU debug register storage (RW parts live here; RO is derived from CPU inputs)
     logic [31:0] cpu_dbg_ctrl_reg;
     logic [31:0] cpu_reg_index_reg;
+    logic        cpu_reg_read_pulse_set;  // Set when CPU_REG_INDEX written
     logic [31:0] cpu_bp0_pc_reg;
     logic [31:0] cpu_bp1_pc_reg;
     logic [31:0] cpu_bp_ctrl_reg;
@@ -289,13 +279,13 @@ module Register_Block #(
             REG_CONTROL, REG_STATUS, REG_CONFIG, REG_DEBUG,
             REG_TX_COUNT, REG_RX_COUNT, REG_FIFO_STAT, REG_VERSION,
             REG_TEST_0, REG_TEST_1, REG_TEST_2, REG_TEST_3,
-            REG_TEST_4, REG_TEST_5, REG_TEST_6, REG_TEST_7, REG_TEST_LED,
+            REG_TEST_4,
             REG_CPU_DBG_CTRL, REG_CPU_PC, REG_CPU_SP, REG_CPU_FLAGS,
             REG_CPU_REG_INDEX, REG_CPU_REG_DATA,
             REG_CPU_BP0_PC, REG_CPU_BP1_PC, REG_CPU_BP_CTRL,
             REG_CPU_MEM_ADDR, REG_CPU_MEM_WDATA, REG_CPU_MEM_CTRL,
             REG_CPU_TRACE_ADDR, REG_CPU_TRACE_CTRL,
-            REG_CPU_ID, REG_REVISION, REG_CPU_TRACE_CTRL, REG_CPU_TRACE_PTR: begin
+            REG_CPU_ID, REG_REVISION, REG_CPU_TRACE_PTR: begin
                 within_register_range = 1'b1;
             end
             default: begin
@@ -324,7 +314,7 @@ module Register_Block #(
             REG_CONTROL, REG_STATUS, REG_CONFIG, REG_DEBUG,
             REG_TX_COUNT, REG_RX_COUNT, REG_FIFO_STAT, REG_VERSION,
             REG_TEST_0, REG_TEST_1, REG_TEST_2, REG_TEST_3,
-            REG_TEST_4, REG_TEST_5, REG_TEST_6, REG_TEST_7, REG_TEST_LED,
+            REG_TEST_4,
             REG_CPU_DBG_CTRL, REG_CPU_DBG_STATUS, REG_CPU_PC, REG_CPU_SP, REG_CPU_FLAGS,
             REG_CPU_REG_INDEX, REG_CPU_REG_DATA,
             REG_CPU_BP0_PC, REG_CPU_BP1_PC, REG_CPU_BP_CTRL,
@@ -427,9 +417,6 @@ module Register_Block #(
     logic test_reg_2_write_detect;
     logic test_reg_3_write_detect;
     logic test_reg_4_write_detect;
-    logic test_reg_5_write_detect;
-    logic test_reg_6_write_detect;
-    logic test_reg_7_write_detect;
 
     always_ff @(posedge clk) begin
         if (rst) begin
@@ -443,9 +430,6 @@ module Register_Block #(
             test_reg_2 <= 32'h00000000;    // Zero initial value
             test_reg_3 <= 32'h00000000;    // Zero initial value
             test_reg_4 <= 32'h00000000;    // Zero initial value
-            test_reg_5 <= 32'h00000000;    // Zero initial value
-            test_reg_6 <= 32'h00000000;    // Zero initial value
-            test_reg_7 <= 32'h00000000;    // Zero initial value
             
             // Test register write detection initialization - Extended
             test_reg_0_write_detect <= 1'b0;
@@ -453,9 +437,6 @@ module Register_Block #(
             test_reg_2_write_detect <= 1'b0;
             test_reg_3_write_detect <= 1'b0;
             test_reg_4_write_detect <= 1'b0;
-            test_reg_5_write_detect <= 1'b0;
-            test_reg_6_write_detect <= 1'b0;
-            test_reg_7_write_detect <= 1'b0;
             
             write_resp <= RESP_OKAY;
             write_addr_reg <= BASE_ADDR;
@@ -486,6 +467,7 @@ module Register_Block #(
             cpu_wr_sp_data <= 16'h0000;
             cpu_wr_flags_pulse <= 1'b0;
             cpu_wr_flags_data <= 3'b000;
+            cpu_reg_read_pulse_set <= 1'b0;
             cpu_reg_write_pulse <= 1'b0;
             cpu_reg_wdata <= 16'h0000;
             cpu_mem_read_req_pulse <= 1'b0;
@@ -501,6 +483,7 @@ module Register_Block #(
             cpu_wr_pc_pulse <= 1'b0;
             cpu_wr_sp_pulse <= 1'b0;
             cpu_wr_flags_pulse <= 1'b0;
+            cpu_reg_read_pulse_set <= 1'b0;  // Clear after one cycle
             cpu_reg_write_pulse <= 1'b0;
             cpu_mem_read_req_pulse <= 1'b0;
             cpu_mem_write_req_pulse <= 1'b0;
@@ -511,12 +494,7 @@ module Register_Block #(
             // Clear test register write detection flags
             test_reg_0_write_detect <= 1'b0;
             test_reg_1_write_detect <= 1'b0;
-            test_reg_2_write_detect <= 1'b0;
-            test_reg_3_write_detect <= 1'b0;
-            test_reg_4_write_detect <= 1'b0;
-            test_reg_5_write_detect <= 1'b0;
-            test_reg_6_write_detect <= 1'b0;
-            test_reg_7_write_detect <= 1'b0;
+
 
             // SOFT RESET: Clear all registers EXCEPT CONFIG (preserve baud rate)
             if (soft_reset_request) begin
@@ -535,9 +513,6 @@ module Register_Block #(
                 test_reg_2 <= '0;
                 test_reg_3 <= '0;
                 test_reg_4 <= '0;
-                test_reg_5 <= '0;
-                test_reg_6 <= '0;
-                test_reg_7 <= '0;
             end else if (aw_handshake) begin
                 write_addr_reg <= axi.awaddr;
                 write_resp <= RESP_OKAY;
@@ -615,29 +590,6 @@ module Register_Block #(
                             test_reg_4_write_detect <= 1'b1;
                         end
 
-                        REG_TEST_5: begin
-                            masked_value = apply_wstrb_mask(test_reg_5, axi.wdata, axi.wstrb);
-                            test_reg_5 <= masked_value;
-                            test_reg_5_write_detect <= 1'b1;
-                        end
-
-                        REG_TEST_6: begin
-                            masked_value = apply_wstrb_mask(test_reg_6, axi.wdata, axi.wstrb);
-                            test_reg_6 <= masked_value;
-                            test_reg_6_write_detect <= 1'b1;
-                        end
-
-                        REG_TEST_7: begin
-                            masked_value = apply_wstrb_mask(test_reg_7, axi.wdata, axi.wstrb);
-                            test_reg_7 <= masked_value;
-                            test_reg_7_write_detect <= 1'b1;
-                        end
-
-                        REG_TEST_LED: begin
-                            masked_value = apply_wstrb_mask(test_led_reg, axi.wdata, axi.wstrb);
-                            test_led_reg <= masked_value;
-                        end
-
                         // ----------------------------------------------------------------
                         // CPU debug register writes
                         // ----------------------------------------------------------------
@@ -677,17 +629,19 @@ module Register_Block #(
                         end
 
                         REG_CPU_REG_INDEX: begin
-                            // Update index and trigger register value latch in CPU
-                            // This allows repeated reads of same register to work correctly
+                            // Update index and trigger register value latch in CPU (for reading)
+                            // Writing CPU_REG_INDEX selects which register to read
+                            // This triggers cpu_reg_read_pulse to latch the value
                             masked_value = apply_wstrb_mask(cpu_reg_index_reg, axi.wdata, axi.wstrb);
                             cpu_reg_index_reg <= 32'h0;
                             cpu_reg_index_reg[2:0] <= masked_value[2:0];
-                            // Generate write pulse to trigger CPU register latch
-                            cpu_reg_write_pulse <= 1'b1;
+                            // Trigger read pulse (for latching register value)
+                            cpu_reg_read_pulse_set <= 1'b1;
                         end
 
                         REG_CPU_REG_DATA: begin
                             if (cpu_halted) begin
+                                // Actual register write - only when CPU halted
                                 cpu_reg_wdata <= axi.wdata[15:0];
                                 cpu_reg_write_pulse <= 1'b1;
                             end
@@ -787,7 +741,7 @@ module Register_Block #(
 
         read_resp = RESP_OKAY;
         read_data = '0;
-        cpu_reg_read_pulse = 1'b0;  // Default: no read pulse
+        cpu_reg_read_pulse = cpu_reg_read_pulse_set;  // Set when CPU_REG_INDEX written
 
         if (read_ok) begin
             case (aligned_offset)
@@ -847,23 +801,6 @@ module Register_Block #(
 
                 REG_TEST_4: begin
                     read_data = test_reg_4;
-                end
-
-                REG_TEST_5: begin
-                    read_data = test_reg_5;
-                end
-
-                REG_TEST_6: begin
-                    read_data = test_reg_6;
-                end
-
-                REG_TEST_7: begin
-                    read_data = test_reg_7;
-                end
-
-                REG_TEST_LED: begin
-                    read_data[3:0] = test_led_reg[3:0];  // Only lower 4 bits are used
-                    read_data[31:4] = '0;
                 end
 
                 // ----------------------------------------------------------------
@@ -969,7 +906,6 @@ module Register_Block #(
     assign baud_div_config = config_reg[15:0];
     assign timeout_config = config_reg[15:8];
     assign debug_mode = debug_reg[3:0];
-    assign test_led = test_led_reg[3:0];  // LED control output
 
     `ifdef ENABLE_DEBUG
     // Critical debugging only - AXI handshakes and state transitions

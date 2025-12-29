@@ -260,10 +260,11 @@ def parse_dsim_error(stderr_output: str, exit_code: int) -> DSIMError:
             exit_code
         )
 
-def _run_subprocess_sync(cmd: List[str], timeout: int, cwd: Path) -> subprocess.CompletedProcess[bytes]:
+def _run_subprocess_sync(cmd: List[str], timeout: Optional[int], cwd: Path) -> subprocess.CompletedProcess[bytes]:
     """Run subprocess and drain its pipes to avoid deadlocks on large DSIM output.
     
     CRITICAL: Windows DLL resolution requires explicit PATH in environment.
+    CRITICAL: timeout is always None to prevent license issues (Exit code 105).
     """
     
     # Ensure DSIM environment is fully configured
@@ -334,7 +335,7 @@ async def execute_dsim_command(cmd: List[str], timeout: Optional[int] = None, cw
             completed = await asyncio.to_thread(
                 _run_subprocess_sync,
                 cmd,
-                timeout,
+                None,  # CRITICAL: Always None - never use timeout (causes license issues)
                 uvm_work_dir
             )
             stdout: bytes = completed.stdout
@@ -352,13 +353,8 @@ async def execute_dsim_command(cmd: List[str], timeout: Optional[int] = None, cw
                 stderr=asyncio.subprocess.PIPE,
                 cwd=uvm_work_dir
             )
-            if timeout is None:
-                stdout, stderr = await process.communicate()
-            else:
-                stdout, stderr = await asyncio.wait_for(
-                    process.communicate(), 
-                    timeout=timeout
-                )
+            # CRITICAL: Always None - never use timeout (causes license issues)
+            stdout, stderr = await process.communicate()
             return_code = process.returncode
             
             # CRITICAL: Wait for DSIM to flush log file buffers (non-Windows)
@@ -549,12 +545,16 @@ async def run_uvm_simulation(
     ]
     
     # Mode-specific options (do NOT add -uvm again)
+    # Note: Not using -genimage/-image to let DSIM use workspace mode (dsim_work/)
+    # This ensures compile and run modes are consistent
     if mode == "compile":
-        cmd.extend(["-genimage", "compiled_image"])
+        # Compile mode: Just compile, workspace automatically managed
+        pass  # DSIM will use workspace mode
     elif mode == "elaborate": 
         cmd.extend(["-elaborate"])
     else:  # run mode
-        cmd.extend(["-image", "compiled_image"])
+        # Run mode: Execute from workspace
+        pass  # DSIM will use workspace mode
     
     # Enhanced feature options
     waves_file: Optional[Path] = None

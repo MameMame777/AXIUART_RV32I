@@ -34,17 +34,15 @@ class axiuart_reg_rw_test extends axiuart_base_test;
         reset_seq.reset_cycles = 100;
         reset_seq.start(env.uart_agt.sequencer);
         
-        // 2. Write 6 test registers (REG_TEST_0-4 + REG_TEST_LED using register package)
-        `uvm_info(get_type_name(), "Writing 6 test registers (REG_TEST_0-4 + REG_TEST_LED)...", UVM_LOW)
-        for (int i = 0; i < 6; i++) begin
+        // 2. Write 5 test registers (REG_TEST_0-4 using register package)
+        `uvm_info(get_type_name(), "Writing 5 test registers (REG_TEST_0-4)...", UVM_LOW)
+        for (int i = 0; i < 5; i++) begin
             wr_seq[i] = uart_reg_write_sequence::type_id::create($sformatf("wr_seq_%0d", i));
             // Use generated register addresses from axiuart_reg_pkg
             if (i < 4)
                 wr_seq[i].reg_addr = REG_TEST_0 + (i * 4);
             else if (i == 4)
                 wr_seq[i].reg_addr = REG_TEST_4;
-            else
-                wr_seq[i].reg_addr = REG_TEST_LED;
             wr_seq[i].reg_data = test_data[i];
             wr_seq[i].start(env.uart_agt.sequencer);
         end
@@ -52,16 +50,14 @@ class axiuart_reg_rw_test extends axiuart_base_test;
         #50000ns;  // Wait 50us for DUT write processing
         
         // 3. Send read commands (note: read-back verification requires Monitor enhancement)
-        `uvm_info(get_type_name(), "Sending read commands for 6 test registers...", UVM_LOW)
-        for (int i = 0; i < 6; i++) begin
+        `uvm_info(get_type_name(), "Sending read commands for 5 test registers...", UVM_LOW)
+        for (int i = 0; i < 5; i++) begin
             rd_seq[i] = uart_reg_read_sequence::type_id::create($sformatf("rd_seq_%0d", i));
             // Use generated register addresses from axiuart_reg_pkg
             if (i < 4)
                 rd_seq[i].reg_addr = REG_TEST_0 + (i * 4);
             else if (i == 4)
                 rd_seq[i].reg_addr = REG_TEST_4;
-            else
-                rd_seq[i].reg_addr = REG_TEST_LED;
             rd_seq[i].start(env.uart_agt.sequencer);
             `uvm_info(get_type_name(), 
                 $sformatf("Read command sent for addr=0x%08X", rd_seq[i].reg_addr), UVM_MEDIUM)

@@ -108,38 +108,6 @@
       "description": "Test register 4 - gap test"
     },
     {
-      "name": "TEST_LED",
-      "offset": "0x044",
-      "access": "RW",
-      "width_bits": 32,
-      "reset": "0x00000000",
-      "description": "4-bit LED control register"
-    },
-    {
-      "name": "TEST_5",
-      "offset": "0x050",
-      "access": "RW",
-      "width_bits": 32,
-      "reset": "0x00000000",
-      "description": "Test register 5 - larger gap test"
-    },
-    {
-      "name": "TEST_6",
-      "offset": "0x080",
-      "access": "RW",
-      "width_bits": 32,
-      "reset": "0x00000000",
-      "description": "Test register 6 - even larger gap test"
-    },
-    {
-      "name": "TEST_7",
-      "offset": "0x100",
-      "access": "RW",
-      "width_bits": 32,
-      "reset": "0x00000000",
-      "description": "Test register 7 - different range test"
-    },
-    {
       "name": "CPU_DBG_CTRL",
       "offset": "0x200",
       "access": "RW",

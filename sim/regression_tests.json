@@ -48,6 +48,12 @@
           "description": "CPU debug interface test",
           "timeout": 300,
           "expected_duration": 90
+        },
+        {
+          "name": "axiuart_cpu_mmio_led_test",
+          "description": "CPU MMIO LED control via LD/ST",
+          "timeout": 300,
+          "expected_duration": 60
         }
       ]
     },
@@ -89,6 +95,12 @@
           "description": "CPU debug interface test",
           "timeout": 300,
           "expected_duration": 90
+        },
+        {
+          "name": "axiuart_cpu_mmio_led_test",
+          "description": "CPU MMIO LED control via LD/ST",
+          "timeout": 300,
+          "expected_duration": 60
         }
       ]
     }
