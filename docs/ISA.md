@@ -3,7 +3,7 @@
 **AUTO-GENERATED FILE - DO NOT EDIT MANUALLY**
 
 - Source: td4cpu_isa.json
-- Generated: 2025-12-20 22:54:11
+- Generated: 2025-12-29 19:43:44
 
 ## Opcodes
 

@@ -3,7 +3,7 @@ AXIUART Register Map
 
 AUTO-GENERATED FILE - DO NOT EDIT MANUALLY
 Generated from: register_map/axiuart_registers.json
-Generation time: 2025-12-29T08:10:42.246948
+Generation time: 2025-12-29T19:43:38.683007
 
 To regenerate:
     python software/axiuart_driver/tools/gen_registers.py --in register_map/axiuart_registers.json

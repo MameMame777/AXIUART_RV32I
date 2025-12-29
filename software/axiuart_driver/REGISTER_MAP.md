@@ -3,7 +3,7 @@
 **AUTO-GENERATED FILE - DO NOT EDIT MANUALLY**
 
 - **Source:** `register_map/axiuart_registers.json`
-- **Generated:** 2025-12-29 08:10:42
+- **Generated:** 2025-12-29 19:43:38
 - **Base Address:** `0x1000`
 - **Stride:** 4 bytes
 

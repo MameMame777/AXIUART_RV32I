@@ -3,7 +3,7 @@ TD4CPU ISA
 
 AUTO-GENERATED FILE - DO NOT EDIT MANUALLY
 Generated from: td4cpu_isa.json
-Generation time: 2025-12-20T22:54:11.475069
+Generation time: 2025-12-29T19:43:44.228331
 
 To regenerate:
     python software/axiuart_driver/tools/gen_cpu_isa.py --in td4cpu_isa.json
