@@ -62,7 +62,8 @@ module AXIUART_Top #(
     logic [15:0] rx_count;
     logic [7:0]  fifo_status;
     
-    logic [3:0]  test_led_internal;  // LED control from register block
+    // LED control is now CPU-driven via MMIO (test_led_internal removed)
+    // logic [3:0]  test_led_internal;  // REMOVED - LED now from CPU MMIO
 
     // --------------------------------------------------------------------
     // TD4CPU debug wiring (Register_Block <-> CPU)
@@ -188,7 +189,7 @@ module AXIUART_Top #(
         .baud_div_config(baud_div_config),
         .timeout_config(timeout_config),
         .debug_mode(debug_mode),
-        .test_led(test_led_internal),  // LED control output
+        // .test_led(test_led_internal),  // REMOVED - LED now CPU-controlled
         
         // Status inputs
         .bridge_busy(bridge_busy),
@@ -315,7 +316,10 @@ module AXIUART_Top #(
         // Trace buffer interface
         .trace_buf_addr(cpu_trace_buf_addr),
         .trace_buf_rdata(cpu_trace_buf_rdata),
-        .trace_write_ptr_out(cpu_trace_write_ptr)
+        .trace_write_ptr_out(cpu_trace_write_ptr),
+        
+        // Memory-Mapped IO: LED output
+        .led_out(led)  // Direct connection to top-level LED pins
     );
     
     // Hardware Flow Control Logic
@@ -333,8 +337,8 @@ module AXIUART_Top #(
         end
     end
     
-    // LED control from TEST_LED register
-    assign led = test_led_internal;
+    // LED control now from CPU's Memory-Mapped IO (led_out signal connected above)
+    // Old: assign led = test_led_internal;  // REMOVED - LED now CPU-controlled
     
     // AXI4-Lite Address Router and Interconnect
     // System status outputs (simulation only)

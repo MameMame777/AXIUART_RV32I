@@ -177,6 +177,26 @@ class axiuart_scoreboard extends uvm_scoreboard;
             return;  // Skip normal register verification for CPU_MEM_RDATA
         end
         
+        // Exclude read-only status/control registers from verification
+        // These registers return computed/status values, not previously written data
+        if (trans.address == axiuart_reg_pkg::REG_CPU_DBG_STATUS ||    // CPU debug status (halted/running/break)
+            trans.address == axiuart_reg_pkg::REG_VERSION ||           // Hardware version (read-only)
+            trans.address == axiuart_reg_pkg::REG_TX_COUNT ||          // TX counter (read-only)
+            trans.address == axiuart_reg_pkg::REG_RX_COUNT ||          // RX counter (read-only)
+            trans.address == axiuart_reg_pkg::REG_FIFO_STAT ||         // FIFO status flags (read-only)
+            trans.address == axiuart_reg_pkg::REG_CPU_REG_DATA ||      // CPU regfile data (read from regfile, not shadow)
+            trans.address == axiuart_reg_pkg::REG_CPU_TRACE_RDATA ||   // Trace buffer read data (read-only)
+            trans.address == axiuart_reg_pkg::REG_CPU_TRACE_PTR ||     // Trace buffer pointer (read-only)
+            trans.address == axiuart_reg_pkg::REG_CPU_ID ||            // CPU ID (read-only)
+            trans.address == axiuart_reg_pkg::REG_REVISION) begin      // Hardware revision (read-only)
+            // Just count the read without verification
+            `uvm_info("SCOREBOARD", 
+                $sformatf("Read from status/RO register (no verification): ADDR=0x%08X DATA=0x%08X",
+                          trans.address, trans.read_response_data), 
+                UVM_HIGH)
+            return;
+        end
+        
         // Normal register read verification
         if (write_shadow_regs.exists(trans.address)) begin
             expected_data = write_shadow_regs[trans.address];

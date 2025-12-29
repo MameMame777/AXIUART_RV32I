@@ -69,7 +69,10 @@ module td4cpu_core #(
     // Trace buffer memory interface (for UVM readback)
     input  logic [7:0]  trace_buf_addr,     // Read address
     output logic [31:0] trace_buf_rdata,    // Read data
-    output logic [7:0]  trace_write_ptr_out // Write pointer for readback
+    output logic [7:0]  trace_write_ptr_out, // Write pointer for readback
+    
+    // Memory-Mapped IO: LED output (direct connection to top-level pins)
+    output logic [3:0]  led_out             // 4-bit LED control via MMIO
 );
 
     localparam logic [7:0] HALT_REASON_NONE          = 8'h00;
@@ -79,8 +82,29 @@ module td4cpu_core #(
     localparam logic [7:0] HALT_REASON_BREAKPOINT    = 8'h04;
     localparam logic [7:0] HALT_REASON_BRK           = 8'h05;
     localparam logic [7:0] HALT_REASON_PC_OOB        = 8'h06;
+    
+    // Memory-Mapped IO address map
+    localparam logic [15:0] MMIO_BASE = 16'h1000;
+    localparam logic [15:0] MMIO_LED  = 16'h1044;  // LED register address (MMIO space)
 
     logic [15:0] regfile [0:7];
+    
+    // Memory-Mapped IO: LED register (CPU-writable, separate from UART-accessible registers)
+    logic [3:0] led_reg;
+    assign led_out = led_reg;  // Direct output to top-level pins
+    
+    // LD/ST instruction execution variables (declared at module level for proper synthesis)
+    logic [2:0] ld_rD_idx, ld_rB_idx;
+    logic [5:0] ld_offset6;
+    logic [15:0] ld_base_addr, ld_effective_addr;
+    
+    logic [2:0] st_rD_idx, st_rB_idx;
+    logic [5:0] st_offset6;
+    logic [15:0] st_base_addr, st_effective_addr, st_store_data;
+    
+    // LDI instruction execution variables
+    logic [2:0] ldi_rd_idx;
+    logic [8:0] ldi_imm9;
 
     // RAM: Infer Block RAM with output register for timing
     (* ram_style = "block" *)
@@ -135,6 +159,11 @@ module td4cpu_core #(
     logic [15:0] insn_fetched;          // Fetched instruction from RAM
     logic        insn_valid;            // Valid instruction fetched
     logic [15:0] fetch_pc;              // PC of fetched instruction
+    
+    // Data forwarding: track last register write in same cycle
+    logic        reg_write_pending;     // Register write scheduled this cycle
+    logic [2:0]  reg_write_idx;         // Index of register being written
+    logic [15:0] reg_write_data;        // Data being written to register
     
     // ALU Pipeline Stage 1: Operand Fetch + Simple Decode
     // Break critical path: PC→RAM→decode→operand_fetch (no ALU computation yet)
@@ -210,19 +239,20 @@ module td4cpu_core #(
         debug_writeback_target = alu_rd_hold;
     end
     
-    // CRITICAL FIX BUG#5: Use write pulse instead of edge detection
+    // CRITICAL FIX BUG#5: Use read pulse instead of write pulse for latching
     // Previous bug: Edge detection (dbg_reg_index != prev) fails when same address read repeatedly
     // Example: Test reads R1 multiple times → index stays 1 → latch never triggers → returns 0x0000
-    // Solution: Latch on EVERY write to CPU_DBG_ADDR (using dbg_reg_write_pulse from Register_Block)
+    // Solution: Latch on EVERY write to CPU_REG_INDEX (using dbg_reg_read_pulse from Register_Block)
     // This ensures atomic capture even for repeated reads of same register
+    // FIXED BUG#6: Use dbg_reg_read_pulse (CPU_REG_INDEX write), NOT dbg_reg_write_pulse (CPU_REG_DATA write)
     always_ff @(posedge clk or posedge rst) begin
         if (rst) begin
             dbg_reg_rdata_latched <= 16'h0000;
         end else begin
-            // Latch register value whenever CPU_DBG_ADDR is written (any value)
+            // Latch register value whenever CPU_REG_INDEX is written
             // This handles repeated reads from same address correctly
             // Captures atomically, remains stable during ~1ms UART read transaction
-            if (dbg_reg_write_pulse) begin
+            if (dbg_reg_read_pulse) begin
                 dbg_reg_rdata_latched <= regfile[dbg_reg_index];
             end
         end
@@ -374,10 +404,16 @@ module td4cpu_core #(
             dbg_mem_err <= 1'b0;
             mem_busy_q <= 1'b0;
             step_pending <= 1'b0;
+            reg_write_pending <= 1'b0;
+            reg_write_idx <= 3'b000;
+            reg_write_data <= 16'h0000;
 
             for (int i = 0; i < 8; i++) begin
                 regfile[i] <= 16'h0000;
             end
+            
+            // Reset LED register
+            led_reg <= 4'h0;
             
             // Reset debug signals
             debug_step_pending <= 1'b0;
@@ -595,7 +631,7 @@ module td4cpu_core #(
             end
 
             // Execution (minimal bring-up): advance PC and stop on BRK/breakpoints
-            if (running) begin
+            if (running && !insn_valid) begin
                 // Fetch stage: Read instruction from RAM
                 // Breakpoint/validity checks happen here (simplified)
                 if (pc_matches_breakpoint(pc)) begin
@@ -617,8 +653,9 @@ module td4cpu_core #(
                     insn_valid <= 1'b1;
                     fetch_pc <= pc;
                     pc <= pc + 16'd1;
+                    $display("[%t] FETCH: PC=0x%04x insn=0x%04x -> insn_valid=1 (was %0d)", $time, pc, ram[pc], insn_valid);
                 end
-            end else begin
+            end else if (!running) begin
                 insn_valid <= 1'b0;
             end
             
@@ -626,6 +663,12 @@ module td4cpu_core #(
             if (insn_valid) begin
                 logic [3:0]  insn_opcode;
                 insn_opcode = insn_fetched[15:12];
+                
+                // Clear forwarding at start of decode
+                reg_write_pending <= 1'b0;
+                
+                // DEBUG: Instruction decode trace
+                $display("[%t] DECODE: PC=0x%04x insn=0x%04x opcode=0x%01x", $time, fetch_pc, insn_fetched, insn_opcode);
                 
                 // Debug: Capture current instruction
                 debug_current_insn <= insn_fetched;
@@ -654,6 +697,140 @@ module td4cpu_core #(
                         debug_alu_flags_update <= 1'b1;
                     end
                     
+                    OP_LDI: begin
+                        // LDI Rd, #imm9 - Load immediate (unsigned)
+                        // Use module-level variables
+                        ldi_rd_idx = insn_fetched[11:9];
+                        ldi_imm9 = insn_fetched[8:0];
+                        regfile[ldi_rd_idx] <= {7'b0000000, ldi_imm9};
+                        $display("[%t] LDI: Scheduled R%0d <= 0x%04x (NBA update at end of timestep)", $time, ldi_rd_idx, {7'b0000000, ldi_imm9});
+                        $display("[%t] LDI: Before NBA - regfile[%0d] = 0x%04x", $time, ldi_rd_idx, regfile[ldi_rd_idx]);
+                        
+                        // Data forwarding
+                        reg_write_pending <= 1'b1;
+                        reg_write_idx <= ldi_rd_idx;
+                        reg_write_data <= {7'b0000000, ldi_imm9};
+                        insn_valid <= 1'b0;
+                    end
+                    
+                    OP_ADDI: begin
+                        // ADDI Rd, #imm9 - Add immediate (unsigned for address construction)
+                        logic [2:0] addi_rd_idx;
+                        logic [8:0] addi_imm9;
+                        logic [15:0] addi_imm_zext;
+                        logic [16:0] addi_result;
+                        
+                        addi_rd_idx = insn_fetched[11:9];
+                        addi_imm9 = insn_fetched[8:0];
+                        // Zero-extend 9-bit immediate to 16-bit (unsigned)
+                        addi_imm_zext = {7'b0000000, addi_imm9};
+                        // Perform addition with carry detection
+                        addi_result = {1'b0, regfile[addi_rd_idx]} + {1'b0, addi_imm_zext};
+                        
+                        $display("[%t] ADDI: R%0d = 0x%04x + 0x%04x = 0x%04x", 
+                                 $time, addi_rd_idx, regfile[addi_rd_idx], addi_imm_zext, addi_result[15:0]);
+                        
+                        regfile[addi_rd_idx] <= addi_result[15:0];
+                        $display("[%t] ADDI: Scheduled R%0d <= 0x%04x (NBA update at end of timestep)", $time, addi_rd_idx, addi_result[15:0]);
+                        // Update flags (Z=bit0, N=bit1, C=bit2)
+                        flags[0] <= (addi_result[15:0] == 16'h0000);  // Zero flag
+                        flags[1] <= addi_result[15];                   // Negative flag
+                        flags[2] <= addi_result[16];                   // Carry flag
+                        
+                        // Data forwarding: track this write for same-cycle reads
+                        reg_write_pending <= 1'b1;
+                        reg_write_idx <= addi_rd_idx;
+                        reg_write_data <= addi_result[15:0];
+                        insn_valid <= 1'b0;
+                    end
+                    
+                    OP_LD: begin
+                        // LD rD, [rB + off6] - Load from memory
+                        // Use module-level variables for proper RAM inference
+                        ld_rD_idx = insn_fetched[11:9];
+                        ld_rB_idx = insn_fetched[8:6];
+                        ld_offset6 = insn_fetched[5:0];
+                        ld_base_addr = regfile[ld_rB_idx];
+                        
+                        // Sign-extend 6-bit offset to 16-bit
+                        ld_effective_addr = ld_base_addr + {{10{ld_offset6[5]}}, ld_offset6};
+                        
+                        // Address space decode
+                        if (ld_effective_addr < MMIO_BASE) begin
+                            // RAM access (0x0000-0x0FFF)
+                            if (is_ram_addr_valid(ld_effective_addr)) begin
+                                regfile[ld_rD_idx] <= ram[ld_effective_addr];
+                            end else begin
+                                // Out of bounds - load zero
+                                regfile[ld_rD_idx] <= 16'h0000;
+                            end
+                        end else if (ld_effective_addr == MMIO_LED) begin
+                            // LED register read (MMIO: 0x1044)
+                            regfile[ld_rD_idx] <= {12'h000, led_reg};
+                        end else begin
+                            // Invalid MMIO address - load zero
+                            regfile[ld_rD_idx] <= 16'h0000;
+                        end
+                        
+                        // Data forwarding: track this write
+                        reg_write_pending <= 1'b1;
+                        reg_write_idx <= ld_rD_idx;
+                        reg_write_data <= (ld_effective_addr < MMIO_BASE && is_ram_addr_valid(ld_effective_addr)) ? ram[ld_effective_addr] :
+                                         (ld_effective_addr == MMIO_LED) ? {12'h000, led_reg} : 16'h0000;
+                        insn_valid <= 1'b0;
+                    end
+                    
+                    OP_ST: begin
+                        // ST rD, [rB + off6] - Store to memory
+                        // Use module-level variables for proper RAM inference
+                        st_rD_idx = insn_fetched[11:9];
+                        st_rB_idx = insn_fetched[8:6];
+                        st_offset6 = insn_fetched[5:0];
+                        
+                        // Data forwarding: check if we just wrote to the register we're reading
+                        if (reg_write_pending && (st_rB_idx == reg_write_idx)) begin
+                            st_base_addr = reg_write_data;  // Forward from pending write
+                            $display("[%t] ST: FORWARDED regfile[%0d] (R%0d) = 0x%04x", $time, st_rB_idx, st_rB_idx, reg_write_data);
+                        end else begin
+                            st_base_addr = regfile[st_rB_idx];
+                            $display("[%t] ST: Reading regfile[%0d] (R%0d) = 0x%04x", $time, st_rB_idx, st_rB_idx, regfile[st_rB_idx]);
+                        end
+                        
+                        if (reg_write_pending && (st_rD_idx == reg_write_idx)) begin
+                            st_store_data = reg_write_data;  // Forward from pending write
+                            $display("[%t] ST: FORWARDED regfile[%0d] (R%0d, store data) = 0x%04x", $time, st_rD_idx, st_rD_idx, reg_write_data);
+                        end else begin
+                            st_store_data = regfile[st_rD_idx];
+                            $display("[%t] ST: Reading regfile[%0d] (R%0d, store data) = 0x%04x", $time, st_rD_idx, st_rD_idx, regfile[st_rD_idx]);
+                        end
+                        
+                        // Sign-extend 6-bit offset to 16-bit
+                        st_effective_addr = st_base_addr + {{10{st_offset6[5]}}, st_offset6};
+                        
+                        // DEBUG: ST instruction execution trace
+                        $display("[%t] ST EXEC: insn=0x%04x rD=%0d rB=%0d off=%0d base=0x%04x data=0x%04x eff_addr=0x%04x", 
+                                 $time, insn_fetched, st_rD_idx, st_rB_idx, st_offset6, 
+                                 st_base_addr, st_store_data, st_effective_addr);
+                        
+                        // Address space decode
+                        if (st_effective_addr < MMIO_BASE) begin
+                            // RAM access (0x0000-0x0FFF)
+                            if (is_ram_addr_valid(st_effective_addr)) begin
+                                ram[st_effective_addr] <= st_store_data;
+                                $display("[%t] ST -> RAM[0x%04x] = 0x%04x", $time, st_effective_addr, st_store_data);
+                            end
+                            // else: out of bounds - ignore write
+                        end else if (st_effective_addr == MMIO_LED) begin
+                            // LED register write (MMIO: 0x1044)
+                            $display("[%t] ST -> LED: data=0x%01x (from 0x%04x, addr=0x%04x, MMIO_LED=0x%04x)", 
+                                     $time, st_store_data[3:0], st_store_data, st_effective_addr, MMIO_LED);
+                            led_reg <= st_store_data[3:0];  // Only lower 4 bits
+                        end else begin
+                            $display("[%t] ST -> INVALID MMIO: addr=0x%04x", $time, st_effective_addr);
+                        end
+                        // else: invalid MMIO address - ignore write
+                    end
+                    
                     OP_SYS: begin
                         if (is_brk_insn(insn_fetched)) begin
                             halted <= 1'b1;
@@ -668,11 +845,18 @@ module td4cpu_core #(
                         // Unimplemented opcodes treated as NOP
                     end
                 endcase
-            end
-            
-            // Check step_pending AFTER potential writeback completes
-            // This ensures register writes from ALU finish before halt
-            if (step_pending && !alu_writeback_en_hold) begin
+                
+                // Check step_pending immediately after instruction execution
+                // For immediate instructions (LDI/LD/ST), we halt right after execution
+                if (step_pending) begin
+                    halted <= 1'b1;
+                    running <= 1'b0;
+                    halt_reason <= HALT_REASON_STEP_DONE;
+                    step_pending <= 1'b0;
+                    insn_valid <= 1'b0;  // Clear to prevent re-execution
+                end
+            end else if (step_pending && !alu_writeback_en_hold) begin
+                // For ALU instructions with pipeline, halt after writeback completes
                 halted <= 1'b1;
                 running <= 1'b0;
                 halt_reason <= HALT_REASON_STEP_DONE;
@@ -717,8 +901,20 @@ module td4cpu_core #(
                 trace_write_ptr <= trace_write_ptr + 1;
             end
         end
-    end
+    end  // always_ff
     
+    // Monitor regfile updates for debugging
+    always @(regfile[0]) begin
+        if ($time > 0) begin  // Skip initial reset
+            $display("[%t] REGFILE UPDATE: R0 changed to 0x%04x", $time, regfile[0]);
+        end
+    end
+    always @(regfile[1]) begin
+        if ($time > 0) begin
+            $display("[%t] REGFILE UPDATE: R1 changed to 0x%04x", $time, regfile[1]);
+        end
+    end
+
     // Trace buffer read port (combinational, for Register_Block)
     assign trace_buf_rdata = trace_buffer[trace_buf_addr];
     assign trace_write_ptr_out = trace_write_ptr;

@@ -3,7 +3,7 @@ AXIUART Register Map
 
 AUTO-GENERATED FILE - DO NOT EDIT MANUALLY
 Generated from: register_map/axiuart_registers.json
-Generation time: 2025-12-28T04:52:08.464847
+Generation time: 2025-12-29T08:10:42.246948
 
 To regenerate:
     python software/axiuart_driver/tools/gen_registers.py --in register_map/axiuart_registers.json
@@ -27,10 +27,6 @@ REG_TEST_1 = 0x1024  # RW - Test register 1 - pattern test
 REG_TEST_2 = 0x1028  # RW - Test register 2 - increment test
 REG_TEST_3 = 0x102C  # RW - Test register 3 - mirror test
 REG_TEST_4 = 0x1040  # RW - Test register 4 - gap test
-REG_TEST_LED = 0x1044  # RW - 4-bit LED control register
-REG_TEST_5 = 0x1050  # RW - Test register 5 - larger gap test
-REG_TEST_6 = 0x1080  # RW - Test register 6 - even larger gap test
-REG_TEST_7 = 0x1100  # RW - Test register 7 - different range test
 REG_CPU_DBG_CTRL = 0x1200  # RW - CPU debug control: halt/run/step requests, halt_on_reset, breakpoint global enable
 REG_CPU_DBG_STATUS = 0x1204  # RO - CPU debug status: halted/running, break/brk hit, halt reason
 REG_CPU_PC = 0x1208  # RW - CPU program counter (word address). Write allowed only when halted
@@ -53,4 +49,4 @@ REG_CPU_ID = 0x1248  # RO - CPU identification/version (ASCII 'TD31' placeholder
 REG_REVISION = 0x124C  # RO - Hardware revision (date-based: 0xYYYYMMDD)
 
 # Register count
-REGISTER_COUNT = 37
+REGISTER_COUNT = 33

@@ -3,7 +3,7 @@
 **AUTO-GENERATED FILE - DO NOT EDIT MANUALLY**
 
 - **Source:** `register_map/axiuart_registers.json`
-- **Generated:** 2025-12-28 04:52:08
+- **Generated:** 2025-12-29 08:10:42
 - **Base Address:** `0x1000`
 - **Stride:** 4 bytes
 
@@ -24,10 +24,6 @@
 | TEST_2 | `0x1028` | `0x028` | RW | `0x00000000` | Test register 2 - increment test |
 | TEST_3 | `0x102C` | `0x02C` | RW | `0x00000000` | Test register 3 - mirror test |
 | TEST_4 | `0x1040` | `0x040` | RW | `0x00000000` | Test register 4 - gap test |
-| TEST_LED | `0x1044` | `0x044` | RW | `0x00000000` | 4-bit LED control register |
-| TEST_5 | `0x1050` | `0x050` | RW | `0x00000000` | Test register 5 - larger gap test |
-| TEST_6 | `0x1080` | `0x080` | RW | `0x00000000` | Test register 6 - even larger gap test |
-| TEST_7 | `0x1100` | `0x100` | RW | `0x00000000` | Test register 7 - different range test |
 | CPU_DBG_CTRL | `0x1200` | `0x200` | RW | `0x00000000` | CPU debug control: halt/run/step requests, halt_on_reset, breakpoint global enable |
 | CPU_DBG_STATUS | `0x1204` | `0x204` | RO | `0x00000001` | CPU debug status: halted/running, break/brk hit, halt reason |
 | CPU_PC | `0x1208` | `0x208` | RW | `0x00000000` | CPU program counter (word address). Write allowed only when halted |
