@@ -170,6 +170,7 @@ module Register_Block #(
     // Address decoding logic added after state machine declaration
     
     // AXI4-Lite state machine - CORRECTED
+    (* fsm_encoding = "one_hot" *)
     typedef enum logic [2:0] {
         IDLE,
         WRITE_ADDR,
