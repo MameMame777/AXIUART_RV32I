@@ -109,13 +109,30 @@ module td4cpu_core #(
     logic [8:0] ldi_imm9;
 
     // RAM: Infer Block RAM with output register for timing
+    // Critical attributes for Xilinx synthesis:
+    // - ram_style="block" forces BRAM (not distributed RAM)
+    // - ram_decomp="power" for efficient packing
+    // - read_first mode for pipeline-friendly behavior
     (* ram_style = "block" *)
+    (* ram_decomp = "power" *)
     (* rw_addr_collision = "yes" *)
     logic [15:0] ram [0:RAM_WORDS-1];
     
+    // RAM address registers for proper BRAM inference
+    logic [15:0] ram_addr_reg;
+    logic        ram_rd_en;
+    logic [15:0] ram_rd_data;
+    logic        ram_wr_en;
+    logic [15:0] ram_wr_addr;
+    logic [15:0] ram_wr_data;
+    
     // Trace buffer: 256 entries for capturing instruction execution
+    // Force BRAM inference with registered output
+    (* ram_style = "block" *)
+    (* ram_decomp = "power" *)
     logic [7:0]  trace_write_ptr;
     logic [31:0] trace_buffer [0:255];
+    logic [31:0] trace_buffer_rd_q;  // Registered output
     
     // ========================================
     // DEBUG SIGNALS FOR WAVEFORM ANALYSIS
@@ -123,44 +140,49 @@ module td4cpu_core #(
     // Export critical internal signals for waveform debugging
     
     // Register file values (for easy waveform viewing)
-    (* keep = "true" *) logic [15:0] debug_r0, debug_r1, debug_r2, debug_r3;
-    (* keep = "true" *) logic [15:0] debug_r4, debug_r5, debug_r6, debug_r7;
+     logic [15:0] debug_r0, debug_r1, debug_r2, debug_r3;
+     logic [15:0] debug_r4, debug_r5, debug_r6, debug_r7;
     
     // Debug control state
-    (* keep = "true" *) logic debug_step_pending;
-    (* keep = "true" *) logic debug_step_executing;
-    (* keep = "true" *) logic debug_reg_write_active;
-    (* keep = "true" *) logic [2:0] debug_reg_write_index;
-    (* keep = "true" *) logic [15:0] debug_reg_write_data;
+     logic debug_step_pending;
+     logic debug_step_executing;
+     logic debug_reg_write_active;
+     logic [2:0] debug_reg_write_index;
+     logic [15:0] debug_reg_write_data;
     
     // Current instruction decode
-    (* keep = "true" *) logic [15:0] debug_current_insn;
-    (* keep = "true" *) logic [3:0]  debug_current_opcode;
-    (* keep = "true" *) logic [2:0]  debug_current_rd;
-    (* keep = "true" *) logic [2:0]  debug_current_rs;
-    (* keep = "true" *) logic [5:0]  debug_current_funct;
+     logic [15:0] debug_current_insn;
+     logic [3:0]  debug_current_opcode;
+     logic [2:0]  debug_current_rd;
+     logic [2:0]  debug_current_rs;
+     logic [5:0]  debug_current_funct;
     
     // ALU operation tracking
-    (* keep = "true" *) logic [15:0] debug_alu_result;
-    (* keep = "true" *) logic [15:0] debug_alu_operand_a;
-    (* keep = "true" *) logic [15:0] debug_alu_operand_b;
-    (* keep = "true" *) logic debug_alu_writeback;
-    (* keep = "true" *) logic debug_alu_flags_update;
+     logic [15:0] debug_alu_result;
+     logic [15:0] debug_alu_operand_a;
+     logic [15:0] debug_alu_operand_b;
+     logic debug_alu_writeback;
+     logic debug_alu_flags_update;
     
     // Debug register read
-    (* keep = "true" *) logic [15:0] debug_dbg_reg_rdata;
-    (* keep = "true" *) logic [2:0]  debug_dbg_reg_index;
+     logic [15:0] debug_dbg_reg_rdata;
+     logic [2:0]  debug_dbg_reg_index;
     
     // Execution state tracking
-    (* keep = "true" *) logic debug_halted;
-    (* keep = "true" *) logic debug_running;
-    (* keep = "true" *) logic [7:0] debug_halt_reason;
+     logic debug_halted;
+     logic debug_running;
+     logic [7:0] debug_halt_reason;
     
     // Instruction Fetch/Decode Pipeline Stage
-    // Break critical path: PC→RAM fetch (cycle N) → decode (cycle N+1)
+    // Break critical path: PC→RAM fetch (cycle N) → decode (cycle N+1) → execute (cycle N+2)
     logic [15:0] insn_fetched;          // Fetched instruction from RAM
     logic        insn_valid;            // Valid instruction fetched
     logic [15:0] fetch_pc;              // PC of fetched instruction
+    
+    // Additional pipeline register to break timing path (insn_fetched → regfile CE)
+    logic [15:0] insn_decoded_reg;      // Decoded instruction (registered for timing)
+    logic        insn_decoded_valid;    // Valid decoded instruction
+    logic [15:0] insn_decoded_pc;       // PC of decoded instruction
     
     // Data forwarding: track last register write in same cycle
     logic        reg_write_pending;     // Register write scheduled this cycle
@@ -203,12 +225,12 @@ module td4cpu_core #(
     logic [15:0] alu_insn_hold;   // Instruction code (for trace)
     
     // Additional debug signals for writeback tracking
-    (* keep = "true" *) logic [15:0] debug_alu_result_hold;
-    (* keep = "true" *) logic [2:0]  debug_alu_rd_hold;
-    (* keep = "true" *) logic        debug_alu_writeback_en_hold;
-    (* keep = "true" *) logic        debug_writeback_active;
-    (* keep = "true" *) logic [15:0] debug_writeback_value;
-    (* keep = "true" *) logic [2:0]  debug_writeback_target;
+     logic [15:0] debug_alu_result_hold;
+     logic [2:0]  debug_alu_rd_hold;
+     logic        debug_alu_writeback_en_hold;
+     logic        debug_writeback_active;
+     logic [15:0] debug_writeback_value;
+     logic [2:0]  debug_writeback_target;
     
     // Latched debug register read data (to prevent race with UART read timing)
     logic [15:0] dbg_reg_rdata_latched;
@@ -247,6 +269,24 @@ module td4cpu_core #(
     // Solution: Latch on EVERY write to CPU_REG_INDEX (using dbg_reg_read_pulse from Register_Block)
     // This ensures atomic capture even for repeated reads of same register
     // FIXED BUG#6: Use dbg_reg_read_pulse (CPU_REG_INDEX write), NOT dbg_reg_write_pulse (CPU_REG_DATA write)
+    // ========================================
+    // RAM Block - Separate for proper BRAM inference
+    // CRITICAL: Must be in its own always_ff block
+    // Single synchronous read-first operation per cycle
+    // ========================================
+    always_ff @(posedge clk) begin
+        // Write takes priority (write-first behavior)
+        if (ram_wr_en) begin
+            ram[ram_wr_addr] <= ram_wr_data;
+            ram_rd_data <= ram_wr_data;  // Forward written data
+        end else if (ram_rd_en) begin
+            ram_rd_data <= ram[ram_addr_reg];
+        end
+    end
+
+    // ========================================
+    // Main CPU State Machine
+    // ========================================
     always_ff @(posedge clk or posedge rst) begin
         if (rst) begin
             dbg_reg_rdata_latched <= 16'h0000;
@@ -439,6 +479,11 @@ module td4cpu_core #(
             insn_valid <= 1'b0;
             fetch_pc <= 16'h0000;
             
+            // Pipeline decode register reset (timing optimization)
+            insn_decoded_reg <= 16'h0000;
+            insn_decoded_valid <= 1'b0;
+            insn_decoded_pc <= 16'h0000;
+            
             // ALU Pipeline Stage 1 reset (operand fetch)
             alu_operand_a_stage1 <= 16'd0;
             alu_operand_b_stage1 <= 16'd0;
@@ -463,6 +508,13 @@ module td4cpu_core #(
             alu_result_hold <= 16'd0;
             alu_rd_hold <= 3'd0;
             alu_writeback_en_hold <= 1'b0;
+            
+            // RAM control signals
+            ram_addr_reg <= 16'd0;
+            ram_rd_en <= 1'b0;
+            ram_wr_en <= 1'b0;
+            ram_wr_addr <= 16'd0;
+            ram_wr_data <= 16'd0;
             alu_flags_update_en_hold <= 1'b0;
             alu_flags_hold <= 3'd0;
             alu_insn_hold <= 16'd0;
@@ -610,12 +662,23 @@ module td4cpu_core #(
                         dbg_mem_err <= 1'b1;
                     end else begin
                         if (dbg_mem_write_req_pulse) begin
-                            ram[dbg_mem_addr] <= dbg_mem_wdata;
+                            ram_wr_en <= 1'b1;
+                            ram_wr_addr <= dbg_mem_addr;
+                            ram_wr_data <= dbg_mem_wdata;
                         end
                         if (dbg_mem_read_req_pulse) begin
-                            dbg_mem_rdata <= ram[dbg_mem_addr];
+                            ram_addr_reg <= dbg_mem_addr;
+                            ram_rd_en <= 1'b1;
                         end
                     end
+                end
+                
+                // Capture debug memory read result when available
+                if (mem_busy_q) begin
+                    if (ram_rd_en && ram_addr_reg == dbg_mem_addr) begin
+                        dbg_mem_rdata <= ram_rd_data;
+                    end
+                    mem_busy_q <= 1'b0;
                 end
             end else begin
                 // If a debug mem op is attempted while running, flag error.
@@ -650,51 +713,70 @@ module td4cpu_core #(
                     step_pending <= 1'b0;
                     insn_valid <= 1'b0;
                 end else begin
-                    // Fetch instruction - decode happens next cycle
-                    insn_fetched <= ram[pc];
-                    insn_valid <= 1'b1;
+                    // Fetch instruction - request RAM read
+                    ram_addr_reg <= pc;
+                    ram_rd_en <= 1'b1;
                     fetch_pc <= pc;
                     pc <= pc + 16'd1;
-                    $display("[%t] FETCH: PC=0x%04x insn=0x%04x -> insn_valid=1 (was %0d)", $time, pc, ram[pc], insn_valid);
+                    $display("[%t] FETCH: PC=0x%04x", $time, pc);
                 end
             end else if (!running) begin
                 insn_valid <= 1'b0;
+                ram_rd_en <= 1'b0;
             end
             
-            // Decode/Execute stage: Process fetched instruction
+            // Capture fetched instruction when RAM data is valid
+            if (ram_rd_en) begin
+                insn_fetched <= ram_rd_data;
+                insn_valid <= 1'b1;
+                ram_rd_en <= 1'b0;  // Clear enable
+            end
+            
+            // Pipeline register: insn_fetched → insn_decoded_reg (timing optimization)
+            // This breaks the critical path from insn_fetched[7] to regfile CE
             if (insn_valid) begin
+                insn_decoded_reg <= insn_fetched;
+                insn_decoded_valid <= 1'b1;
+                insn_decoded_pc <= fetch_pc;
+                insn_valid <= 1'b0;  // Clear after decode
+            end else begin
+                insn_decoded_valid <= 1'b0;
+            end
+            
+            // Decode/Execute stage: Process decoded instruction
+            if (insn_decoded_valid) begin
                 logic [3:0]  insn_opcode;
-                insn_opcode = insn_fetched[15:12];
+                insn_opcode = insn_decoded_reg[15:12];
                 
                 // Clear forwarding at start of decode
                 reg_write_pending <= 1'b0;
                 
                 // DEBUG: Instruction decode trace
-                $display("[%t] DECODE: PC=0x%04x insn=0x%04x opcode=0x%01x", $time, fetch_pc, insn_fetched, insn_opcode);
+                $display("[%t] DECODE: PC=0x%04x insn=0x%04x opcode=0x%01x", $time, insn_decoded_pc, insn_decoded_reg, insn_opcode);
                 
                 // Debug: Capture current instruction
-                debug_current_insn <= insn_fetched;
+                debug_current_insn <= insn_decoded_reg;
                 debug_current_opcode <= insn_opcode;
 
                 // Execute instruction based on opcode
                 case (insn_opcode)
                     OP_R_ALU: begin
                         // Debug: Capture operands and operation
-                        debug_current_rd <= insn_fetched[11:9];
-                        debug_current_rs <= insn_fetched[8:6];
-                        debug_current_funct <= insn_fetched[5:0];
-                        debug_alu_operand_a <= regfile[insn_fetched[11:9]];
-                        debug_alu_operand_b <= regfile[insn_fetched[8:6]];
+                        debug_current_rd <= insn_decoded_reg[11:9];
+                        debug_current_rs <= insn_decoded_reg[8:6];
+                        debug_current_funct <= insn_decoded_reg[5:0];
+                        debug_alu_operand_a <= regfile[insn_decoded_reg[11:9]];
+                        debug_alu_operand_b <= regfile[insn_decoded_reg[8:6]];
                         
                         // ALU Pipeline Stage 1: Fetch operands only
                         // No arithmetic computation - just decode and register read
-                        alu_operand_a_stage1 <= regfile[insn_fetched[11:9]];
-                        alu_operand_b_stage1 <= regfile[insn_fetched[8:6]];
-                        alu_funct_stage1 <= insn_fetched[5:0];
-                        alu_rd_stage1 <= insn_fetched[11:9];
+                        alu_operand_a_stage1 <= regfile[insn_decoded_reg[11:9]];
+                        alu_operand_b_stage1 <= regfile[insn_decoded_reg[8:6]];
+                        alu_funct_stage1 <= insn_decoded_reg[5:0];
+                        alu_rd_stage1 <= insn_decoded_reg[11:9];
                         alu_input_flags_stage1 <= flags;
                         alu_valid_stage1 <= 1'b1;
-                        alu_insn_stage1 <= insn_fetched;  // Propagate instruction
+                        alu_insn_stage1 <= insn_decoded_reg;  // Propagate instruction
 
                         debug_alu_flags_update <= 1'b1;
                     end
@@ -702,8 +784,8 @@ module td4cpu_core #(
                     OP_LDI: begin
                         // LDI Rd, #imm9 - Load immediate (unsigned)
                         // Use module-level variables
-                        ldi_rd_idx = insn_fetched[11:9];
-                        ldi_imm9 = insn_fetched[8:0];
+                        ldi_rd_idx = insn_decoded_reg[11:9];
+                        ldi_imm9 = insn_decoded_reg[8:0];
                         regfile[ldi_rd_idx] <= {7'b0000000, ldi_imm9};
                         $display("[%t] LDI: Scheduled R%0d <= 0x%04x (NBA update at end of timestep)", $time, ldi_rd_idx, {7'b0000000, ldi_imm9});
                         $display("[%t] LDI: Before NBA - regfile[%0d] = 0x%04x", $time, ldi_rd_idx, regfile[ldi_rd_idx]);
@@ -712,7 +794,6 @@ module td4cpu_core #(
                         reg_write_pending <= 1'b1;
                         reg_write_idx <= ldi_rd_idx;
                         reg_write_data <= {7'b0000000, ldi_imm9};
-                        insn_valid <= 1'b0;
                     end
                     
                     OP_ADDI: begin
@@ -722,8 +803,8 @@ module td4cpu_core #(
                         logic [15:0] addi_imm_zext;
                         logic [16:0] addi_result;
                         
-                        addi_rd_idx = insn_fetched[11:9];
-                        addi_imm9 = insn_fetched[8:0];
+                        addi_rd_idx = insn_decoded_reg[11:9];
+                        addi_imm9 = insn_decoded_reg[8:0];
                         // Zero-extend 9-bit immediate to 16-bit (unsigned)
                         addi_imm_zext = {7'b0000000, addi_imm9};
                         // Perform addition with carry detection
@@ -743,15 +824,14 @@ module td4cpu_core #(
                         reg_write_pending <= 1'b1;
                         reg_write_idx <= addi_rd_idx;
                         reg_write_data <= addi_result[15:0];
-                        insn_valid <= 1'b0;
                     end
                     
                     OP_LD: begin
                         // LD rD, [rB + off6] - Load from memory
                         // Use module-level variables for proper RAM inference
-                        ld_rD_idx = insn_fetched[11:9];
-                        ld_rB_idx = insn_fetched[8:6];
-                        ld_offset6 = insn_fetched[5:0];
+                        ld_rD_idx = insn_decoded_reg[11:9];
+                        ld_rB_idx = insn_decoded_reg[8:6];
+                        ld_offset6 = insn_decoded_reg[5:0];
                         ld_base_addr = regfile[ld_rB_idx];
                         
                         // Sign-extend 6-bit offset to 16-bit
@@ -765,7 +845,8 @@ module td4cpu_core #(
                         if (ld_is_ram) begin
                             // RAM access (0x0000-0x0FFF)
                             if (is_ram_addr_valid(ld_effective_addr)) begin
-                                regfile[ld_rD_idx] <= ram[ld_effective_addr];
+                                ram_addr_reg <= ld_effective_addr;
+                                ram_rd_en <= 1'b1;
                             end else begin
                                 // Out of bounds - load zero
                                 regfile[ld_rD_idx] <= 16'h0000;
@@ -781,17 +862,15 @@ module td4cpu_core #(
                         // Data forwarding: track this write (optimized with pre-computed flags)
                         reg_write_pending <= 1'b1;
                         reg_write_idx <= ld_rD_idx;
-                        reg_write_data <= (ld_is_ram && is_ram_addr_valid(ld_effective_addr)) ? ram[ld_effective_addr] :
-                                         ld_is_led ? {12'h000, led_reg} : 16'h0000;
-                        insn_valid <= 1'b0;
+                        reg_write_data <= ld_is_led ? {12'h000, led_reg} : 16'h0000;
                     end
                     
                     OP_ST: begin
                         // ST rD, [rB + off6] - Store to memory
                         // Use module-level variables for proper RAM inference
-                        st_rD_idx = insn_fetched[11:9];
-                        st_rB_idx = insn_fetched[8:6];
-                        st_offset6 = insn_fetched[5:0];
+                        st_rD_idx = insn_decoded_reg[11:9];
+                        st_rB_idx = insn_decoded_reg[8:6];
+                        st_offset6 = insn_decoded_reg[5:0];
                         
                         // Data forwarding: check if we just wrote to the register we're reading
                         if (reg_write_pending && (st_rB_idx == reg_write_idx)) begin
@@ -819,14 +898,16 @@ module td4cpu_core #(
                         
                         // DEBUG: ST instruction execution trace
                         $display("[%t] ST EXEC: insn=0x%04x rD=%0d rB=%0d off=%0d base=0x%04x data=0x%04x eff_addr=0x%04x", 
-                                 $time, insn_fetched, st_rD_idx, st_rB_idx, st_offset6, 
+                                 $time, insn_decoded_reg, st_rD_idx, st_rB_idx, st_offset6, 
                                  st_base_addr, st_store_data, st_effective_addr);
                         
                         // Address space decode (optimized with pre-computed flags)
                         if (st_is_ram) begin
                             // RAM access (0x0000-0x0FFF)
                             if (is_ram_addr_valid(st_effective_addr)) begin
-                                ram[st_effective_addr] <= st_store_data;
+                                ram_wr_en <= 1'b1;
+                                ram_wr_addr <= st_effective_addr;
+                                ram_wr_data <= st_store_data;
                                 $display("[%t] ST -> RAM[0x%04x] = 0x%04x", $time, st_effective_addr, st_store_data);
                             end
                             // else: out of bounds - ignore write
@@ -842,7 +923,7 @@ module td4cpu_core #(
                     end
                     
                     OP_SYS: begin
-                        if (is_brk_insn(insn_fetched)) begin
+                        if (is_brk_insn(insn_decoded_reg)) begin
                             halted <= 1'b1;
                             running <= 1'b0;
                             brk_hit <= 1'b1;
@@ -863,7 +944,6 @@ module td4cpu_core #(
                     running <= 1'b0;
                     halt_reason <= HALT_REASON_STEP_DONE;
                     step_pending <= 1'b0;
-                    insn_valid <= 1'b0;  // Clear to prevent re-execution
                 end
             end else if (step_pending && !alu_writeback_en_hold) begin
                 // For ALU instructions with pipeline, halt after writeback completes
@@ -926,7 +1006,11 @@ module td4cpu_core #(
     end
 
     // Trace buffer read port (combinational, for Register_Block)
-    assign trace_buf_rdata = trace_buffer[trace_buf_addr];
+    // Trace buffer readout (registered for timing)
+    always_ff @(posedge clk) begin
+        trace_buffer_rd_q <= trace_buffer[trace_buf_addr];
+    end
+    assign trace_buf_rdata = trace_buffer_rd_q;
     assign trace_write_ptr_out = trace_write_ptr;
     
 endmodule
