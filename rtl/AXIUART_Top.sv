@@ -253,8 +253,10 @@ module AXIUART_Top #(
     assign cpu_trace_buf_addr = register_block_inst.cpu_trace_addr_reg[7:0];
 
     // Minimal TD4CPU core (debug + RAM bring-up)
+    // RAM reduced to 1024 words (2KB) for initial synthesis
+    // Increase after verifying BRAM inference and timing closure
     td4cpu_core #(
-        .RAM_WORDS(4096)
+        .RAM_WORDS(1024)  // Reduced from 4096 to speed up synthesis
     ) cpu_inst (
         .clk(clk),
         .rst(rst),
