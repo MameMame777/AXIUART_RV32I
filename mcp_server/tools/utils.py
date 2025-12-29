@@ -15,6 +15,8 @@ _TESTNAME_RE = re.compile(r"Running test\s+([\w:$]+)", re.IGNORECASE)
 _SEED_RE = re.compile(r"Random seed:\s*([0-9]+)")
 _RUNTIME_RE = re.compile(r"Simulation terminated by \$finish at time\s+([0-9_]+)")
 _COVERAGE_RE = re.compile(r"Total coverage:\s*([0-9]+(?:\.[0-9]+)?)%")
+# UVM Report Summary format: "UVM_ERROR :   73"
+_UVM_SUMMARY_RE = re.compile(r"^UVM_(INFO|WARNING|ERROR|FATAL)\s*:\s*(\d+)", re.IGNORECASE)
 
 
 def _normalise_counts() -> Dict[str, int]:
@@ -47,8 +49,20 @@ def analyse_uvm_log(log_path: Path) -> Dict[str, Any]:
     seed: int | None = None
     runtime_ps: int | None = None
     coverage_percent: float | None = None
+    
+    # Track whether we've found UVM Report Summary to use authoritative counts
+    found_uvm_summary = False
 
     for line in _read_lines(log_path):
+        # Check for UVM Report Summary (authoritative source)
+        summary_match = _UVM_SUMMARY_RE.match(line)
+        if summary_match:
+            severity_type = summary_match.group(1).lower()
+            count = int(summary_match.group(2))
+            severity_totals[severity_type] = count
+            found_uvm_summary = True
+            continue
+        
         severity_match = _SEVERITY_RE.search(line)
         if severity_match:
             severity = severity_match.group(1).lower()
@@ -56,7 +70,9 @@ def analyse_uvm_log(log_path: Path) -> Dict[str, Any]:
             report_id = severity_match.group(3).strip()
             message = severity_match.group(4).strip()
 
-            severity_totals[severity] += 1
+            # Only count individual messages if we haven't found summary yet
+            if not found_uvm_summary:
+                severity_totals[severity] += 1
             _increment(by_component, component, severity)
             _increment(by_id, report_id, severity)
 

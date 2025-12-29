@@ -29,6 +29,58 @@ class RegressionRunner:
         with open(config_file, 'r') as f:
             self.config = json.load(f)
     
+    def run_single_test_standalone(self, test_name: str) -> Dict:
+        """
+        Run a single test by name (not part of a suite)
+        
+        Args:
+            test_name: Name of the test to run
+            
+        Returns:
+            Summary dictionary with pass/fail counts
+        """
+        default_config = self.config['default_config']
+        
+        print(f"\n{'='*80}")
+        print(f"Running Single Test: {test_name}")
+        print(f"{'='*80}\n")
+        
+        self.start_time = datetime.now()
+        self.results = []
+        
+        result = self._run_single_test(
+            test_name=test_name,
+            verbosity=default_config['verbosity'],
+            waves=default_config['waves'],
+            coverage=default_config['coverage']
+        )
+        
+        result['description'] = f"Standalone execution of {test_name}"
+        result['expected_duration'] = 0
+        self.results.append(result)
+        
+        if result['status'] == 'PASS':
+            print(f"  ✓ PASS ({result['duration']:.1f}s)")
+        elif result['status'] == 'FAIL':
+            print(f"  ✗ FAIL ({result['duration']:.1f}s)")
+            print(f"    Error: {result['error']}")
+        else:
+            print(f"  ⊘ SKIP - {result['error']}")
+        
+        self.end_time = datetime.now()
+        
+        summary = {
+            'suite': f"single_test_{test_name}",
+            'total': 1,
+            'passed': 1 if result['status'] == 'PASS' else 0,
+            'failed': 1 if result['status'] == 'FAIL' else 0,
+            'skipped': 1 if result['status'] not in ('PASS', 'FAIL') else 0,
+            'duration': (self.end_time - self.start_time).total_seconds(),
+            'timestamp': self.start_time.isoformat()
+        }
+        
+        return summary
+    
     def run_suite(self, suite_name: str, stop_on_failure: bool = False) -> Dict:
         """
         Run a test suite
@@ -155,71 +207,52 @@ class RegressionRunner:
             try:
                 output = json.loads(result.stdout)
                 
-                # Check for errors in MCP response
-                if output.get('status') == 'error':
-                    return {
-                        'test': test_name,
-                        'status': 'FAIL',
-                        'duration': duration,
-                        'error': output.get('message', 'Unknown error'),
-                        'exit_code': output.get('exit_code', result.returncode)
-                    }
+                # MCP client directly returns the tool result (dsim_uvm_server response)
+                # Check status field directly
+                test_status = output.get('status', 'unknown')
                 
-                # Parse inner result (DSIM execution result)
-                if 'result' in output:
-                    inner_result = json.loads(output['result'])
-                    
-                    if inner_result.get('status') == 'success':
-                        return {
-                            'test': test_name,
-                            'status': 'PASS',
-                            'duration': duration,
-                            'log_file': inner_result.get('log_file', ''),
-                            'seed': inner_result.get('seed', 1)
-                        }
-                    else:
-                        return {
-                            'test': test_name,
-                            'status': 'FAIL',
-                            'duration': duration,
-                            'error': inner_result.get('error', 'Test failed'),
-                            'log_file': inner_result.get('log_file', '')
-                        }
+                # DEBUG: Print status for verification
+                uvm_errors = output.get('uvm_error_count', 0)
+                print(f"  DEBUG: {test_name} - status = {test_status}, uvm_error_count = {uvm_errors}")
                 
-                # Fallback: check exit code
-                if result.returncode == 0:
+                # Only 'success' means PASS - everything else is FAIL
+                if test_status == 'success' and uvm_errors == 0:
                     return {
                         'test': test_name,
                         'status': 'PASS',
-                        'duration': duration
+                        'duration': duration,
+                        'log_file': output.get('log_file', ''),
+                        'seed': output.get('seed', 1)
                     }
                 else:
+                    # Any non-success status or errors means FAIL
+                    error_msg = output.get('error', '')
+                    if not error_msg:
+                        if uvm_errors > 0:
+                            error_msg = f"Test has {uvm_errors} UVM errors"
+                        elif test_status == 'failure':
+                            error_msg = "Test failed"
+                        else:
+                            error_msg = f"Test status: {test_status}"
+                    
                     return {
                         'test': test_name,
                         'status': 'FAIL',
                         'duration': duration,
-                        'error': f"Non-zero exit code: {result.returncode}",
-                        'stdout': result.stdout[:500],
-                        'stderr': result.stderr[:500]
+                        'error': error_msg,
+                        'log_file': output.get('log_file', '')
                     }
                     
             except json.JSONDecodeError:
-                # Not JSON output - check exit code
-                if result.returncode == 0:
-                    return {
-                        'test': test_name,
-                        'status': 'PASS',
-                        'duration': duration
-                    }
-                else:
-                    return {
-                        'test': test_name,
-                        'status': 'FAIL',
-                        'duration': duration,
-                        'error': 'Failed to parse output',
-                        'stdout': result.stdout[:500],
-                        'stderr': result.stderr[:500]
-                    }
+                # Not JSON output - likely execution error
+                return {
+                    'test': test_name,
+                    'status': 'FAIL',
+                    'duration': duration,
+                    'error': f"Failed to parse test output (exit code: {result.returncode})",
+                    'stdout': result.stdout[:500] if result.stdout else '',
+                    'stderr': result.stderr[:500] if result.stderr else ''
+                }
         
         except Exception as e:
             duration = time.time() - start
@@ -436,17 +469,23 @@ Examples:
         help='Regression test configuration file (default: sim/regression_tests.json)'
     )
     
-    parser.add_argument(
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
         '--suite',
         type=str,
-        default='smoke',
         help='Test suite to run (smoke, register, cpu, full)'
+    )
+    
+    group.add_argument(
+        '--test',
+        type=str,
+        help='Run a single test by name (e.g., axiuart_cpu_simple_mem_test)'
     )
     
     parser.add_argument(
         '--stop-on-failure',
         action='store_true',
-        help='Stop execution on first test failure'
+        help='Stop execution on first test failure (only applies to --suite)'
     )
     
     parser.add_argument(
@@ -484,7 +523,13 @@ Examples:
     # Run regression
     try:
         runner = RegressionRunner(args.workspace, args.config)
-        summary = runner.run_suite(args.suite, args.stop_on_failure)
+        
+        # Run either suite or single test
+        if args.suite:
+            summary = runner.run_suite(args.suite, args.stop_on_failure)
+        else:  # args.test is set
+            summary = runner.run_single_test_standalone(args.test)
+        
         runner.print_summary(summary)
         
         # Generate report
