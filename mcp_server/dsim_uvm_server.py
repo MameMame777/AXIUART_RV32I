@@ -677,6 +677,7 @@ async def run_uvm_simulation(
             "wave_format": wave_format if enable_waves else None,
             "coverage_requested": coverage,
             "plusargs_requested": plusargs_applied,
+            "uvm_error_count": summary_report.get("error_count", 0),  # Add error count for regression framework
             "analysis": {
                 **analysis,
                 "warnings": (analysis.get("warnings", [])[:10] if analysis else []),
