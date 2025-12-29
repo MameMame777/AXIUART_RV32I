@@ -45,6 +45,7 @@ module Axi4_Lite_Master #(
     assign len_field = cmd_reg[3:0];
 
     // State machine - CRITICAL for debugging WRITE_ADDR stuck issue
+    (* fsm_encoding = "one_hot" *)
     typedef enum logic [3:0] {
         IDLE            = 4'h0,
         CHECK_ALIGNMENT = 4'h1,

@@ -183,6 +183,7 @@ module Uart_Axi4_Bridge #(
     logic builder_response_complete;
     
     // Main control state machine
+    (* fsm_encoding = "one_hot" *)
     typedef enum logic [2:0] {
         MAIN_IDLE,
         MAIN_AXI_TRANSACTION,        MAIN_BUILD_RESPONSE,

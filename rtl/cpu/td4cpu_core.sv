@@ -97,10 +97,12 @@ module td4cpu_core #(
     logic [2:0] ld_rD_idx, ld_rB_idx;
     logic [5:0] ld_offset6;
     logic [15:0] ld_base_addr, ld_effective_addr;
+    logic ld_is_ram, ld_is_led;  // Address decode flags (pre-computed)
     
     logic [2:0] st_rD_idx, st_rB_idx;
     logic [5:0] st_offset6;
     logic [15:0] st_base_addr, st_effective_addr, st_store_data;
+    logic st_is_ram, st_is_led;  // Address decode flags (pre-computed)
     
     // LDI instruction execution variables
     logic [2:0] ldi_rd_idx;
@@ -755,8 +757,12 @@ module td4cpu_core #(
                         // Sign-extend 6-bit offset to 16-bit
                         ld_effective_addr = ld_base_addr + {{10{ld_offset6[5]}}, ld_offset6};
                         
-                        // Address space decode
-                        if (ld_effective_addr < MMIO_BASE) begin
+                        // Pre-compute address decode flags (optimize critical path)
+                        ld_is_ram = (ld_effective_addr < MMIO_BASE);
+                        ld_is_led = (ld_effective_addr == MMIO_LED);
+                        
+                        // Address space decode (optimized with pre-computed flags)
+                        if (ld_is_ram) begin
                             // RAM access (0x0000-0x0FFF)
                             if (is_ram_addr_valid(ld_effective_addr)) begin
                                 regfile[ld_rD_idx] <= ram[ld_effective_addr];
@@ -764,7 +770,7 @@ module td4cpu_core #(
                                 // Out of bounds - load zero
                                 regfile[ld_rD_idx] <= 16'h0000;
                             end
-                        end else if (ld_effective_addr == MMIO_LED) begin
+                        end else if (ld_is_led) begin
                             // LED register read (MMIO: 0x1044)
                             regfile[ld_rD_idx] <= {12'h000, led_reg};
                         end else begin
@@ -772,11 +778,11 @@ module td4cpu_core #(
                             regfile[ld_rD_idx] <= 16'h0000;
                         end
                         
-                        // Data forwarding: track this write
+                        // Data forwarding: track this write (optimized with pre-computed flags)
                         reg_write_pending <= 1'b1;
                         reg_write_idx <= ld_rD_idx;
-                        reg_write_data <= (ld_effective_addr < MMIO_BASE && is_ram_addr_valid(ld_effective_addr)) ? ram[ld_effective_addr] :
-                                         (ld_effective_addr == MMIO_LED) ? {12'h000, led_reg} : 16'h0000;
+                        reg_write_data <= (ld_is_ram && is_ram_addr_valid(ld_effective_addr)) ? ram[ld_effective_addr] :
+                                         ld_is_led ? {12'h000, led_reg} : 16'h0000;
                         insn_valid <= 1'b0;
                     end
                     
@@ -807,20 +813,24 @@ module td4cpu_core #(
                         // Sign-extend 6-bit offset to 16-bit
                         st_effective_addr = st_base_addr + {{10{st_offset6[5]}}, st_offset6};
                         
+                        // Pre-compute address decode flags (optimize critical path)
+                        st_is_ram = (st_effective_addr < MMIO_BASE);
+                        st_is_led = (st_effective_addr == MMIO_LED);
+                        
                         // DEBUG: ST instruction execution trace
                         $display("[%t] ST EXEC: insn=0x%04x rD=%0d rB=%0d off=%0d base=0x%04x data=0x%04x eff_addr=0x%04x", 
                                  $time, insn_fetched, st_rD_idx, st_rB_idx, st_offset6, 
                                  st_base_addr, st_store_data, st_effective_addr);
                         
-                        // Address space decode
-                        if (st_effective_addr < MMIO_BASE) begin
+                        // Address space decode (optimized with pre-computed flags)
+                        if (st_is_ram) begin
                             // RAM access (0x0000-0x0FFF)
                             if (is_ram_addr_valid(st_effective_addr)) begin
                                 ram[st_effective_addr] <= st_store_data;
                                 $display("[%t] ST -> RAM[0x%04x] = 0x%04x", $time, st_effective_addr, st_store_data);
                             end
                             // else: out of bounds - ignore write
-                        end else if (st_effective_addr == MMIO_LED) begin
+                        end else if (st_is_led) begin
                             // LED register write (MMIO: 0x1044)
                             $display("[%t] ST -> LED: data=0x%01x (from 0x%04x, addr=0x%04x, MMIO_LED=0x%04x)", 
                                      $time, st_store_data[3:0], st_store_data, st_effective_addr, MMIO_LED);
