@@ -33,6 +33,9 @@ class axiuart_scoreboard extends uvm_scoreboard;
     int write_count;
     int read_count;
     
+    // Non-verifiable register addresses (read-only or dynamic)
+    local bit [31:0] exclude_verify_addrs[$];
+    
     function new(string name = "axiuart_scoreboard", uvm_component parent = null);
         super.new(name, parent);
         match_count = 0;
@@ -44,6 +47,28 @@ class axiuart_scoreboard extends uvm_scoreboard;
         cpu_memory_write_count = 0;
         cpu_memory_read_count = 0;
         pending_cpu_mem_addr = 16'h0000;
+        
+        // Initialize exclude list for registers that shouldn't be verified against shadow
+        exclude_verify_addrs.push_back(axiuart_reg_pkg::REG_CPU_DBG_STATUS);  // Dynamic: halted/running state
+        exclude_verify_addrs.push_back(axiuart_reg_pkg::REG_VERSION);         // Read-only: hardware version
+        exclude_verify_addrs.push_back(axiuart_reg_pkg::REG_TX_COUNT);        // Read-only: TX counter
+        exclude_verify_addrs.push_back(axiuart_reg_pkg::REG_RX_COUNT);        // Read-only: RX counter
+        exclude_verify_addrs.push_back(axiuart_reg_pkg::REG_FIFO_STAT);       // Read-only: FIFO status
+        exclude_verify_addrs.push_back(axiuart_reg_pkg::REG_CPU_REG_DATA);    // Dynamic: CPU regfile
+        exclude_verify_addrs.push_back(axiuart_reg_pkg::REG_CPU_TRACE_RDATA); // Read-only: trace data
+        exclude_verify_addrs.push_back(axiuart_reg_pkg::REG_CPU_TRACE_PTR);   // Read-only: trace pointer
+        exclude_verify_addrs.push_back(axiuart_reg_pkg::REG_CPU_ID);          // Read-only: CPU ID
+        exclude_verify_addrs.push_back(axiuart_reg_pkg::REG_REVISION);        // Read-only: revision
+        exclude_verify_addrs.push_back(axiuart_reg_pkg::REG_CPU_PC);          // Dynamic: changes on execution
+        exclude_verify_addrs.push_back(axiuart_reg_pkg::REG_CPU_SP);          // Dynamic: changes on execution
+    endfunction
+    
+    // Helper function: Check if address should be excluded from verification
+    local function bit is_excluded_addr(bit [31:0] addr);
+        foreach (exclude_verify_addrs[i]) begin
+            if (exclude_verify_addrs[i] == addr) return 1'b1;
+        end
+        return 1'b0;
     endfunction
     
     virtual function void build_phase(uvm_phase phase);
@@ -177,21 +202,10 @@ class axiuart_scoreboard extends uvm_scoreboard;
             return;  // Skip normal register verification for CPU_MEM_RDATA
         end
         
-        // Exclude read-only status/control registers from verification
-        // These registers return computed/status values, not previously written data
-        if (trans.address == axiuart_reg_pkg::REG_CPU_DBG_STATUS ||    // CPU debug status (halted/running/break)
-            trans.address == axiuart_reg_pkg::REG_VERSION ||           // Hardware version (read-only)
-            trans.address == axiuart_reg_pkg::REG_TX_COUNT ||          // TX counter (read-only)
-            trans.address == axiuart_reg_pkg::REG_RX_COUNT ||          // RX counter (read-only)
-            trans.address == axiuart_reg_pkg::REG_FIFO_STAT ||         // FIFO status flags (read-only)
-            trans.address == axiuart_reg_pkg::REG_CPU_REG_DATA ||      // CPU regfile data (read from regfile, not shadow)
-            trans.address == axiuart_reg_pkg::REG_CPU_TRACE_RDATA ||   // Trace buffer read data (read-only)
-            trans.address == axiuart_reg_pkg::REG_CPU_TRACE_PTR ||     // Trace buffer pointer (read-only)
-            trans.address == axiuart_reg_pkg::REG_CPU_ID ||            // CPU ID (read-only)
-            trans.address == axiuart_reg_pkg::REG_REVISION) begin      // Hardware revision (read-only)
-            // Just count the read without verification
+        // Exclude read-only and dynamic registers from verification
+        if (is_excluded_addr(trans.address)) begin
             `uvm_info("SCOREBOARD", 
-                $sformatf("Read from status/RO register (no verification): ADDR=0x%08X DATA=0x%08X",
+                $sformatf("Read from excluded register (no verification): ADDR=0x%08X DATA=0x%08X",
                           trans.address, trans.read_response_data), 
                 UVM_HIGH)
             return;
