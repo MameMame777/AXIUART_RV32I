@@ -146,6 +146,9 @@ module Register_Block #(
     logic [31:0] cpu_mem_ctrl_reg;
     logic [31:0] cpu_trace_addr_reg;   // NEW: Trace buffer address (entry index)
     logic [31:0] cpu_trace_ctrl_reg;  // NEW: Trace control [0]=enable, [1]=clear_pulse
+    logic        cpu_mem_busy_q;       // Delayed copy of cpu_mem_busy for falling edge detection
+    logic        cpu_mem_busy_q2;      // Extra delay for data capture timing
+    logic        cpu_mem_last_was_read;  // Track if last operation was read (not write)
     
     // AXI4-Lite response codes
     localparam bit [1:0] RESP_OKAY   = 2'b00;
@@ -456,6 +459,9 @@ module Register_Block #(
             cpu_mem_rdata_reg <= 32'h0000_0000;
             cpu_mem_ctrl_reg <= 32'h0000_0000;
             cpu_trace_ctrl_reg <= 32'h0000_0001;  // Trace enabled by default
+            cpu_mem_busy_q <= 1'b0;
+            cpu_mem_busy_q2 <= 1'b0;
+            cpu_mem_last_was_read <= 1'b0;
 
             // CPU debug pulses (one-cycle)
             cpu_halt_req_pulse <= 1'b0;
@@ -476,6 +482,17 @@ module Register_Block #(
         end else begin
             reset_stats_pulse <= 1'b0;
 
+            // Track operation type (read vs write)
+            if (cpu_mem_read_req_pulse) begin
+                cpu_mem_last_was_read <= 1'b1;
+            end else if (cpu_mem_write_req_pulse) begin
+                cpu_mem_last_was_read <= 1'b0;
+            end
+            
+            // Delayed copies for data capture timing
+            cpu_mem_busy_q <= cpu_mem_busy;
+            cpu_mem_busy_q2 <= cpu_mem_busy_q;  // Extra delay
+
             // Default: clear one-cycle pulses
             cpu_halt_req_pulse <= 1'b0;
             cpu_run_req_pulse <= 1'b0;
@@ -489,8 +506,11 @@ module Register_Block #(
             cpu_mem_read_req_pulse <= 1'b0;
             cpu_mem_write_req_pulse <= 1'b0;
             
-            // Latch CPU memory read data (always update to capture latest value)
-            cpu_mem_rdata_reg <= {16'h0000, cpu_mem_rdata};
+            // Latch CPU memory read data ONLY for READ operations (not writes)
+            // Capture 1 cycle after busy clears to allow CPU to update dbg_mem_rdata
+            if (cpu_mem_busy_q2 && !cpu_mem_busy_q && cpu_mem_last_was_read) begin
+                cpu_mem_rdata_reg <= {16'h0000, cpu_mem_rdata};
+            end
             
             // Clear test register write detection flags
             test_reg_0_write_detect <= 1'b0;
@@ -684,17 +704,19 @@ module Register_Block #(
                             cpu_mem_ctrl_reg[2] <= masked_value[2]; // AUTO_INC
 
                             // write-1-to-pulse request bits (byte 0)
-                            if (axi.wstrb[0] && axi.wdata[0]) begin
-                                cpu_mem_read_req_pulse <= 1'b1;
+                            // CRITICAL: Latch address BEFORE generating pulse to ensure correct address is used
+                            if (axi.wstrb[0] && (axi.wdata[0] || axi.wdata[1])) begin
+                                // Address auto-increment happens BEFORE the operation
                                 if (cpu_halted && cpu_mem_ctrl_reg[2]) begin
                                     cpu_mem_addr_reg[15:0] <= cpu_mem_addr_reg[15:0] + 16'd1;
                                 end
                             end
+                            
+                            if (axi.wstrb[0] && axi.wdata[0]) begin
+                                cpu_mem_read_req_pulse <= 1'b1;
+                            end
                             if (axi.wstrb[0] && axi.wdata[1]) begin
                                 cpu_mem_write_req_pulse <= 1'b1;
-                                if (cpu_halted && cpu_mem_ctrl_reg[2]) begin
-                                    cpu_mem_addr_reg[15:0] <= cpu_mem_addr_reg[15:0] + 16'd1;
-                                end
                             end
                         end
 

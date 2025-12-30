@@ -305,6 +305,12 @@ module td4cpu_core #(
 
     // Debug memory busy is a one-cycle pulse after request
     logic mem_busy_q;
+    logic mem_data_valid;  // NEW: Data valid flag (holds 1 cycle after capture, before busy clears)
+    logic [15:0] dbg_mem_addr_latched;  // CRITICAL: Latch address at request time
+    
+    // CRITICAL: Debug access has independent RAM read path (no ram_rd_en conflict with CPU execution)
+    logic [15:0] dbg_ram_rdata;  // Debug-specific RAM read output
+    assign dbg_ram_rdata = ram[dbg_mem_addr_latched];  // Combinational read for debug
     assign dbg_mem_busy = mem_busy_q;
 
     function automatic bit pc_matches_breakpoint(input logic [15:0] pc_in);
@@ -442,9 +448,11 @@ module td4cpu_core #(
             brk_hit <= 1'b0;
             halt_reason <= HALT_REASON_RESET_HALT;
 
-            dbg_mem_rdata <= 16'h0000;
+            dbg_mem_rdata <= 16'hDEAD;  // Debug: Distinctive init pattern
             dbg_mem_err <= 1'b0;
             mem_busy_q <= 1'b0;
+            mem_data_valid <= 1'b0;
+            dbg_mem_addr_latched <= 16'h0000;
             step_pending <= 1'b0;
             reg_write_pending <= 1'b0;
             reg_write_idx <= 3'b000;
@@ -653,32 +661,43 @@ module td4cpu_core #(
                 if (dbg_wr_flags_pulse) flags <= dbg_wr_flags_data;
                 if (dbg_reg_write_pulse) regfile[dbg_reg_index] <= dbg_reg_wdata;
 
-                // Debug memory access (single-cycle)
+                // Debug memory access (single-cycle request)
                 if (dbg_mem_read_req_pulse || dbg_mem_write_req_pulse) begin
+                    // CRITICAL: Latch address immediately at request time
+                    dbg_mem_addr_latched <= dbg_mem_addr;
                     mem_busy_q <= 1'b1;
                     dbg_mem_err <= 1'b0;
+                    mem_data_valid <= 1'b0;
 
                     if (!is_ram_addr_valid(dbg_mem_addr)) begin
                         dbg_mem_err <= 1'b1;
+                        mem_data_valid <= 1'b1;  // Error completes immediately
                     end else begin
                         if (dbg_mem_write_req_pulse) begin
                             ram_wr_en <= 1'b1;
                             ram_wr_addr <= dbg_mem_addr;
                             ram_wr_data <= dbg_mem_wdata;
+                            dbg_mem_rdata <= dbg_mem_wdata;  // Write-first forwarding
+                            mem_data_valid <= 1'b1;  // Write completes immediately
                         end
                         if (dbg_mem_read_req_pulse) begin
-                            ram_addr_reg <= dbg_mem_addr;
-                            ram_rd_en <= 1'b1;
+                            // Read uses combinational path dbg_ram_rdata = ram[addr]
+                            // Data available same cycle after address latched
+                            mem_data_valid <= 1'b1;  // Read completes immediately via combinational path
                         end
                     end
-                end
-                
-                // Capture debug memory read result when available
-                if (mem_busy_q) begin
-                    if (ram_rd_en && ram_addr_reg == dbg_mem_addr) begin
-                        dbg_mem_rdata <= ram_rd_data;
+                end else if (mem_busy_q) begin
+                    // Capture read data from combinational path
+                    if (mem_data_valid && !dbg_mem_err && !ram_wr_en) begin
+                        dbg_mem_rdata <= dbg_ram_rdata;  // Capture from combinational read
                     end
-                    mem_busy_q <= 1'b0;
+                    
+                    // Clear busy after data held stable for 1 cycle
+                    if (mem_data_valid) begin
+                        ram_wr_en <= 1'b0;
+                        mem_busy_q <= 1'b0;
+                        mem_data_valid <= 1'b0;
+                    end
                 end
             end else begin
                 // If a debug mem op is attempted while running, flag error.
@@ -718,7 +737,6 @@ module td4cpu_core #(
                     ram_rd_en <= 1'b1;
                     fetch_pc <= pc;
                     pc <= pc + 16'd1;
-                    $display("[%t] FETCH: PC=0x%04x", $time, pc);
                 end
             end else if (!running) begin
                 insn_valid <= 1'b0;
@@ -750,9 +768,6 @@ module td4cpu_core #(
                 
                 // Clear forwarding at start of decode
                 reg_write_pending <= 1'b0;
-                
-                // DEBUG: Instruction decode trace
-                $display("[%t] DECODE: PC=0x%04x insn=0x%04x opcode=0x%01x", $time, insn_decoded_pc, insn_decoded_reg, insn_opcode);
                 
                 // Debug: Capture current instruction
                 debug_current_insn <= insn_decoded_reg;
@@ -787,8 +802,6 @@ module td4cpu_core #(
                         ldi_rd_idx = insn_decoded_reg[11:9];
                         ldi_imm9 = insn_decoded_reg[8:0];
                         regfile[ldi_rd_idx] <= {7'b0000000, ldi_imm9};
-                        $display("[%t] LDI: Scheduled R%0d <= 0x%04x (NBA update at end of timestep)", $time, ldi_rd_idx, {7'b0000000, ldi_imm9});
-                        $display("[%t] LDI: Before NBA - regfile[%0d] = 0x%04x", $time, ldi_rd_idx, regfile[ldi_rd_idx]);
                         
                         // Data forwarding
                         reg_write_pending <= 1'b1;
@@ -810,11 +823,7 @@ module td4cpu_core #(
                         // Perform addition with carry detection
                         addi_result = {1'b0, regfile[addi_rd_idx]} + {1'b0, addi_imm_zext};
                         
-                        $display("[%t] ADDI: R%0d = 0x%04x + 0x%04x = 0x%04x", 
-                                 $time, addi_rd_idx, regfile[addi_rd_idx], addi_imm_zext, addi_result[15:0]);
-                        
                         regfile[addi_rd_idx] <= addi_result[15:0];
-                        $display("[%t] ADDI: Scheduled R%0d <= 0x%04x (NBA update at end of timestep)", $time, addi_rd_idx, addi_result[15:0]);
                         // Update flags (Z=bit0, N=bit1, C=bit2)
                         flags[0] <= (addi_result[15:0] == 16'h0000);  // Zero flag
                         flags[1] <= addi_result[15];                   // Negative flag
@@ -875,18 +884,14 @@ module td4cpu_core #(
                         // Data forwarding: check if we just wrote to the register we're reading
                         if (reg_write_pending && (st_rB_idx == reg_write_idx)) begin
                             st_base_addr = reg_write_data;  // Forward from pending write
-                            $display("[%t] ST: FORWARDED regfile[%0d] (R%0d) = 0x%04x", $time, st_rB_idx, st_rB_idx, reg_write_data);
                         end else begin
                             st_base_addr = regfile[st_rB_idx];
-                            $display("[%t] ST: Reading regfile[%0d] (R%0d) = 0x%04x", $time, st_rB_idx, st_rB_idx, regfile[st_rB_idx]);
                         end
                         
                         if (reg_write_pending && (st_rD_idx == reg_write_idx)) begin
                             st_store_data = reg_write_data;  // Forward from pending write
-                            $display("[%t] ST: FORWARDED regfile[%0d] (R%0d, store data) = 0x%04x", $time, st_rD_idx, st_rD_idx, reg_write_data);
                         end else begin
                             st_store_data = regfile[st_rD_idx];
-                            $display("[%t] ST: Reading regfile[%0d] (R%0d, store data) = 0x%04x", $time, st_rD_idx, st_rD_idx, regfile[st_rD_idx]);
                         end
                         
                         // Sign-extend 6-bit offset to 16-bit
@@ -896,11 +901,6 @@ module td4cpu_core #(
                         st_is_ram = (st_effective_addr < MMIO_BASE);
                         st_is_led = (st_effective_addr == MMIO_LED);
                         
-                        // DEBUG: ST instruction execution trace
-                        $display("[%t] ST EXEC: insn=0x%04x rD=%0d rB=%0d off=%0d base=0x%04x data=0x%04x eff_addr=0x%04x", 
-                                 $time, insn_decoded_reg, st_rD_idx, st_rB_idx, st_offset6, 
-                                 st_base_addr, st_store_data, st_effective_addr);
-                        
                         // Address space decode (optimized with pre-computed flags)
                         if (st_is_ram) begin
                             // RAM access (0x0000-0x0FFF)
@@ -908,16 +908,11 @@ module td4cpu_core #(
                                 ram_wr_en <= 1'b1;
                                 ram_wr_addr <= st_effective_addr;
                                 ram_wr_data <= st_store_data;
-                                $display("[%t] ST -> RAM[0x%04x] = 0x%04x", $time, st_effective_addr, st_store_data);
                             end
                             // else: out of bounds - ignore write
                         end else if (st_is_led) begin
                             // LED register write (MMIO: 0x1044)
-                            $display("[%t] ST -> LED: data=0x%01x (from 0x%04x, addr=0x%04x, MMIO_LED=0x%04x)", 
-                                     $time, st_store_data[3:0], st_store_data, st_effective_addr, MMIO_LED);
                             led_reg <= st_store_data[3:0];  // Only lower 4 bits
-                        end else begin
-                            $display("[%t] ST -> INVALID MMIO: addr=0x%04x", $time, st_effective_addr);
                         end
                         // else: invalid MMIO address - ignore write
                     end
@@ -993,18 +988,6 @@ module td4cpu_core #(
         end
     end  // always_ff
     
-    // Monitor regfile updates for debugging
-    always @(regfile[0]) begin
-        if ($time > 0) begin  // Skip initial reset
-            $display("[%t] REGFILE UPDATE: R0 changed to 0x%04x", $time, regfile[0]);
-        end
-    end
-    always @(regfile[1]) begin
-        if ($time > 0) begin
-            $display("[%t] REGFILE UPDATE: R1 changed to 0x%04x", $time, regfile[1]);
-        end
-    end
-
     // Trace buffer read port (combinational, for Register_Block)
     // Trace buffer readout (registered for timing)
     always_ff @(posedge clk) begin
