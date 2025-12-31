@@ -47,6 +47,7 @@
 - Never call archived scripts or `archive/legacy_mcp_files/` assets.
 
 # Coding Standards (SystemVerilog)
+- declaration of variables should be placed at the beginning of a module or block
 - Timescale: `timescale 1ns / 1ps` at the top of every RTL, interface, or testbench file.
 - Naming:
   - Modules: Capitalized words with underscores (e.g., `My_Module`).
