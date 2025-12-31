@@ -1,7 +1,7 @@
 # CPU Memory-Mapped IO Design (Feature: cpu-mmio-led)
 
 ## Overview
-Implement LD/ST instructions in TD4CPU to enable direct memory-mapped IO access, specifically for LED control at address 0x1044.
+Implement LD/ST instructions in TD4CPU to enable direct memory-mapped IO access, specifically for LED control at address 0x101F.
 
 ## Design Decisions
 
@@ -9,7 +9,7 @@ Implement LD/ST instructions in TD4CPU to enable direct memory-mapped IO access,
 ```
 0x0000 - 0x0FFF  : Internal RAM (4096 words, 16-bit)
 0x1000 - 0x1FFF  : Memory-Mapped IO space
-  0x1044         : LED register (4-bit, write-only from CPU perspective)
+  0x101F         : LED register (4-bit, write-only from CPU perspective)
   0x1200+        : CPU debug registers (remain UART-accessible only)
 ```
 
