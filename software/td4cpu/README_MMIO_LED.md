@@ -21,7 +21,7 @@ This test validates that the TD4 CPU can:
 
 ### 1. Single LED Value Test (Default)
 
-Test LED value 0xA (binary 1010):
+Test LED value 0xA (binary 1010) - CPU halts after execution:
 
 ```bash
 # Windows
@@ -31,7 +31,50 @@ python test_mmio_led.py --port COM3
 python test_mmio_led.py --port /dev/ttyUSB0
 ```
 
-Expected output:
+### 2. Looping LED Patterns (Runs Indefinitely)
+
+**NEW**: CPU executes pattern program in a loop. Press Ctrl+C to stop.
+
+#### Blink Pattern (All ON/OFF)
+```bash
+python test_mmio_led.py --port COM3 --pattern blink
+```
+Pattern: `1111` → `0000` → `1111` → ... (repeat)
+
+#### Knight Rider (Scanning LED)
+```bash
+python test_mmio_led.py --port COM3 --pattern knight
+```
+Pattern: `0001` → `0010` → `0100` → `1000` → `0100` → `0010` → ... (repeat)
+
+#### Binary Counter (0-15 Loop)
+```bash
+python test_mmio_led.py --port COM3 --pattern counter
+```
+Pattern: `0000` → `0001` → `0010` → ... → `1111` → `0000` → ... (repeat)
+
+#### Wave Pattern (Chase Effect)
+```bash
+python test_mmio_led.py --port COM3 --pattern wave
+```
+Pattern: `0001` → `0011` → `0111` → `1111` → `1110` → `1100` → `1000` → `0000` → ... (repeat)
+
+#### Alternating Pattern
+```bash
+python test_mmio_led.py --port COM3 --pattern alternate
+```
+Pattern: `0101` ⟷ `1010` ⟷ `0101` → ... (repeat)
+
+#### Adjust Pattern Speed
+```bash
+# Slower (higher number = more CPU delay loops)
+python test_mmio_led.py --port COM3 --pattern knight --speed 500
+
+# Faster
+python test_mmio_led.py --port COM3 --pattern blink --speed 100
+```
+
+### 3. One-Time Test: All 16 Values
 ```
 ======================================================================
 Testing LED value: 10 (0xA, 0b1010)
@@ -50,9 +93,9 @@ Register state after execution:
 ✓ TEST PASSED
 ```
 
-### 2. Binary Counting Pattern (0-15)
+### 3. One-Time Test: All 16 Values
 
-Visual test showing all LED combinations:
+Test all LED combinations sequentially (CPU halts after each value):
 
 ```bash
 python test_mmio_led.py --port COM3 --pattern count --delay 0.5
@@ -60,39 +103,17 @@ python test_mmio_led.py --port COM3 --pattern count --delay 0.5
 
 This will:
 - Test all 16 LED values (0x0 to 0xF)
-- Load and execute CPU program for each value
+- Load and execute CPU program for each value  
 - Verify CPU registers after each execution
 - Display pass/fail for each test
 
 Watch the physical LEDs count from 0000 to 1111 in binary!
 
-### 3. Knight Rider Pattern
+### 4. Expected Output (Single Value Test)
 
-Fun demo showing a single LED "scanning" left to right:
-
-```bash
-python test_mmio_led.py --port COM3 --pattern knight --delay 0.3
 ```
-
-Pattern sequence: 0001 → 0010 → 0100 → 1000 → 0100 → 0010 (repeat)
-
-### 4. Custom LED Value
-
-Test any specific 4-bit value:
-
-```bash
-# Test LED = 0x5 (binary 0101)
-python test_mmio_led.py --port COM3 --value 5
-
-# Test LED = 0xF (binary 1111 - all on)
-python test_mmio_led.py --port COM3 --value 15
-```
-
-## What the Test Does
-
-### Program Logic
-
-For each test, the script:
+======================================================================
+Testing LED value: 10 (0xA, 0b1010)
 
 1. **Resets CPU** - Halts CPU and clears all registers
 2. **Builds Program** - Creates instruction sequence in Python:
