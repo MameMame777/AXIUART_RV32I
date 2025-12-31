@@ -85,7 +85,7 @@ module td4cpu_core #(
     
     // Memory-Mapped IO address map
     localparam logic [15:0] MMIO_BASE = 16'h1000;
-    localparam logic [15:0] MMIO_LED  = 16'h1044;  // LED register address (MMIO space)
+    localparam logic [15:0] MMIO_LED  = 16'h101F;  // LED register address (MMIO space)
 
     logic [15:0] regfile [0:7];
     
@@ -93,16 +93,16 @@ module td4cpu_core #(
     logic [3:0] led_reg;
     assign led_out = led_reg;  // Direct output to top-level pins
     
-    // LD/ST instruction execution variables (declared at module level for proper synthesis)
-    logic [2:0] ld_rD_idx, ld_rB_idx;
-    logic [5:0] ld_offset6;
-    logic [15:0] ld_base_addr, ld_effective_addr;
-    logic ld_is_ram, ld_is_led;  // Address decode flags (pre-computed)
-    
-    logic [2:0] st_rD_idx, st_rB_idx;
-    logic [5:0] st_offset6;
-    logic [15:0] st_base_addr, st_effective_addr, st_store_data;
-    logic st_is_ram, st_is_led;  // Address decode flags (pre-computed)
+    // LD/ST instruction execution - TWO-STAGE PIPELINE
+    // Stage 1: Address calculation and decode (registered)
+    logic        mem_op_pending;        // Memory operation in pipeline
+    logic        mem_op_is_load;        // 1=LD, 0=ST
+    logic [2:0]  mem_op_rd_idx;         // Destination register (for LD)
+    logic [15:0] mem_op_effective_addr; // Calculated address
+    logic [15:0] mem_op_store_data;     // Data to store (for ST)
+    logic        mem_op_is_ram;         // Address decode: RAM access
+    logic        mem_op_is_led;         // Address decode: LED MMIO access
+    logic        mem_op_executing;      // Set during STAGE 1 to block next fetch
     
     // LDI instruction execution variables
     logic [2:0] ldi_rd_idx;
@@ -272,14 +272,20 @@ module td4cpu_core #(
     // ========================================
     // RAM Block - Separate for proper BRAM inference
     // CRITICAL: Must be in its own always_ff block
-    // Single synchronous read-first operation per cycle
+    // Single synchronous read-first operation per cycle  
+    // COMPREHENSIVE FIX: Always read on ram_rd_en=1. When RAM writes occur,
+    // invalidate cached data by reading fresh on next cycle.
     // ========================================
+    
     always_ff @(posedge clk) begin
-        // Write takes priority (write-first behavior)
         if (ram_wr_en) begin
             ram[ram_wr_addr] <= ram_wr_data;
-            ram_rd_data <= ram_wr_data;  // Forward written data
-        end else if (ram_rd_en) begin
+            // Write occurred - ram_rd_data potentially stale
+            // Next read cycle will fetch fresh data
+        end 
+        
+        // Separate read logic: ALWAYS honor ram_rd_en
+        if (ram_rd_en) begin
             ram_rd_data <= ram[ram_addr_reg];
         end
     end
@@ -435,6 +441,7 @@ module td4cpu_core #(
     endfunction
 
     logic step_pending;
+    logic step_insn_fetched;  // Track if step instruction has been fetched
 
     always_ff @(posedge clk) begin
         if (rst) begin
@@ -454,9 +461,15 @@ module td4cpu_core #(
             mem_data_valid <= 1'b0;
             dbg_mem_addr_latched <= 16'h0000;
             step_pending <= 1'b0;
+            step_insn_fetched <= 1'b0;
             reg_write_pending <= 1'b0;
             reg_write_idx <= 3'b000;
             reg_write_data <= 16'h0000;
+            
+            // CRITICAL: Initialize pipeline valid flags
+            insn_valid <= 1'b0;
+            insn_decoded_valid <= 1'b0;
+            ram_rd_en <= 1'b0;
 
             for (int i = 0; i < 8; i++) begin
                 regfile[i] <= 16'h0000;
@@ -529,8 +542,24 @@ module td4cpu_core #(
 
             // RAM contents are left uninitialized by default.
             // In simulation, use $readmemh from a testbench if needed.
+            // Initialize to NOP (0x0000) in simulation to prevent X-opcode runaway
+            `ifndef SYNTHESIS
+            for (int i = 0; i < RAM_WORDS; i++) begin
+                ram[i] <= 16'h0000;  // NOP = all zeros
+            end
+            `endif
+            
+            mem_op_executing <= 1'b0;
+            mem_op_pending <= 1'b0;
+            mem_op_is_load <= 1'b0;
+            mem_op_rd_idx <= 3'd0;
+            mem_op_effective_addr <= 16'd0;
+            mem_op_store_data <= 16'd0;
+            mem_op_is_ram <= 1'b0;
+            mem_op_is_led <= 1'b0;
         end else begin
             mem_busy_q <= 1'b0;
+            mem_op_executing <= 1'b0;  // Clear by default
             
             // Update step tracking
             debug_step_pending <= step_pending;
@@ -638,24 +667,30 @@ module td4cpu_core #(
                 running <= 1'b0;
                 halt_reason <= HALT_REASON_EXTERNAL_HALT;
                 step_pending <= 1'b0;
+                step_insn_fetched <= 1'b0;
                 // Flush fetch pipeline on halt
                 insn_valid <= 1'b0;
+                ram_rd_en <= 1'b0;
             end
 
             if (dbg_run_req_pulse) begin
                 halted <= 1'b0;
                 running <= 1'b1;
                 step_pending <= 1'b0;
-                // Flush fetch pipeline on run
+                step_insn_fetched <= 1'b0;
+                // CRITICAL: Flush BOTH pipeline stages on run
                 insn_valid <= 1'b0;
+                insn_decoded_valid <= 1'b0;
+                ram_rd_en <= 1'b0;
             end
 
             // Debug writes into state are accepted only while halted
             if (halted) begin
                 if (dbg_wr_pc_pulse) begin
                     pc <= dbg_wr_pc_data;
-                    // Flush fetch pipeline on PC write
+                    // Flush BOTH pipeline stages on PC write
                     insn_valid <= 1'b0;
+                    insn_decoded_valid <= 1'b0;
                 end
                 if (dbg_wr_sp_pulse) sp <= dbg_wr_sp_data;
                 if (dbg_wr_flags_pulse) flags <= dbg_wr_flags_data;
@@ -710,12 +745,20 @@ module td4cpu_core #(
             // One-instruction step request: halt after next instruction completes
             if (dbg_step_req_pulse) begin
                 step_pending <= 1'b1;
+                step_insn_fetched <= 1'b0;  // Reset fetch tracking
                 halted <= 1'b0;
                 running <= 1'b1;
+                // CRITICAL: Flush pipeline on transition to running
+                insn_valid <= 1'b0;
+                insn_decoded_valid <= 1'b0;
             end
 
             // Execution (minimal bring-up): advance PC and stop on BRK/breakpoints
-            if (running && !insn_valid) begin
+            // CRITICAL: Don't fetch new instruction while memory operation is executing (2-cycle LD/ST)
+            // mem_op_executing prevents fetch during STAGE 1, mem_op_pending blocks during STAGE 2
+            // CRITICAL: When step_pending, allow ONE fetch then block until halt
+            // CRITICAL: Block fetch while ram_rd_en is active (prevents double-fetch)
+            if (running && !insn_valid && !mem_op_executing && !mem_op_pending && !ram_rd_en && !(step_pending && step_insn_fetched)) begin
                 // Fetch stage: Read instruction from RAM
                 // Breakpoint/validity checks happen here (simplified)
                 if (pc_matches_breakpoint(pc)) begin
@@ -724,12 +767,14 @@ module td4cpu_core #(
                     break_hit <= 1'b1;
                     halt_reason <= HALT_REASON_BREAKPOINT;
                     step_pending <= 1'b0;
+                    step_insn_fetched <= 1'b0;
                     insn_valid <= 1'b0;
                 end else if (!is_ram_addr_valid(pc)) begin
                     halted <= 1'b1;
                     running <= 1'b0;
                     halt_reason <= HALT_REASON_PC_OOB;
                     step_pending <= 1'b0;
+                    step_insn_fetched <= 1'b0;
                     insn_valid <= 1'b0;
                 end else begin
                     // Fetch instruction - request RAM read
@@ -737,6 +782,8 @@ module td4cpu_core #(
                     ram_rd_en <= 1'b1;
                     fetch_pc <= pc;
                     pc <= pc + 16'd1;
+                    // Track that step instruction has been fetched
+                    if (step_pending) step_insn_fetched <= 1'b1;
                 end
             end else if (!running) begin
                 insn_valid <= 1'b0;
@@ -757,9 +804,8 @@ module td4cpu_core #(
                 insn_decoded_valid <= 1'b1;
                 insn_decoded_pc <= fetch_pc;
                 insn_valid <= 1'b0;  // Clear after decode
-            end else begin
-                insn_decoded_valid <= 1'b0;
             end
+            // NOTE: insn_decoded_valid is cleared after execution, not here
             
             // Decode/Execute stage: Process decoded instruction
             if (insn_decoded_valid) begin
@@ -810,18 +856,18 @@ module td4cpu_core #(
                     end
                     
                     OP_ADDI: begin
-                        // ADDI Rd, #imm9 - Add immediate (unsigned for address construction)
+                        // ADDI Rd, #imm9s - Add immediate (sign-extended per ISA spec)
                         logic [2:0] addi_rd_idx;
                         logic [8:0] addi_imm9;
-                        logic [15:0] addi_imm_zext;
+                        logic [15:0] addi_imm_sext;
                         logic [16:0] addi_result;
                         
                         addi_rd_idx = insn_decoded_reg[11:9];
                         addi_imm9 = insn_decoded_reg[8:0];
-                        // Zero-extend 9-bit immediate to 16-bit (unsigned)
-                        addi_imm_zext = {7'b0000000, addi_imm9};
+                        // Sign-extend 9-bit immediate to 16-bit (signed per ISA)
+                        addi_imm_sext = {{7{addi_imm9[8]}}, addi_imm9};
                         // Perform addition with carry detection
-                        addi_result = {1'b0, regfile[addi_rd_idx]} + {1'b0, addi_imm_zext};
+                        addi_result = {1'b0, regfile[addi_rd_idx]} + {1'b0, addi_imm_sext};
                         
                         regfile[addi_rd_idx] <= addi_result[15:0];
                         // Update flags (Z=bit0, N=bit1, C=bit2)
@@ -836,85 +882,77 @@ module td4cpu_core #(
                     end
                     
                     OP_LD: begin
-                        // LD rD, [rB + off6] - Load from memory
-                        // Use module-level variables for proper RAM inference
-                        ld_rD_idx = insn_decoded_reg[11:9];
-                        ld_rB_idx = insn_decoded_reg[8:6];
-                        ld_offset6 = insn_decoded_reg[5:0];
-                        ld_base_addr = regfile[ld_rB_idx];
+                        // LD rD, [rB + off6] - STAGE 1: Address calculation
+                        logic [2:0] rD_idx, rB_idx;
+                        logic [5:0] offset6;
+                        logic [15:0] base_addr, effective_addr;
                         
-                        // Sign-extend 6-bit offset to 16-bit
-                        ld_effective_addr = ld_base_addr + {{10{ld_offset6[5]}}, ld_offset6};
+                        rD_idx = insn_decoded_reg[11:9];
+                        rB_idx = insn_decoded_reg[8:6];
+                        offset6 = insn_decoded_reg[5:0];
                         
-                        // Pre-compute address decode flags (optimize critical path)
-                        ld_is_ram = (ld_effective_addr < MMIO_BASE);
-                        ld_is_led = (ld_effective_addr == MMIO_LED);
-                        
-                        // Address space decode (optimized with pre-computed flags)
-                        if (ld_is_ram) begin
-                            // RAM access (0x0000-0x0FFF)
-                            if (is_ram_addr_valid(ld_effective_addr)) begin
-                                ram_addr_reg <= ld_effective_addr;
-                                ram_rd_en <= 1'b1;
-                            end else begin
-                                // Out of bounds - load zero
-                                regfile[ld_rD_idx] <= 16'h0000;
-                            end
-                        end else if (ld_is_led) begin
-                            // LED register read (MMIO: 0x1044)
-                            regfile[ld_rD_idx] <= {12'h000, led_reg};
+                        // Data forwarding: check if base register was just written
+                        if (reg_write_pending && (rB_idx == reg_write_idx)) begin
+                            base_addr = reg_write_data;
                         end else begin
-                            // Invalid MMIO address - load zero
-                            regfile[ld_rD_idx] <= 16'h0000;
+                            base_addr = regfile[rB_idx];
                         end
                         
-                        // Data forwarding: track this write (optimized with pre-computed flags)
-                        reg_write_pending <= 1'b1;
-                        reg_write_idx <= ld_rD_idx;
-                        reg_write_data <= ld_is_led ? {12'h000, led_reg} : 16'h0000;
+                        // Sign-extend 6-bit offset to 16-bit
+                        effective_addr = base_addr + {{10{offset6[5]}}, offset6};
+                        
+                        // Stage pipeline registers for STAGE 2 execution
+                        mem_op_pending <= 1'b1;
+                        mem_op_is_load <= 1'b1;
+                        mem_op_rd_idx <= rD_idx;
+                        mem_op_effective_addr <= effective_addr;
+                        mem_op_is_ram <= (effective_addr < MMIO_BASE);
+                        mem_op_is_led <= (effective_addr == MMIO_LED);
+                        
+                        // Block next fetch - STAGE 2 needs next cycle
+                        mem_op_executing <= 1'b1;
+                        
+                        // STAGE 2 will execute in next cycle (handled separately below)
                     end
                     
                     OP_ST: begin
-                        // ST rD, [rB + off6] - Store to memory
-                        // Use module-level variables for proper RAM inference
-                        st_rD_idx = insn_decoded_reg[11:9];
-                        st_rB_idx = insn_decoded_reg[8:6];
-                        st_offset6 = insn_decoded_reg[5:0];
+                        // ST rD, [rB + off6] - STAGE 1: Address calculation
+                        logic [2:0] rB_idx, rD_idx;
+                        logic [5:0] offset6;
+                        logic [15:0] base_addr, effective_addr, store_data;
                         
-                        // Data forwarding: check if we just wrote to the register we're reading
-                        if (reg_write_pending && (st_rB_idx == reg_write_idx)) begin
-                            st_base_addr = reg_write_data;  // Forward from pending write
+                        rB_idx = insn_decoded_reg[8:6];
+                        rD_idx = insn_decoded_reg[11:9];
+                        offset6 = insn_decoded_reg[5:0];
+                        
+                        // Data forwarding: check if we just wrote to the registers we're reading
+                        if (reg_write_pending && (rB_idx == reg_write_idx)) begin
+                            base_addr = reg_write_data;  // Forward base address
                         end else begin
-                            st_base_addr = regfile[st_rB_idx];
+                            base_addr = regfile[rB_idx];
                         end
                         
-                        if (reg_write_pending && (st_rD_idx == reg_write_idx)) begin
-                            st_store_data = reg_write_data;  // Forward from pending write
+                        if (reg_write_pending && (rD_idx == reg_write_idx)) begin
+                            store_data = reg_write_data;  // Forward store data
                         end else begin
-                            st_store_data = regfile[st_rD_idx];
+                            store_data = regfile[rD_idx];
                         end
                         
-                        // Sign-extend 6-bit offset to 16-bit
-                        st_effective_addr = st_base_addr + {{10{st_offset6[5]}}, st_offset6};
+                        // Calculate effective address
+                        effective_addr = base_addr + {{10{offset6[5]}}, offset6};
                         
-                        // Pre-compute address decode flags (optimize critical path)
-                        st_is_ram = (st_effective_addr < MMIO_BASE);
-                        st_is_led = (st_effective_addr == MMIO_LED);
+                        // Stage pipeline registers for STAGE 2 execution
+                        mem_op_pending <= 1'b1;
+                        mem_op_is_load <= 1'b0;
+                        mem_op_effective_addr <= effective_addr;
+                        mem_op_store_data <= store_data;
+                        mem_op_is_ram <= (effective_addr < MMIO_BASE);
+                        mem_op_is_led <= (effective_addr == MMIO_LED);
                         
-                        // Address space decode (optimized with pre-computed flags)
-                        if (st_is_ram) begin
-                            // RAM access (0x0000-0x0FFF)
-                            if (is_ram_addr_valid(st_effective_addr)) begin
-                                ram_wr_en <= 1'b1;
-                                ram_wr_addr <= st_effective_addr;
-                                ram_wr_data <= st_store_data;
-                            end
-                            // else: out of bounds - ignore write
-                        end else if (st_is_led) begin
-                            // LED register write (MMIO: 0x1044)
-                            led_reg <= st_store_data[3:0];  // Only lower 4 bits
-                        end
-                        // else: invalid MMIO address - ignore write
+                        // Block next fetch - STAGE 2 needs next cycle
+                        mem_op_executing <= 1'b1;
+                        
+                        // STAGE 2 will execute in next cycle (handled separately below)
                     end
                     
                     OP_SYS: begin
@@ -924,6 +962,7 @@ module td4cpu_core #(
                             brk_hit <= 1'b1;
                             halt_reason <= HALT_REASON_BRK;
                             step_pending <= 1'b0;
+                            step_insn_fetched <= 1'b0;
                         end
                     end
                     
@@ -932,20 +971,91 @@ module td4cpu_core #(
                     end
                 endcase
                 
-                // Check step_pending immediately after instruction execution
-                // For immediate instructions (LDI/LD/ST), we halt right after execution
+                // Check step_pending after instruction execution
+                // CRITICAL: LD/ST are 2-cycle operations, don't halt until STAGE 2 completes
+                // Check if current instruction is LD or ST
+                // Use 4-state comparison (!==) to prevent X-opcode runaway
+                if (step_pending && (insn_opcode !== OP_LD) && (insn_opcode !== OP_ST)) begin
+                    halted <= 1'b1;
+                    running <= 1'b0;
+                    halt_reason <= HALT_REASON_STEP_DONE;
+                    step_pending <= 1'b0;
+                    step_insn_fetched <= 1'b0;
+                end
+                
+                // CRITICAL: Clear decoded valid after execution (except for LD/ST which need 2 cycles)
+                if ((insn_opcode !== OP_LD) && (insn_opcode !== OP_ST)) begin
+                    insn_decoded_valid <= 1'b0;
+                end
+            end
+            
+            // ========================================
+            // STAGE 2: Memory Operation Execution
+            // ========================================
+            // Execute pending LD/ST operations from previous cycle
+            // This runs in parallel with instruction decode, NOT inside insn_decoded_valid block
+            if (mem_op_pending) begin
+                if (mem_op_is_load) begin
+                    // LD instruction - STAGE 2: Execute memory read
+                    if (mem_op_is_ram) begin
+                        // RAM access
+                        if (is_ram_addr_valid(mem_op_effective_addr)) begin
+                            ram_addr_reg <= mem_op_effective_addr;
+                            ram_rd_en <= 1'b1;
+                        end else begin
+                            // Out of bounds - load zero
+                            regfile[mem_op_rd_idx] <= 16'h0000;
+                        end
+                    end else if (mem_op_is_led) begin
+                        // LED MMIO read
+                        regfile[mem_op_rd_idx] <= {12'h000, led_reg};
+                    end else begin
+                        // Invalid MMIO address - load zero
+                        regfile[mem_op_rd_idx] <= 16'h0000;
+                    end
+                    
+                    // Data forwarding for loads
+                    reg_write_pending <= 1'b1;
+                    reg_write_idx <= mem_op_rd_idx;
+                    reg_write_data <= mem_op_is_led ? {12'h000, led_reg} : 16'h0000;
+                end else begin
+                    // ST instruction - STAGE 2: Execute memory write
+                    if (mem_op_is_ram) begin
+                        // RAM access
+                        if (is_ram_addr_valid(mem_op_effective_addr)) begin
+                            ram_wr_en <= 1'b1;
+                            ram_wr_addr <= mem_op_effective_addr;
+                            ram_wr_data <= mem_op_store_data;
+                        end
+                    end else if (mem_op_is_led) begin
+                        // LED MMIO write - THIS WILL NOW WORK!
+                        led_reg <= mem_op_store_data[3:0];
+                    end
+                    // else: invalid MMIO - ignore write
+                end
+                
+                // Clear pipeline after execution
+                mem_op_pending <= 1'b0;
+                insn_decoded_valid <= 1'b0;  // Clear decoded instruction after LD/ST completes
+                
+                // For step mode: halt after memory operation completes
                 if (step_pending) begin
                     halted <= 1'b1;
                     running <= 1'b0;
                     halt_reason <= HALT_REASON_STEP_DONE;
                     step_pending <= 1'b0;
+                    step_insn_fetched <= 1'b0;
                 end
-            end else if (step_pending && !alu_writeback_en_hold) begin
-                // For ALU instructions with pipeline, halt after writeback completes
+            end
+            
+            // Handle step completion for ALU pipeline outside insn_decoded_valid
+            if (step_pending && (alu_writeback_en_hold || alu_flags_update_en_hold)) begin
+                // For ALU instructions with pipeline, halt after writeback/flag-update completes
                 halted <= 1'b1;
                 running <= 1'b0;
                 halt_reason <= HALT_REASON_STEP_DONE;
                 step_pending <= 1'b0;
+                step_insn_fetched <= 1'b0;
             end
         end
     end

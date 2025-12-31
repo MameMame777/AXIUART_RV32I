@@ -232,6 +232,8 @@ virtual class axiuart_cpu_test_base extends axiuart_base_test;
         bit cpu_halted;
         bit [7:0] halt_reason;
         int timeout_count;
+        bit [15:0] cpu_pc;
+        bit [15:0] insn_at_pc;
         
         // Verify halted
         cpu_halted = axiuart_tb_top.dut.cpu_inst.halted;
@@ -254,6 +256,21 @@ virtual class axiuart_cpu_test_base extends axiuart_base_test;
             read_reg(CPU_DBG_STATUS, status);
             halt_reason = status[15:8];
             timeout_count++;
+            
+            // FAIL FAST: If halt_reason is unexpected (not STEP_DONE=0x03), diagnose and abort
+            if (halt_reason != 8'h00 && halt_reason != 8'h03) begin
+                bit [31:0] pc_val;
+                read_reg(CPU_PC, pc_val);
+                cpu_pc = pc_val[15:0];
+                
+                // Try to read instruction at PC (may fail if PC is out-of-bounds)
+                read_ram_direct(cpu_pc, insn_at_pc);
+                
+                `uvm_fatal(get_type_name(), 
+                    $sformatf("step_cpu() FAIL FAST: unexpected halt_reason=0x%02x (0x03=STEP_DONE, 0x06=PC_OOB). PC=0x%04x, insn=0x%04x, poll_count=%0d", 
+                        halt_reason, cpu_pc, insn_at_pc, timeout_count))
+            end
+            
             if (timeout_count > step_timeout_cycles) begin
                 `uvm_fatal(get_type_name(), 
                     $sformatf("step_cpu() timeout - halt_reason=0x%02x", halt_reason))

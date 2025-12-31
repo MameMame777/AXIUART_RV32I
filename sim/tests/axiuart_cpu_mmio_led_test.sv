@@ -1,6 +1,6 @@
 //------------------------------------------------------------------------------
 // CPU MMIO LED Test - LD/ST Instruction Verification for LED Control
-// Purpose: Verify CPU can access LED register at 0x1044 using LD/ST instructions
+// Purpose: Verify CPU can access LED register at 0x101F using LD/ST instructions
 // Features: LDI, LD, ST to MMIO space, LED output observation
 //------------------------------------------------------------------------------
 `timescale 1ns / 1ps
@@ -24,8 +24,8 @@ class axiuart_cpu_mmio_led_test extends axiuart_base_test;
     localparam bit [31:0] CPU_MEM_RDATA    = REG_CPU_MEM_RDATA;
     localparam bit [31:0] CPU_MEM_CTRL     = REG_CPU_MEM_CTRL;
 
-    // MMIO LED address (from CPU perspective)
-    localparam bit [15:0] LED_MMIO_ADDR = 16'h1044;
+    // MMIO LED address (maximum reachable with ST instruction's 6-bit signed offset)
+    localparam bit [15:0] LED_MMIO_ADDR = 16'h101F;
     
     // Test statistics
     int tests_passed = 0;
@@ -185,9 +185,9 @@ class axiuart_cpu_mmio_led_test extends axiuart_base_test;
         read_led_output(led_before);
         `uvm_info("CPU_MMIO", $sformatf("LED before: 0x%01x", led_before), UVM_LOW)
         
-        // Program: Build LED address 0x1044 using ADDI instructions
-        // 0x1044 = 4164 = 256×16 + 68 = 0x1000 + 0x44
-        // Strategy: LDI 256, ADDI×4 to get 1280, then ADDI×11 to reach 4164
+        // Program: Build LED address 0x101F using ADDI instructions
+        // 0x101F = 4127 = 256×16 + 31 = 0x1000 + 0x1F
+        // Strategy: LDI 256, ADDI×16 to get 4096, then ADDI to reach 4127
         // 0x0000: LDI R0, #0xA        ; LED pattern = 10
         // 0x0001: LDI R1, #0x100      ; R1 = 256
         // 0x0002: ADDI R1, #0x100     ; R1 = 512
@@ -205,30 +205,47 @@ class axiuart_cpu_mmio_led_test extends axiuart_base_test;
         // 0x000E: ADDI R1, #0x100     ; R1 = 3584 (0xE00)
         // 0x000F: ADDI R1, #0x100     ; R1 = 3840 (0xF00)
         // 0x0010: ADDI R1, #0x100     ; R1 = 4096 (0x1000)
-        // 0x0011: ADDI R1, #0x44      ; R1 = 4164 (0x1044) ← LED address!
+        // 0x0011: ADDI R1, #0x1F      ; R1 = 4127 (0x101F) ← LED address!
         // 0x0012: ST R0, [R1+0]       ; Write to LED
         // 0x0013: SYS #BRK            ; Halt
         
         write_insn(16'h0000, {OP_LDI, 3'd0, 9'h00A});    // LDI R0, #0xA
-        write_insn(16'h0001, {OP_LDI, 3'd1, 9'h100});    // LDI R1, #0x100
-        write_insn(16'h0002, {OP_ADDI, 3'd1, 9'h100});   // ADDI R1, #0x100
-        write_insn(16'h0003, {OP_ADDI, 3'd1, 9'h100});   // ADDI R1, #0x100
-        write_insn(16'h0004, {OP_ADDI, 3'd1, 9'h100});   // ADDI R1, #0x100
-        write_insn(16'h0005, {OP_ADDI, 3'd1, 9'h100});   // ADDI R1, #0x100
-        write_insn(16'h0006, {OP_ADDI, 3'd1, 9'h100});   // ADDI R1, #0x100
-        write_insn(16'h0007, {OP_ADDI, 3'd1, 9'h100});   // ADDI R1, #0x100
-        write_insn(16'h0008, {OP_ADDI, 3'd1, 9'h100});   // ADDI R1, #0x100
-        write_insn(16'h0009, {OP_ADDI, 3'd1, 9'h100});   // ADDI R1, #0x100
-        write_insn(16'h000A, {OP_ADDI, 3'd1, 9'h100});   // ADDI R1, #0x100
-        write_insn(16'h000B, {OP_ADDI, 3'd1, 9'h100});   // ADDI R1, #0x100
-        write_insn(16'h000C, {OP_ADDI, 3'd1, 9'h100});   // ADDI R1, #0x100
-        write_insn(16'h000D, {OP_ADDI, 3'd1, 9'h100});   // ADDI R1, #0x100
-        write_insn(16'h000E, {OP_ADDI, 3'd1, 9'h100});   // ADDI R1, #0x100
-        write_insn(16'h000F, {OP_ADDI, 3'd1, 9'h100});   // ADDI R1, #0x100
-        write_insn(16'h0010, {OP_ADDI, 3'd1, 9'h100});   // ADDI R1, #0x100
-        write_insn(16'h0011, {OP_ADDI, 3'd1, 9'h044});   // ADDI R1, #0x44
-        write_insn(16'h0012, {OP_ST, 3'd0, 3'd1, 6'h00}); // ST R0, [R1+0]
-        write_insn(16'h0013, {OP_SYS, 9'd0, 4'd0});      // SYS BRK
+        $display("[DEBUG] Instruction at 0x0001: {OP_LDI=%0d, rd=1, imm=0x080} = 0x%04x", OP_LDI, {OP_LDI, 3'd1, 9'h080});
+        write_insn(16'h0001, {OP_LDI, 3'd1, 9'h080});    // LDI R1, #0x80 (128) - Start with positive value
+        write_insn(16'h0002, {OP_ADDI, 3'd1, 9'h080});   // ADDI R1, #0x80
+        write_insn(16'h0003, {OP_ADDI, 3'd1, 9'h080});   // ADDI R1, #0x80
+        write_insn(16'h0004, {OP_ADDI, 3'd1, 9'h080});   // ADDI R1, #0x80
+        write_insn(16'h0005, {OP_ADDI, 3'd1, 9'h080});   // ADDI R1, #0x80
+        write_insn(16'h0006, {OP_ADDI, 3'd1, 9'h080});   // ADDI R1, #0x80
+        write_insn(16'h0007, {OP_ADDI, 3'd1, 9'h080});   // ADDI R1, #0x80
+        write_insn(16'h0008, {OP_ADDI, 3'd1, 9'h080});   // ADDI R1, #0x80
+        write_insn(16'h0009, {OP_ADDI, 3'd1, 9'h080});   // ADDI R1, #0x80
+        write_insn(16'h000A, {OP_ADDI, 3'd1, 9'h080});   // ADDI R1, #0x80
+        write_insn(16'h000B, {OP_ADDI, 3'd1, 9'h080});   // ADDI R1, #0x80
+        write_insn(16'h000C, {OP_ADDI, 3'd1, 9'h080});   // ADDI R1, #0x80
+        write_insn(16'h000D, {OP_ADDI, 3'd1, 9'h080});   // ADDI R1, #0x80
+        write_insn(16'h000E, {OP_ADDI, 3'd1, 9'h080});   // ADDI R1, #0x80
+        write_insn(16'h000F, {OP_ADDI, 3'd1, 9'h080});   // ADDI R1, #0x80
+        write_insn(16'h0010, {OP_ADDI, 3'd1, 9'h080});   // ADDI R1, #0x80
+        write_insn(16'h0011, {OP_ADDI, 3'd1, 9'h080});   // ADDI R1, #0x80
+        write_insn(16'h0012, {OP_ADDI, 3'd1, 9'h080});   // ADDI R1, #0x80
+        write_insn(16'h0013, {OP_ADDI, 3'd1, 9'h080});   // ADDI R1, #0x80
+        write_insn(16'h0014, {OP_ADDI, 3'd1, 9'h080});   // ADDI R1, #0x80
+        write_insn(16'h0015, {OP_ADDI, 3'd1, 9'h080});   // ADDI R1, #0x80
+        write_insn(16'h0016, {OP_ADDI, 3'd1, 9'h080});   // ADDI R1, #0x80
+        write_insn(16'h0017, {OP_ADDI, 3'd1, 9'h080});   // ADDI R1, #0x80
+        write_insn(16'h0018, {OP_ADDI, 3'd1, 9'h080});   // ADDI R1, #0x80
+        write_insn(16'h0019, {OP_ADDI, 3'd1, 9'h080});   // ADDI R1, #0x80
+        write_insn(16'h001A, {OP_ADDI, 3'd1, 9'h080});   // ADDI R1, #0x80
+        write_insn(16'h001B, {OP_ADDI, 3'd1, 9'h080});   // ADDI R1, #0x80
+        write_insn(16'h001C, {OP_ADDI, 3'd1, 9'h080});   // ADDI R1, #0x80
+        write_insn(16'h001D, {OP_ADDI, 3'd1, 9'h080});   // ADDI R1, #0x80
+        write_insn(16'h001E, {OP_ADDI, 3'd1, 9'h080});   // ADDI R1, #0x80
+        write_insn(16'h001F, {OP_ADDI, 3'd1, 9'h080});   // ADDI R1, #0x80
+        write_insn(16'h0020, {OP_ADDI, 3'd1, 9'h080});   // ADDI R1, #0x80 (31st ADDI)
+        write_insn(16'h0021, {OP_ADDI, 3'd1, 9'h01F});   // ADDI R1, #0x1F → R1=0x101F (128 + 31×128 + 31 = 4127)
+        write_insn(16'h0022, {OP_ST, 3'd0, 3'd1, 6'h00}); // ST R0, [R1+0]
+        write_insn(16'h0023, {OP_SYS, 9'd0, 4'd0});      // SYS BRK
         
         // Reset PC and execute
         set_cpu_pc(16'h0000);
@@ -237,13 +254,18 @@ class axiuart_cpu_mmio_led_test extends axiuart_base_test;
         read_cpu_reg(0, r0_val);
         `uvm_info("CPU_MMIO", $sformatf("R0 = 0x%04x (LED pattern)", r0_val), UVM_MEDIUM)
         
-        `uvm_info("CPU_MMIO", "Building address 0x1044 with LDI+ADDI...", UVM_MEDIUM)
-        step_cpu(); // LDI R1, #0x100
-        for (int i = 0; i < 16; i++) begin
-            step_cpu(); // ADDI R1, #0x100 or #0x44
+        `uvm_info("CPU_MMIO", "Building address 0x101F with LDI+ADDI...", UVM_MEDIUM)
+        step_cpu(); // LDI R1, #0x80
+        for (int i = 0; i < 32; i++) begin
+            step_cpu(); // ADDI R1, #0x80 or #0x1F
         end
         read_cpu_reg(1, r1_val);
-        `uvm_info("CPU_MMIO", $sformatf("R1 = 0x%04x (expected: 0x1044)", r1_val), UVM_MEDIUM)
+        `uvm_info("CPU_MMIO", $sformatf("R1 = 0x%04x (expected: 0x101F)", r1_val), UVM_MEDIUM)
+        if (r1_val != 16'h101F) begin
+            `uvm_error("CPU_MMIO", $sformatf("Address build failed: R1=0x%04x (expected 0x101F); aborting ST test", r1_val))
+            tests_failed++;
+            return;
+        end
         
         `uvm_info("CPU_MMIO", "Executing: ST R0, [R1+0] (write to LED)", UVM_MEDIUM)
         step_cpu();
@@ -270,14 +292,14 @@ class axiuart_cpu_mmio_led_test extends axiuart_base_test;
         
         // Continue from previous test state (LED should be 0xA)
         // Program continues at 0x0004:
-        // 0x0004: LD R2, [R1+0x00]  ; Load from [0x1044] into R2
+        // 0x0004: LD R2, [R1+0x00]  ; Load from [0x101F] into R2
         // 0x0005: SYS #BRK          ; Halt
         
         write_insn(16'h0004, {OP_LD, 3'd2, 3'd1, 6'h00}); // LD R2, [R1+0]
         write_insn(16'h0005, {OP_SYS, 9'd0, 4'd0}); // SYS BRK
         
         set_cpu_pc(16'h0004);
-        `uvm_info("CPU_MMIO", "Executing: LD R2, [R1+0] (read from 0x1044)", UVM_MEDIUM)
+        `uvm_info("CPU_MMIO", "Executing: LD R2, [R1+0] (read from 0x101F)", UVM_MEDIUM)
         step_cpu();
         #50ns;
         
@@ -298,33 +320,41 @@ class axiuart_cpu_mmio_led_test extends axiuart_base_test;
     task test_led_counter_pattern();
         bit [3:0] led_val;
         bit [15:0] r3_val;
+        bit [15:0] r1_val;
         int pattern_errors = 0;
         
         `uvm_info("CPU_MMIO", "=== Test 3: LED Binary Counter Pattern (4 patterns) ===", UVM_LOW)
         
         // Simplified test: Only test 4 patterns instead of 16
-        // Build LED address 0x1044 = 4096 + 68 using ADDI sequence (same as Test 1)
+        // Build LED address 0x101F = 4096 + 31 using ADDI sequence (same as Test 1)
         // 0x0010: LDI R3, #0x00     ; Counter = 0
-        // 0x0011: LDI R1, #0x100    ; R1 = 256
-        // 0x0012-0x0020: ADDI R1, #0x100 (15 times) ; R1 = 4096
-        // 0x0021: ADDI R1, #0x44    ; R1 = 4164 (0x1044)
-        // 0x0022: ST R3, [R1+0]     ; Write to LED
-        // 0x0023: ADDI R3, #3       ; Increment counter by 3
+        // 0x0011: LDI R1, #0x80     ; R1 = 128
+        // 0x0012-0x0030: ADDI R1, #0x80 (31 times) ; R1 = 4096
+        // 0x0031: ADDI R1, #0x1F    ; R1 = 4127 (0x101F)
+        // 0x0032: ST R3, [R1+0]     ; Write to LED
+        // 0x0033: ADDI R3, #3       ; Increment counter by 3
         // ... (repeat for 4 patterns)
         
         write_insn(16'h0010, {OP_LDI, 3'd3, 9'h000}); // LDI R3, #0
-        write_insn(16'h0011, {OP_LDI, 3'd1, 9'h100}); // LDI R1, #0x100
+        write_insn(16'h0011, {OP_LDI, 3'd1, 9'h080}); // LDI R1, #0x80
         // ADDI sequence to build 0x1000
-        for (int i = 0; i < 15; i++) begin
-            write_insn(16'h0012 + i, {OP_ADDI, 3'd1, 9'h100}); // ADDI R1, #0x100
+        for (int i = 0; i < 31; i++) begin
+            write_insn(16'h0012 + i, {OP_ADDI, 3'd1, 9'h080}); // ADDI R1, #0x80
         end
-        write_insn(16'h0021, {OP_ADDI, 3'd1, 9'h044}); // ADDI R1, #0x44 → R1=0x1044
+        write_insn(16'h0031, {OP_ADDI, 3'd1, 9'h01F}); // ADDI R1, #0x1F → R1=0x101F
         
         set_cpu_pc(16'h0010);
         step_cpu(); // LDI R3
         step_cpu(); // LDI R1
-        for (int i = 0; i < 16; i++) begin
+        for (int i = 0; i < 32; i++) begin
             step_cpu(); // ADDI R1 (build address)
+        end
+        read_cpu_reg(1, r1_val);
+        `uvm_info("CPU_MMIO", $sformatf("R1 = 0x%04x (expected: 0x101F)", r1_val), UVM_MEDIUM)
+        if (r1_val != 16'h101F) begin
+            `uvm_error("CPU_MMIO", $sformatf("Address build failed: R1=0x%04x (expected 0x101F); aborting pattern test", r1_val))
+            tests_failed++;
+            return;
         end
         
         // Test 4 patterns: 0x0, 0x3, 0x6, 0x9
@@ -332,11 +362,11 @@ class axiuart_cpu_mmio_led_test extends axiuart_base_test;
             int expected_value = i * 3;
             
             // Write program: ST R3, [R1+0] and ADDI R3, #3
-            // Start at 0x0022 (after address construction)
-            write_insn(16'h0022 + (i*2), {OP_ST, 3'd3, 3'd1, 6'h00});
-            write_insn(16'h0023 + (i*2), {OP_ADDI, 3'd3, 9'h003}); // ADDI R3, #3
+            // Start at 0x0032 (after address construction)
+            write_insn(16'h0032 + (i*2), {OP_ST, 3'd3, 3'd1, 6'h00});
+            write_insn(16'h0033 + (i*2), {OP_ADDI, 3'd3, 9'h003}); // ADDI R3, #3
             
-            set_cpu_pc(16'h0022 + (i*2));
+            set_cpu_pc(16'h0032 + (i*2));
             step_cpu(); // ST
             #100ns;
             
@@ -372,21 +402,21 @@ class axiuart_cpu_mmio_led_test extends axiuart_base_test;
         `uvm_info("CPU_MMIO", "=== Test 4: Negative Offset Addressing ===", UVM_LOW)
         
         // Program:
-        // Build LED address 0x1044 first, then use negative offset from 0x1048
+        // Build LED address 0x101F using negative offset from 0x1023
         // 0x0100: LDI R4, #0x05     ; LED pattern
-        // 0x0101: LDI R5, #0x100    ; R5 = 256
-        // 0x0102-0x0110: ADDI R5, #0x100 (15 times) ; R5 = 4096
-        // 0x0111: ADDI R5, #0x48    ; R5 = 4168 (0x1048)
-        // 0x0112: ST R4, [R5-0x04]  ; Store to [0x1048 - 4] = 0x1044
+        // 0x0101: LDI R5, #0x80     ; R5 = 128
+        // 0x0102-0x0120: ADDI R5, #0x80 (31 times) ; R5 = 4096
+        // 0x0121: ADDI R5, #0x23    ; R5 = 4131 (0x1023)
+        // 0x0122: ST R4, [R5-0x04]  ; Store to [0x1023 - 4] = 0x101F
         
         write_insn(16'h0100, {OP_LDI, 3'd4, 9'h005}); // LDI R4, #0x05
-        write_insn(16'h0101, {OP_LDI, 3'd5, 9'h100}); // LDI R5, #0x100
+        write_insn(16'h0101, {OP_LDI, 3'd5, 9'h080}); // LDI R5, #0x80
         // ADDI sequence to build 0x1000
-        for (int i = 0; i < 15; i++) begin
-            write_insn(16'h0102 + i, {OP_ADDI, 3'd5, 9'h100}); // ADDI R5, #0x100
+        for (int i = 0; i < 31; i++) begin
+            write_insn(16'h0102 + i, {OP_ADDI, 3'd5, 9'h080}); // ADDI R5, #0x80
         end
-        write_insn(16'h0111, {OP_ADDI, 3'd5, 9'h048}); // ADDI R5, #0x48 → R5=0x1048
-        write_insn(16'h0112, {OP_ST, 3'd4, 3'd5, 6'h3C}); // ST R4, [R5-4] (offset=-4 = 0x3C in 6-bit signed)
+        write_insn(16'h0121, {OP_ADDI, 3'd5, 9'h023}); // ADDI R5, #0x23 → R5=0x1023
+        write_insn(16'h0122, {OP_ST, 3'd4, 3'd5, 6'h3C}); // ST R4, [R5-4] (offset=-4 = 0x3C in 6-bit signed)
         
         set_cpu_pc(16'h0100);
         step_cpu(); // LDI R4
@@ -394,11 +424,16 @@ class axiuart_cpu_mmio_led_test extends axiuart_base_test;
         `uvm_info("CPU_MMIO", $sformatf("R4 = 0x%04x", r4_val), UVM_MEDIUM)
         
         step_cpu(); // LDI R5
-        for (int i = 0; i < 16; i++) begin
+        for (int i = 0; i < 32; i++) begin
             step_cpu(); // ADDI R5 (build address)
         end
         read_cpu_reg(5, r5_val);
-        `uvm_info("CPU_MMIO", $sformatf("R5 = 0x%04x (expected: 0x1048)", r5_val), UVM_MEDIUM)
+        `uvm_info("CPU_MMIO", $sformatf("R5 = 0x%04x (expected: 0x1023)", r5_val), UVM_MEDIUM)
+        if (r5_val != 16'h1023) begin
+            `uvm_error("CPU_MMIO", $sformatf("Address build failed: R5=0x%04x (expected 0x1023); aborting negative-offset test", r5_val))
+            tests_failed++;
+            return;
+        end
         
         step_cpu(); // ST with negative offset
         #100ns;
@@ -429,20 +464,20 @@ class axiuart_cpu_mmio_led_test extends axiuart_base_test;
         // 0x0203: LDI R6, #0x03     ; Data for LED
         // 0x0204: LDI R7, #0x100    ; R7 = 256
         // 0x0205-0x0213: ADDI R7, #0x100 (15 times) ; R7 = 4096
-        // 0x0214: ADDI R7, #0x44    ; R7 = 4164 (0x1044)
+        // 0x0214: ADDI R7, #0x1F    ; R7 = 4127 (0x101F)
         // 0x0215: ST R6, [R7+0x00]  ; Store to LED MMIO
         
         write_insn(16'h0200, {OP_LDI, 3'd6, 9'h00F}); // LDI R6, #0x0F
         write_insn(16'h0201, {OP_LDI, 3'd7, 9'h0FF}); // LDI R7, #0xFF
         write_insn(16'h0202, {OP_ST, 3'd6, 3'd7, 6'h00}); // ST R6, [R7+0] (to RAM)
         write_insn(16'h0203, {OP_LDI, 3'd6, 9'h003}); // LDI R6, #0x03
-        write_insn(16'h0204, {OP_LDI, 3'd7, 9'h100}); // LDI R7, #0x100
+        write_insn(16'h0204, {OP_LDI, 3'd7, 9'h080}); // LDI R7, #0x80
         // ADDI sequence to build 0x1000
-        for (int i = 0; i < 15; i++) begin
-            write_insn(16'h0205 + i, {OP_ADDI, 3'd7, 9'h100}); // ADDI R7, #0x100
+        for (int i = 0; i < 31; i++) begin
+            write_insn(16'h0205 + i, {OP_ADDI, 3'd7, 9'h080}); // ADDI R7, #0x80
         end
-        write_insn(16'h0214, {OP_ADDI, 3'd7, 9'h044}); // ADDI R7, #0x44 → R7=0x1044
-        write_insn(16'h0215, {OP_ST, 3'd6, 3'd7, 6'h00}); // ST R6, [R7+0] (to MMIO)
+        write_insn(16'h0224, {OP_ADDI, 3'd7, 9'h01F}); // ADDI R7, #0x1F → R7=0x101F
+        write_insn(16'h0225, {OP_ST, 3'd6, 3'd7, 6'h00}); // ST R6, [R7+0] (to MMIO)
         
         set_cpu_pc(16'h0200);
         
@@ -452,11 +487,18 @@ class axiuart_cpu_mmio_led_test extends axiuart_base_test;
         step_cpu(); // ST to RAM
         #50ns;
         
-        `uvm_info("CPU_MMIO", "Storing 0x03 to LED MMIO[0x1044]", UVM_MEDIUM)
+        `uvm_info("CPU_MMIO", "Storing 0x03 to LED MMIO[0x101F]", UVM_MEDIUM)
         step_cpu(); // LDI R6, #0x03
-        step_cpu(); // LDI R7, #0x100
-        for (int i = 0; i < 16; i++) begin
+        step_cpu(); // LDI R7, #0x80
+        for (int i = 0; i < 32; i++) begin
             step_cpu(); // ADDI R7 (build address)
+        end
+        read_cpu_reg(7, r7_val);
+        `uvm_info("CPU_MMIO", $sformatf("R7 = 0x%04x (expected: 0x101F)", r7_val), UVM_MEDIUM)
+        if (r7_val != 16'h101F) begin
+            `uvm_error("CPU_MMIO", $sformatf("Address build failed: R7=0x%04x (expected 0x101F); aborting boundary test", r7_val))
+            tests_failed++;
+            return;
         end
         step_cpu(); // ST to MMIO
         #100ns;
