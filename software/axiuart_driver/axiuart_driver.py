@@ -57,10 +57,29 @@ class AXIUARTDriver:
     REG_TEST_2 = registers.REG_TEST_2
     REG_TEST_3 = registers.REG_TEST_3
     REG_TEST_4 = registers.REG_TEST_4
-    REG_TEST_LED = registers.REG_TEST_LED
-    REG_TEST_5 = registers.REG_TEST_5
-    REG_TEST_6 = registers.REG_TEST_6
-    REG_TEST_7 = registers.REG_TEST_7
+    # REG_TEST_LED removed - LED now accessible only via CPU MMIO at 0x101F
+    
+    # CPU debug registers
+    REG_CPU_DBG_CTRL = registers.REG_CPU_DBG_CTRL
+    REG_CPU_DBG_STATUS = registers.REG_CPU_DBG_STATUS
+    REG_CPU_PC = registers.REG_CPU_PC
+    REG_CPU_SP = registers.REG_CPU_SP
+    REG_CPU_FLAGS = registers.REG_CPU_FLAGS
+    REG_CPU_REG_INDEX = registers.REG_CPU_REG_INDEX
+    REG_CPU_REG_DATA = registers.REG_CPU_REG_DATA
+    REG_CPU_BP0_PC = registers.REG_CPU_BP0_PC
+    REG_CPU_BP1_PC = registers.REG_CPU_BP1_PC
+    REG_CPU_BP_CTRL = registers.REG_CPU_BP_CTRL
+    REG_CPU_MEM_ADDR = registers.REG_CPU_MEM_ADDR
+    REG_CPU_MEM_WDATA = registers.REG_CPU_MEM_WDATA
+    REG_CPU_MEM_RDATA = registers.REG_CPU_MEM_RDATA
+    REG_CPU_MEM_CTRL = registers.REG_CPU_MEM_CTRL
+    REG_CPU_TRACE_ADDR = registers.REG_CPU_TRACE_ADDR
+    REG_CPU_TRACE_RDATA = registers.REG_CPU_TRACE_RDATA
+    REG_CPU_TRACE_CTRL = registers.REG_CPU_TRACE_CTRL
+    REG_CPU_TRACE_PTR = registers.REG_CPU_TRACE_PTR
+    REG_CPU_ID = registers.REG_CPU_ID
+    REG_REVISION = registers.REG_REVISION
     
     def __init__(self, port: str, baudrate: int = DEFAULT_BAUD, 
                  timeout: float = DEFAULT_TIMEOUT, debug: bool = False):
