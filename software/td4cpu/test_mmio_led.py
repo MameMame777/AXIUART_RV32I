@@ -168,6 +168,230 @@ class MMIOLEDTester:
         program.append((isa.OP_SYS << 12) | isa.SYSOP_BRK)
         
         return program
+    
+    def build_blink_pattern(self, delay_loops: int = 500) -> list:
+        """
+        Build CPU program for continuous LED blinking pattern (all on/off)
+        
+        Pattern loops indefinitely:
+            R0 = 0xF (all on)  → ST to LED → delay
+            R0 = 0x0 (all off) → ST to LED → delay
+            BR (branch back to start)
+        
+        Args:
+            delay_loops: Number of NOP loops for delay (larger = slower blink)
+        
+        Returns:
+            List of 16-bit instructions
+        """
+        program = []
+        start_addr = 0
+        
+        # Build R1 = 0x1000 (LED MMIO base address) - only once at start
+        program.append((isa.OP_LDI << 12) | (1 << 9) | 128)  # R1 = 128
+        for _ in range(31):
+            program.append((isa.OP_ADDI << 12) | (1 << 9) | 128)  # R1 += 128
+        # R1 = 0x1000
+        
+        loop_start = len(program)  # Mark loop start position
+        
+        # Phase 1: All LEDs ON (0xF)
+        program.append((isa.OP_LDI << 12) | (0 << 9) | 0xF)     # R0 = 0xF
+        program.append((isa.OP_ST << 12) | (0 << 9) | (1 << 6) | 31)  # ST R0, [R1+31]
+        
+        # Delay loop (R2 as counter)
+        program.append((isa.OP_LDI << 12) | (2 << 9) | (delay_loops & 0x1FF))  # R2 = delay_loops (low)
+        delay_loop_start = len(program)
+        program.append((isa.OP_ADDI << 12) | (2 << 9) | (-1 & 0x1FF))  # R2 -= 1
+        # Branch if not zero: BR.NZ delay_loop_start (condition_reg=2 for R2, offset in bit[8:0])
+        offset = delay_loop_start - (len(program) + 1)  # Relative offset
+        program.append((isa.OP_BR << 12) | (2 << 9) | (offset & 0x1FF))  # R2, NZ condition check
+        
+        # Phase 2: All LEDs OFF (0x0)
+        program.append((isa.OP_LDI << 12) | (0 << 9) | 0x0)     # R0 = 0x0
+        program.append((isa.OP_ST << 12) | (0 << 9) | (1 << 6) | 31)  # ST R0, [R1+31]
+        
+        # Delay loop
+        program.append((isa.OP_LDI << 12) | (2 << 9) | (delay_loops & 0x1FF))
+        delay_loop_start2 = len(program)
+        program.append((isa.OP_ADDI << 12) | (2 << 9) | (-1 & 0x1FF))
+        offset2 = delay_loop_start2 - (len(program) + 1)
+        program.append((isa.OP_BR << 12) | (2 << 9) | (offset2 & 0x1FF))  # R2, NZ condition check
+        
+        # Branch back to loop start (unconditional - condition_reg=0 for always)
+        offset_main = loop_start - (len(program) + 1)
+        program.append((isa.OP_BR << 12) | (0 << 9) | (offset_main & 0x1FF))  # BR.AL (R0 always branches)
+        
+        return program
+    
+    def build_knight_rider_pattern(self, delay_loops: int = 200) -> list:
+        """
+        Build CPU program for Knight Rider LED pattern (scanning single LED)
+        
+        Pattern: 0001 → 0010 → 0100 → 1000 → 0100 → 0010 (repeat)
+        
+        Args:
+            delay_loops: Number of NOP loops for delay
+        
+        Returns:
+            List of 16-bit instructions
+        """
+        program = []
+        sequence = [0x1, 0x2, 0x4, 0x8, 0x4, 0x2]
+        
+        # Build R1 = 0x1000
+        program.append((isa.OP_LDI << 12) | (1 << 9) | 128)
+        for _ in range(31):
+            program.append((isa.OP_ADDI << 12) | (1 << 9) | 128)
+        
+        loop_start = len(program)
+        
+        for pattern in sequence:
+            # Load pattern
+            program.append((isa.OP_LDI << 12) | (0 << 9) | pattern)
+            # Write to LED
+            program.append((isa.OP_ST << 12) | (0 << 9) | (1 << 6) | 31)
+            # Delay
+            program.append((isa.OP_LDI << 12) | (2 << 9) | (delay_loops & 0x1FF))
+            delay_start = len(program)
+            program.append((isa.OP_ADDI << 12) | (2 << 9) | (-1 & 0x1FF))
+            offset = delay_start - (len(program) + 1)
+            program.append((isa.OP_BR << 12) | (2 << 9) | (offset & 0x1FF))  # R2, NZ check
+        
+        # Loop back
+        offset_main = loop_start - (len(program) + 1)
+        program.append((isa.OP_BR << 12) | (0 << 9) | (offset_main & 0x1FF))  # BR.AL
+        
+        return program
+    
+    def build_binary_counter_pattern(self, delay_loops: int = 100) -> list:
+        """
+        Build CPU program for binary counting pattern (0-15 loop)
+        
+        Counts from 0 to 15 repeatedly
+        
+        Args:
+            delay_loops: Number of NOP loops for delay
+        
+        Returns:
+            List of 16-bit instructions
+        """
+        program = []
+        
+        # Build R1 = 0x1000
+        program.append((isa.OP_LDI << 12) | (1 << 9) | 128)
+        for _ in range(31):
+            program.append((isa.OP_ADDI << 12) | (1 << 9) | 128)
+        
+        # R0 = counter (0-15)
+        program.append((isa.OP_LDI << 12) | (0 << 9) | 0)  # R0 = 0
+        
+        loop_start = len(program)
+        
+        # Write current counter to LED
+        program.append((isa.OP_ST << 12) | (0 << 9) | (1 << 6) | 31)
+        
+        # Delay
+        program.append((isa.OP_LDI << 12) | (2 << 9) | (delay_loops & 0x1FF))
+        delay_start = len(program)
+        program.append((isa.OP_ADDI << 12) | (2 << 9) | (-1 & 0x1FF))
+        offset = delay_start - (len(program) + 1)
+        program.append((isa.OP_BR << 12) | (2 << 9) | (offset & 0x1FF))  # R2, NZ check
+        
+        # Increment counter
+        program.append((isa.OP_ADDI << 12) | (0 << 9) | 1)  # R0++
+        
+        # Mask to 4 bits (R0 = R0 AND 0xF)
+        program.append((isa.OP_LDI << 12) | (3 << 9) | 0xF)  # R3 = 0xF (mask)
+        program.append((isa.OP_R_ALU << 12) | (0 << 9) | (0 << 6) | (3 << 3) | isa.FUNCT_AND)  # R0 = R0 AND R3
+        
+        # Loop back
+        offset_main = loop_start - (len(program) + 1)
+        program.append((isa.OP_BR << 12) | (0 << 9) | (offset_main & 0x1FF))  # BR.AL
+        
+        return program
+    
+    def build_wave_pattern(self, delay_loops: int = 150) -> list:
+        """
+        Build CPU program for wave/chase pattern
+        
+        Pattern: 0001 → 0011 → 0111 → 1111 → 1110 → 1100 → 1000 → 0000 (repeat)
+        
+        Args:
+            delay_loops: Number of NOP loops for delay
+        
+        Returns:
+            List of 16-bit instructions
+        """
+        program = []
+        sequence = [0x1, 0x3, 0x7, 0xF, 0xE, 0xC, 0x8, 0x0]
+        
+        # Build R1 = 0x1000
+        program.append((isa.OP_LDI << 12) | (1 << 9) | 128)
+        for _ in range(31):
+            program.append((isa.OP_ADDI << 12) | (1 << 9) | 128)
+        
+        loop_start = len(program)
+        
+        for pattern in sequence:
+            program.append((isa.OP_LDI << 12) | (0 << 9) | pattern)
+            program.append((isa.OP_ST << 12) | (0 << 9) | (1 << 6) | 31)
+            program.append((isa.OP_LDI << 12) | (2 << 9) | (delay_loops & 0x1FF))
+            delay_start = len(program)
+            program.append((isa.OP_ADDI << 12) | (2 << 9) | (-1 & 0x1FF))
+            offset = delay_start - (len(program) + 1)
+            program.append((isa.OP_BR << 12) | (2 << 9) | (offset & 0x1FF))  # R2, NZ check
+        
+        # Loop back
+        offset_main = loop_start - (len(program) + 1)
+        program.append((isa.OP_BR << 12) | (0 << 9) | (offset_main & 0x1FF))  # BR.AL
+        
+        return program
+    
+    def build_alternate_pattern(self, delay_loops: int = 200) -> list:
+        """
+        Build CPU program for alternating pattern
+        
+        Pattern: 0101 ⟷ 1010 (repeat)
+        
+        Args:
+            delay_loops: Number of NOP loops for delay
+        
+        Returns:
+            List of 16-bit instructions
+        """
+        program = []
+        
+        # Build R1 = 0x1000
+        program.append((isa.OP_LDI << 12) | (1 << 9) | 128)
+        for _ in range(31):
+            program.append((isa.OP_ADDI << 12) | (1 << 9) | 128)
+        
+        loop_start = len(program)
+        
+        # Pattern 1: 0x5 (0101)
+        program.append((isa.OP_LDI << 12) | (0 << 9) | 0x5)
+        program.append((isa.OP_ST << 12) | (0 << 9) | (1 << 6) | 31)
+        program.append((isa.OP_LDI << 12) | (2 << 9) | (delay_loops & 0x1FF))
+        delay_start = len(program)
+        program.append((isa.OP_ADDI << 12) | (2 << 9) | (-1 & 0x1FF))
+        offset = delay_start - (len(program) + 1)
+        program.append((isa.OP_BR << 12) | (2 << 9) | (offset & 0x1FF))  # R2, NZ check
+        
+        # Pattern 2: 0xA (1010)
+        program.append((isa.OP_LDI << 12) | (0 << 9) | 0xA)
+        program.append((isa.OP_ST << 12) | (0 << 9) | (1 << 6) | 31)
+        program.append((isa.OP_LDI << 12) | (2 << 9) | (delay_loops & 0x1FF))
+        delay_start2 = len(program)
+        program.append((isa.OP_ADDI << 12) | (2 << 9) | (-1 & 0x1FF))
+        offset2 = delay_start2 - (len(program) + 1)
+        program.append((isa.OP_BR << 12) | (2 << 9) | (offset2 & 0x1FF))  # R2, NZ check
+        
+        # Loop back
+        offset_main = loop_start - (len(program) + 1)
+        program.append((isa.OP_BR << 12) | (0 << 9) | (offset_main & 0x1FF))  # BR.AL
+        
+        return program
         
     def load_and_run_led_program(self, led_value: int) -> bool:
         """
@@ -309,6 +533,76 @@ class MMIOLEDTester:
         
         print(f"{Colors.GREEN}✓ Knight Rider pattern complete{Colors.END}")
         return True
+    
+    def load_and_run_looping_pattern(self, pattern_name: str, delay_loops: int = 200) -> bool:
+        """
+        Load and run a looping LED pattern (runs indefinitely)
+        
+        Args:
+            pattern_name: Pattern name ('blink', 'knight', 'counter', 'wave', 'alternate')
+            delay_loops: Delay between pattern steps
+        
+        Returns:
+            True if loaded successfully
+        """
+        print(f"\n{Colors.HEADER}{'='*70}{Colors.END}")
+        print(f"{Colors.HEADER}Looping Pattern: {pattern_name.upper()}{Colors.END}")
+        print(f"{Colors.HEADER}{'='*70}{Colors.END}")
+        
+        # Select pattern builder
+        if pattern_name == 'blink':
+            program = self.build_blink_pattern(delay_loops)
+            description = "All LEDs ON/OFF alternating"
+        elif pattern_name == 'knight':
+            program = self.build_knight_rider_pattern(delay_loops)
+            description = "Knight Rider scanning pattern"
+        elif pattern_name == 'counter':
+            program = self.build_binary_counter_pattern(delay_loops)
+            description = "Binary counter 0-15"
+        elif pattern_name == 'wave':
+            program = self.build_wave_pattern(delay_loops)
+            description = "Wave/chase pattern"
+        elif pattern_name == 'alternate':
+            program = self.build_alternate_pattern(delay_loops)
+            description = "Alternating 0101/1010"
+        else:
+            print(f"{Colors.RED}Unknown pattern: {pattern_name}{Colors.END}")
+            return False
+        
+        print(f"{Colors.CYAN}Pattern: {description}{Colors.END}")
+        print(f"{Colors.CYAN}Building program ({len(program)} instructions)...{Colors.END}")
+        
+        # Reset CPU
+        self.reset_cpu()
+        
+        # Load program
+        print(f"{Colors.CYAN}Loading program to RAM...{Colors.END}")
+        for addr, insn in enumerate(program):
+            self.write_ram(addr, insn)
+        
+        # Verify
+        print(f"{Colors.CYAN}Verifying program...{Colors.END}")
+        for addr, expected in enumerate(program):
+            actual = self.read_ram(addr)
+            if actual != expected:
+                print(f"{Colors.RED}✗ Verification failed at 0x{addr:04X}: " +
+                      f"expected 0x{expected:04X}, got 0x{actual:04X}{Colors.END}")
+                return False
+        
+        print(f"{Colors.GREEN}✓ Program loaded and verified{Colors.END}")
+        
+        # Set PC to start
+        self.driver.write_reg32(registers.REG_CPU_PC, 0x0000)
+        
+        # Run CPU (will loop indefinitely)
+        print(f"{Colors.CYAN}Starting CPU...{Colors.END}")
+        self.run_cpu()
+        
+        print(f"{Colors.GREEN}{Colors.BOLD}✓ Pattern is now running!{Colors.END}")
+        print(f"{Colors.YELLOW}CPU is executing pattern in loop. Press Ctrl+C to stop.{Colors.END}")
+        print(f"{Colors.CYAN}Observe the LEDs on your FPGA board...{Colors.END}")
+        
+        return True
 
 
 def main():
@@ -317,14 +611,31 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Test single LED value
+  # Test single LED value (halt after execution)
   python test_mmio_led.py --port COM3 --value 10
   
-  # Binary counting pattern (0-15)
+  # One-time test: all 16 LED values sequentially (0-15)
   python test_mmio_led.py --port COM3 --pattern count
   
-  # Knight Rider pattern
-  python test_mmio_led.py --port /dev/ttyUSB0 --pattern knight
+  # Looping patterns (run indefinitely until Ctrl+C):
+  
+  # Blink pattern (all LEDs ON/OFF)
+  python test_mmio_led.py --port COM3 --pattern blink
+  
+  # Knight Rider (scanning single LED: 0001→0010→0100→1000→0100→0010)
+  python test_mmio_led.py --port COM3 --pattern knight
+  
+  # Binary counter (0-15 repeating)
+  python test_mmio_led.py --port COM3 --pattern counter
+  
+  # Wave pattern (0001→0011→0111→1111→1110→1100→1000→0000)
+  python test_mmio_led.py --port COM3 --pattern wave
+  
+  # Alternating pattern (0101 ⟷ 1010)
+  python test_mmio_led.py --port COM3 --pattern alternate
+  
+  # Adjust speed (higher number = slower pattern)
+  python test_mmio_led.py --port COM3 --pattern knight --speed 500
         """
     )
     
@@ -334,10 +645,12 @@ Examples:
                         help='UART baud rate (default: 115200)')
     parser.add_argument('--value', type=int, metavar='0-15',
                         help='Single LED value to test (0-15)')
-    parser.add_argument('--pattern', choices=['count', 'knight'],
-                        help='Test pattern to run')
+    parser.add_argument('--pattern', choices=['count', 'knight', 'blink', 'counter', 'wave', 'alternate'],
+                        help='Pattern to run: count=one-time test, blink/knight/counter/wave/alternate=looping patterns')
     parser.add_argument('--delay', type=float, default=0.5,
                         help='Delay between pattern steps in seconds (default: 0.5)')
+    parser.add_argument('--speed', type=int, metavar='LOOPS',
+                        help='CPU loop count for delay (higher=slower). Default: 100-500 depending on pattern')
     parser.add_argument('--verbose', action='store_true',
                         help='Enable verbose debug output')
     
@@ -362,14 +675,27 @@ Examples:
             return 0 if success else 1
             
         elif args.pattern == 'count':
-            # Binary counting pattern
+            # Binary counting pattern (one-time test of all 16 values)
             success = tester.test_pattern_count(delay=args.delay)
             return 0 if success else 1
             
-        elif args.pattern == 'knight':
-            # Knight Rider pattern
-            success = tester.test_pattern_knight_rider(delay=args.delay)
-            return 0 if success else 1
+        elif args.pattern in ['blink', 'knight', 'counter', 'wave', 'alternate']:
+            # Looping patterns - run indefinitely
+            delay_loops = args.speed if args.speed else 200
+            success = tester.load_and_run_looping_pattern(args.pattern, delay_loops)
+            if not success:
+                return 1
+            
+            # Keep program running until user interrupts
+            print(f"\n{Colors.CYAN}Pattern is running. Press Ctrl+C to stop and exit...{Colors.END}")
+            try:
+                while True:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                print(f"\n{Colors.YELLOW}Stopping pattern...{Colors.END}")
+                tester.halt_cpu()
+                print(f"{Colors.GREEN}CPU halted.{Colors.END}")
+            return 0
             
         else:
             # Default: test single value (0xA, same as UVM test)
