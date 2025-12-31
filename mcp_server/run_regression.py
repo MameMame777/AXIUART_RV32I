@@ -222,6 +222,7 @@ class RegressionRunner:
                         'status': 'PASS',
                         'duration': duration,
                         'log_file': output.get('log_file', ''),
+                        'log_file_absolute': output.get('log_file_absolute', ''),
                         'seed': output.get('seed', 1)
                     }
                 else:
@@ -240,7 +241,8 @@ class RegressionRunner:
                         'status': 'FAIL',
                         'duration': duration,
                         'error': error_msg,
-                        'log_file': output.get('log_file', '')
+                        'log_file': output.get('log_file', ''),
+                        'log_file_absolute': output.get('log_file_absolute', '')
                     }
                     
             except json.JSONDecodeError:
@@ -349,6 +351,8 @@ class RegressionRunner:
         .pass {{ color: green; font-weight: bold; }}
         .fail {{ color: red; font-weight: bold; }}
         .skip {{ color: orange; font-weight: bold; }}
+        a {{ color: #0066cc; text-decoration: none; }}
+        a:hover {{ text-decoration: underline; }}
     </style>
 </head>
 <body>
@@ -370,6 +374,7 @@ class RegressionRunner:
             <th>Description</th>
             <th>Status</th>
             <th>Duration</th>
+            <th>Log File</th>
             <th>Details</th>
         </tr>
 """
@@ -377,6 +382,39 @@ class RegressionRunner:
         for idx, result in enumerate(self.results, 1):
             status_class = result['status'].lower()
             details = result.get('error', '') if result['status'] == 'FAIL' else ''
+            log_file = result.get('log_file', '')
+            
+            # Generate log link if available
+            log_link = ''
+            if log_file:
+                # log_file from MCP server is relative to sim/uvm/ like "../../exec/logs/test.log"
+                # Reports are in sim/reports/, so we need to convert the path
+                
+                # Check for absolute path in log_file_absolute field
+                log_file_abs = result.get('log_file_absolute', '')
+                if log_file_abs:
+                    log_path = Path(log_file_abs)
+                    if log_path.exists():
+                        # Make path relative to sim/reports/
+                        try:
+                            rel_path = log_path.relative_to(self.workspace / 'sim' / 'reports')
+                            log_link = f'<a href="{rel_path}" target="_blank">View Log</a>'
+                        except ValueError:
+                            # Make relative to workspace, then adjust for reports directory
+                            try:
+                                rel_path = log_path.relative_to(self.workspace)
+                                # From sim/reports/ to log file - normalize path separators for HTML
+                                rel_path_str = str(rel_path).replace('\\', '/')
+                                log_link = f'<a href="../{rel_path_str}" target="_blank">View Log</a>'
+                            except ValueError:
+                                # Fallback: use absolute path
+                                log_link = f'<a href="file:///{log_file_abs.replace(chr(92), "/")}" target="_blank">View Log</a>'
+                    else:
+                        log_link = f'<span style="color: gray;">{log_path.name} (not found)</span>'
+                else:
+                    # Fallback to log_file field - extract filename
+                    log_filename = Path(log_file).name
+                    log_link = f'<span style="color: gray;">{log_filename}</span>'
             
             html += f"""        <tr>
             <td>{idx}</td>
@@ -384,6 +422,7 @@ class RegressionRunner:
             <td>{result.get('description', '')}</td>
             <td class="{status_class}">{result['status']}</td>
             <td>{result['duration']:.1f}s</td>
+            <td>{log_link}</td>
             <td>{details}</td>
         </tr>
 """
