@@ -317,6 +317,13 @@ virtual class axiuart_cpu_test_base extends axiuart_base_test;
         #10ns;
     endtask
     
+    protected task read_cpu_pc(output bit [15:0] value);
+        bit [31:0] rdata;
+        read_reg(CPU_PC, rdata);
+        value = rdata[15:0];
+        #10ns;
+    endtask
+    
     protected task write_ram_direct(bit [15:0] addr, bit [15:0] data);
         write_reg(CPU_MEM_ADDR, {16'h0000, addr});
         #2us;

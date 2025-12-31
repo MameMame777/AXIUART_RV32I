@@ -122,15 +122,14 @@ class axiuart_cpu_logic_test extends axiuart_base_test;
         write_reg(CPU_DBG_CTRL, 32'h00000004); // Step request
         #1us;
         
-        // Poll for status change indicating step completion
+        // Poll for status change indicating step completion - ABSOLUTE MAX 50 POLLS
         timeout_count = 0;
         do begin
             #50us; // Reduced from 100us
             read_reg(CPU_DBG_STATUS, status);
             timeout_count++;
-            if (timeout_count > 50) begin // Reduced from 100
-                `uvm_error("CPU_LOGIC", $sformatf("step_cpu() timeout - status=0x%08x", status))
-                break;
+            if (timeout_count > 50) begin // FATAL on timeout to stop infinite loops
+                `uvm_fatal("CPU_LOGIC", $sformatf("ABORT: step_cpu() timeout after %0d polls - status=0x%08x. Test cannot continue.", timeout_count, status))
             end
         end while (status == old_status);
         
