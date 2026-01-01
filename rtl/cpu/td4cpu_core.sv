@@ -115,11 +115,11 @@ module td4cpu_core #(
     // - read_first mode for pipeline-friendly behavior
     (* ram_style = "block" *)
     (* ram_decomp = "power" *)
-    (* rw_addr_collision = "yes" *)
     logic [15:0] ram [0:RAM_WORDS-1];
     
     // RAM address registers for proper BRAM inference
-    logic [15:0] ram_addr_reg;
+    logic [15:0] ram_addr_reg;      // Registered address (for debug visibility)
+    logic [15:0] ram_addr_next;     // Next address wire (set before clock edge)
     logic        ram_rd_en;
     logic [15:0] ram_rd_data;
     logic        ram_wr_en;
@@ -173,11 +173,18 @@ module td4cpu_core #(
      logic debug_running;
      logic [7:0] debug_halt_reason;
     
+    // Branch delay slot handling (MIPS/SPARC style)
+    logic [15:0] branch_target_pending; // Target PC to apply after delay slot
+    logic        branch_pending;        // Branch target is pending (delay slot executing)
+    logic [15:0] br_insn_pc;            // Captured PC of BR instruction (for target calculation)
+    
     // Instruction Fetch/Decode Pipeline Stage
     // Break critical path: PC→RAM fetch (cycle N) → decode (cycle N+1) → execute (cycle N+2)
     logic [15:0] insn_fetched;          // Fetched instruction from RAM
     logic        insn_valid;            // Valid instruction fetched
     logic [15:0] fetch_pc;              // PC of fetched instruction
+    logic [15:0] insn_fetched_pc;       // PC of instruction in insn_fetched register
+    logic        pc_updated_by_branch;  // Flag to skip PC increment after branch
     
     // Additional pipeline register to break timing path (insn_fetched → regfile CE)
     logic [15:0] insn_decoded_reg;      // Decoded instruction (registered for timing)
@@ -261,6 +268,13 @@ module td4cpu_core #(
         debug_writeback_active = alu_writeback_en_hold;
         debug_writeback_value = alu_result_hold;
         debug_writeback_target = alu_rd_hold;
+        
+        // ========================================
+        // Branch Delay Slot Implementation (MIPS/SPARC style)
+        // BR instruction uses 1-instruction delay slot
+        // The instruction immediately after BR ALWAYS executes before branch taken
+        // No pipeline interlock needed - delay slot flows naturally through pipeline
+        // ========================================
     end
     
     // CRITICAL FIX BUG#5: Use read pulse instead of write pulse for latching
@@ -273,20 +287,30 @@ module td4cpu_core #(
     // RAM Block - Separate for proper BRAM inference
     // CRITICAL: Must be in its own always_ff block
     // Single synchronous read-first operation per cycle  
-    // COMPREHENSIVE FIX: Always read on ram_rd_en=1. When RAM writes occur,
-    // invalidate cached data by reading fresh on next cycle.
+    // TIMING-SAFE RAM FIX: Use ram_addr_next wire (set before clock edge)
+    // instead of ram_addr_reg (registered, stale by 1 cycle).
+    // This maintains BRAM registered output while reading correct address.
+    // 
+    // BUG#7 FIX: ram_rd_en timing issue
+    // Problem: Lines 756 and 767 in same always_ff create assignment conflict.
+    //   Cycle N:   dbg_mem_read_req_pulse=1 → ram_rd_en <= 1, mem_busy_q <= 1
+    //   Cycle N+1: mem_busy_q becomes 1 → else-if branch executes → ram_rd_en <= 0 
+    //              Result: ram_rd_en never actually outputs 1 (last write wins)
+    // Solution: Add ram_read_phase flag to distinguish request (Cycle N+1) from capture (Cycle N+2)
+    //   Cycle N:   Request  → ram_rd_en <= 1, ram_read_phase <= 1
+    //   Cycle N+1: Access   → ram_rd_en stays 1 (condition prevents clear)
+    //   Cycle N+2: Capture  → ram_rd_en <= 0, ram_read_phase <= 0
     // ========================================
     
     always_ff @(posedge clk) begin
         if (ram_wr_en) begin
             ram[ram_wr_addr] <= ram_wr_data;
-            // Write occurred - ram_rd_data potentially stale
-            // Next read cycle will fetch fresh data
         end 
         
-        // Separate read logic: ALWAYS honor ram_rd_en
+        // Read using NEXT address (wire), then register for debug visibility
         if (ram_rd_en) begin
-            ram_rd_data <= ram[ram_addr_reg];
+            ram_rd_data <= ram[ram_addr_next];  // FIXED: Use wire set THIS cycle
+            ram_addr_reg <= ram_addr_next;      // Store for debug tracing
         end
     end
 
@@ -313,10 +337,9 @@ module td4cpu_core #(
     logic mem_busy_q;
     logic mem_data_valid;  // NEW: Data valid flag (holds 1 cycle after capture, before busy clears)
     logic [15:0] dbg_mem_addr_latched;  // CRITICAL: Latch address at request time
+    logic ram_read_phase;  // BUG#7 FIX: Track RAM read phase (0=idle/capture, 1=RAM access in progress)
     
-    // CRITICAL: Debug access has independent RAM read path (no ram_rd_en conflict with CPU execution)
-    logic [15:0] dbg_ram_rdata;  // Debug-specific RAM read output
-    assign dbg_ram_rdata = ram[dbg_mem_addr_latched];  // Combinational read for debug
+    // Debug access uses registered RAM path (adds +1 cycle latency)
     assign dbg_mem_busy = mem_busy_q;
 
     function automatic bit pc_matches_breakpoint(input logic [15:0] pc_in);
@@ -460,6 +483,7 @@ module td4cpu_core #(
             mem_busy_q <= 1'b0;
             mem_data_valid <= 1'b0;
             dbg_mem_addr_latched <= 16'h0000;
+            ram_read_phase <= 1'b0;  // BUG#7 FIX: Initialize RAM read phase flag
             step_pending <= 1'b0;
             step_insn_fetched <= 1'b0;
             reg_write_pending <= 1'b0;
@@ -485,6 +509,7 @@ module td4cpu_core #(
             debug_reg_write_index <= 3'h0;
             debug_reg_write_data <= 16'h0000;
             debug_current_insn <= 16'h0000;
+            
             debug_current_opcode <= 4'h0;
             debug_current_rd <= 3'h0;
             debug_current_rs <= 3'h0;
@@ -497,6 +522,7 @@ module td4cpu_core #(
             
             // Instruction fetch pipeline reset
             insn_fetched <= 16'h0000;
+            insn_fetched_pc <= 16'h0000;
             insn_valid <= 1'b0;
             fetch_pc <= 16'h0000;
             
@@ -532,6 +558,7 @@ module td4cpu_core #(
             
             // RAM control signals
             ram_addr_reg <= 16'd0;
+            ram_addr_next <= 16'd0;  // Initialize to prevent X propagation
             ram_rd_en <= 1'b0;
             ram_wr_en <= 1'b0;
             ram_wr_addr <= 16'd0;
@@ -539,6 +566,9 @@ module td4cpu_core #(
             alu_flags_update_en_hold <= 1'b0;
             alu_flags_hold <= 3'd0;
             alu_insn_hold <= 16'd0;
+            branch_pending <= 1'b0;
+            branch_target_pending <= 16'd0;
+            br_insn_pc <= 16'd0;
 
             // RAM contents are left uninitialized by default.
             // In simulation, use $readmemh from a testbench if needed.
@@ -558,8 +588,25 @@ module td4cpu_core #(
             mem_op_is_ram <= 1'b0;
             mem_op_is_led <= 1'b0;
         end else begin
-            mem_busy_q <= 1'b0;
+            // BUG#7 FIX #12: Do NOT clear mem_busy_q unconditionally here!
+            // It must hold across the 3-cycle debug read sequence.
+            // Only clear it explicitly when operation completes (Lines 802, 810)
+            // mem_busy_q <= 1'b0;  // ← REMOVED: This was clearing mem_busy_q every cycle!
+            
+            // BUG#7 FIX: Do NOT clear ram_read_phase here - it needs to hold across cycles!
+            // Only clear it explicitly when read completes in Line 787
             mem_op_executing <= 1'b0;  // Clear by default
+            
+            // Default: Hold previous RAM address to prevent X propagation
+            // DON'T restore from ram_addr_reg when halted (debug operations pollute it)
+            // Just let ram_addr_next hold its value
+            if (!ram_rd_en && !mem_busy_q && !halted) begin
+                ram_addr_next <= ram_addr_reg;
+            end else if (!ram_rd_en && halted) begin
+                // During halted state, explicitly hold ram_addr_next
+                // This prevents X when no operation is setting it
+                ram_addr_next <= ram_addr_next;
+            end
             
             // Update step tracking
             debug_step_pending <= step_pending;
@@ -670,7 +717,12 @@ module td4cpu_core #(
                 step_insn_fetched <= 1'b0;
                 // Flush fetch pipeline on halt
                 insn_valid <= 1'b0;
-                ram_rd_en <= 1'b0;
+                // BUG#7 FIX: Don't clear ram_rd_en if debug read is in progress
+                if (!ram_read_phase) begin
+                    ram_rd_en <= 1'b0;
+                end
+                pc_updated_by_branch <= 1'b0;
+                branch_pending <= 1'b0;
             end
 
             if (dbg_run_req_pulse) begin
@@ -681,7 +733,12 @@ module td4cpu_core #(
                 // CRITICAL: Flush BOTH pipeline stages on run
                 insn_valid <= 1'b0;
                 insn_decoded_valid <= 1'b0;
-                ram_rd_en <= 1'b0;
+                // BUG#7 FIX: Don't clear ram_rd_en if debug read is in progress
+                if (!ram_read_phase) begin
+                    ram_rd_en <= 1'b0;
+                end
+                pc_updated_by_branch <= 1'b0;
+                branch_pending <= 1'b0;
             end
 
             // Debug writes into state are accepted only while halted
@@ -691,6 +748,8 @@ module td4cpu_core #(
                     // Flush BOTH pipeline stages on PC write
                     insn_valid <= 1'b0;
                     insn_decoded_valid <= 1'b0;
+                    pc_updated_by_branch <= 1'b0;
+                    branch_pending <= 1'b0;
                 end
                 if (dbg_wr_sp_pulse) sp <= dbg_wr_sp_data;
                 if (dbg_wr_flags_pulse) flags <= dbg_wr_flags_data;
@@ -707,6 +766,7 @@ module td4cpu_core #(
                     if (!is_ram_addr_valid(dbg_mem_addr)) begin
                         dbg_mem_err <= 1'b1;
                         mem_data_valid <= 1'b1;  // Error completes immediately
+                        ram_read_phase <= 1'b0;  // No RAM access for error case
                     end else begin
                         if (dbg_mem_write_req_pulse) begin
                             ram_wr_en <= 1'b1;
@@ -714,23 +774,36 @@ module td4cpu_core #(
                             ram_wr_data <= dbg_mem_wdata;
                             dbg_mem_rdata <= dbg_mem_wdata;  // Write-first forwarding
                             mem_data_valid <= 1'b1;  // Write completes immediately
+                            ram_read_phase <= 1'b0;  // Write, not read
                         end
                         if (dbg_mem_read_req_pulse) begin
-                            // Read uses combinational path dbg_ram_rdata = ram[addr]
-                            // Data available same cycle after address latched
-                            mem_data_valid <= 1'b1;  // Read completes immediately via combinational path
+                            // BUG#7 FIX: Use registered RAM path (adds +1 cycle latency)
+                            // Set ram_read_phase=1 for Cycle N+1 (address setup)
+                            ram_addr_next <= dbg_mem_addr;  // Set address wire
+                            ram_rd_en <= 1'b1;              // Trigger read
+                            ram_read_phase <= 1'b1;         // Enter RAM access phase (wait for data)
+                            // Data will be ready in Cycle N+2
                         end
                     end
                 end else if (mem_busy_q) begin
-                    // Capture read data from combinational path
-                    if (mem_data_valid && !dbg_mem_err && !ram_wr_en) begin
-                        dbg_mem_rdata <= dbg_ram_rdata;  // Capture from combinational read
-                    end
-                    
-                    // Clear busy after data held stable for 1 cycle
-                    if (mem_data_valid) begin
+                    // BUG#7 FIX: 2-stage read sequence for RAM latency
+                    // Cycle N+1: ram_read_phase=1, hold for RAM access
+                    // Cycle N+2: ram_read_phase=0, data ready, capture
+                    if (ram_read_phase == 1'b1 && ram_rd_en && !dbg_mem_err) begin
+                        // Cycle N+1: Hold for RAM data propagation
+                        ram_addr_next <= ram_addr_next;  // Hold address
+                        ram_rd_en <= 1'b1;               // Keep read enable
+                        ram_read_phase <= 1'b0;          // Transition to capture phase
+                    end else if (ram_read_phase == 1'b0 && ram_rd_en && !dbg_mem_err) begin
+                        // Cycle N+2: Capture RAM data
+                        dbg_mem_rdata <= ram_rd_data;    // Capture valid data
+                        mem_data_valid <= 1'b1;          // Mark complete - but don't clear mem_busy_q yet
+                        ram_rd_en <= 1'b0;               // Clear read enable
+                        // mem_busy_q stays high this cycle to protect against clearing
+                    end else if (mem_data_valid) begin
+                        // Cycle N+3: Clear mem_busy_q one cycle after data captured
                         ram_wr_en <= 1'b0;
-                        mem_busy_q <= 1'b0;
+                        mem_busy_q <= 1'b0;              // Now safe to clear
                         mem_data_valid <= 1'b0;
                     end
                 end
@@ -758,51 +831,112 @@ module td4cpu_core #(
             // mem_op_executing prevents fetch during STAGE 1, mem_op_pending blocks during STAGE 2
             // CRITICAL: When step_pending, allow ONE fetch then block until halt
             // CRITICAL: Block fetch while ram_rd_en is active (prevents double-fetch)
+            // NOTE: Delay slot architecture - PC increments naturally except after branch
             if (running && !insn_valid && !mem_op_executing && !mem_op_pending && !ram_rd_en && !(step_pending && step_insn_fetched)) begin
-                // Fetch stage: Read instruction from RAM
-                // Breakpoint/validity checks happen here (simplified)
-                if (pc_matches_breakpoint(pc)) begin
-                    halted <= 1'b1;
-                    running <= 1'b0;
-                    break_hit <= 1'b1;
-                    halt_reason <= HALT_REASON_BREAKPOINT;
-                    step_pending <= 1'b0;
-                    step_insn_fetched <= 1'b0;
-                    insn_valid <= 1'b0;
-                end else if (!is_ram_addr_valid(pc)) begin
-                    halted <= 1'b1;
-                    running <= 1'b0;
-                    halt_reason <= HALT_REASON_PC_OOB;
-                    step_pending <= 1'b0;
-                    step_insn_fetched <= 1'b0;
-                    insn_valid <= 1'b0;
+                // Branch delay slot handling
+                // CRITICAL FIX: Fetch from branch target in SAME cycle as PC update
+                // This ensures fetch_pc always matches pc, eliminating timing mismatch
+                if (branch_pending) begin
+                    // Branch delay slot completed - apply branch target and fetch immediately
+                    branch_pending <= 1'b0;
+                    // Fetch from branch target immediately (breakpoint/validity checks)
+                    if (pc_matches_breakpoint(branch_target_pending)) begin
+                        pc <= branch_target_pending;
+                        halted <= 1'b1;
+                        running <= 1'b0;
+                        break_hit <= 1'b1;
+                        halt_reason <= HALT_REASON_BREAKPOINT;
+                        step_pending <= 1'b0;
+                        step_insn_fetched <= 1'b0;
+                        insn_valid <= 1'b0;
+                    end else if (!is_ram_addr_valid(branch_target_pending)) begin
+                        pc <= branch_target_pending;
+                        halted <= 1'b1;
+                        running <= 1'b0;
+                        halt_reason <= HALT_REASON_PC_OOB;
+                        step_pending <= 1'b0;
+                        step_insn_fetched <= 1'b0;
+                        insn_valid <= 1'b0;
+                    end else begin
+                        // Fetch from branch target and increment PC (same as normal fetch)
+                        ram_addr_next <= branch_target_pending;  // FIXED: Set wire for immediate use
+                        ram_rd_en <= 1'b1;
+                        fetch_pc <= branch_target_pending;
+                        pc <= branch_target_pending + 16'd1;  // PC advances after fetch
+                        // Track step fetch
+                        if (step_pending) step_insn_fetched <= 1'b1;
+                    end
                 end else begin
-                    // Fetch instruction - request RAM read
-                    ram_addr_reg <= pc;
-                    ram_rd_en <= 1'b1;
-                    fetch_pc <= pc;
-                    pc <= pc + 16'd1;
-                    // Track that step instruction has been fetched
-                    if (step_pending) step_insn_fetched <= 1'b1;
+                    // Normal fetch operations
+                    // Breakpoint/validity checks happen here (simplified)
+                    if (pc_matches_breakpoint(pc)) begin
+                        halted <= 1'b1;
+                        running <= 1'b0;
+                        break_hit <= 1'b1;
+                        halt_reason <= HALT_REASON_BREAKPOINT;
+                        step_pending <= 1'b0;
+                        step_insn_fetched <= 1'b0;
+                        insn_valid <= 1'b0;
+                        branch_pending <= 1'b0;
+                    end else if (!is_ram_addr_valid(pc)) begin
+                        halted <= 1'b1;
+                        running <= 1'b0;
+                        halt_reason <= HALT_REASON_PC_OOB;
+                        step_pending <= 1'b0;
+                        step_insn_fetched <= 1'b0;
+                        insn_valid <= 1'b0;
+                        branch_pending <= 1'b0;
+                    end else begin
+                        // Fetch instruction - request RAM read
+                        ram_addr_next <= pc;  // FIXED: Set wire for immediate use
+                        ram_rd_en <= 1'b1;
+                        fetch_pc <= pc;
+                        // PC increment happens after every fetch
+                        pc <= pc + 16'd1;
+                        
+                        // Track that step instruction has been fetched
+                        if (step_pending) step_insn_fetched <= 1'b1;
+                    end
                 end
             end else if (!running) begin
                 insn_valid <= 1'b0;
-                ram_rd_en <= 1'b0;
+                // BUG#7 FIX #11: Don't clear ram_rd_en during ANY debug read sequence state
+                // CRITICAL: Check mem_busy_q to protect full 3-cycle debug read sequence
+                // Without this guard, ram_rd_en gets cleared at +8ps after clock when mem_busy_q=0
+                if (!ram_read_phase && !dbg_mem_read_req_pulse && !mem_busy_q) begin
+                    ram_rd_en <= 1'b0;
+                end
             end
             
             // Capture fetched instruction when RAM data is valid
-            if (ram_rd_en) begin
+            // CRITICAL: Only capture if CPU is still running (prevent halt-time fetch completion)
+            if (ram_rd_en && running) begin
                 insn_fetched <= ram_rd_data;
+                insn_fetched_pc <= fetch_pc;  // Capture fetch_pc at instruction valid time
                 insn_valid <= 1'b1;
                 ram_rd_en <= 1'b0;  // Clear enable
+            end else if (ram_rd_en && !running && !ram_read_phase) begin
+                // BUG#7 FIX: Discard fetch that completed during halt
+                // ONLY clear if NOT in debug read phase
+                ram_rd_en <= 1'b0;
             end
             
             // Pipeline register: insn_fetched → insn_decoded_reg (timing optimization)
+            // NOTE: Delay slot architecture - pipeline flows continuously, no interlock needed
             // This breaks the critical path from insn_fetched[7] to regfile CE
             if (insn_valid) begin
                 insn_decoded_reg <= insn_fetched;
                 insn_decoded_valid <= 1'b1;
-                insn_decoded_pc <= fetch_pc;
+                insn_decoded_pc <= insn_fetched_pc;  // CRITICAL: Use fetched PC, not current fetch_pc
+                
+                // CRITICAL: Capture PC for BR instructions at decode entry
+                // Use insn_fetched_pc (captured in previous cycle when instruction was fetched).
+                // insn_fetched contains the instruction, insn_fetched_pc contains its PC.
+                // This prevents using fetch_pc which has already advanced to next instruction.
+                if (insn_fetched[15:12] == OP_BR) begin
+                    br_insn_pc <= insn_fetched_pc;  // Use captured PC from fetch stage
+                end
+                
                 insn_valid <= 1'b0;  // Clear after decode
             end
             // NOTE: insn_decoded_valid is cleared after execution, not here
@@ -811,6 +945,13 @@ module td4cpu_core #(
             if (insn_decoded_valid) begin
                 logic [3:0]  insn_opcode;
                 insn_opcode = insn_decoded_reg[15:12];
+                
+                // NOTE: br_insn_pc is already captured at insn_valid time (when instruction first decoded)
+                // Do not capture here - insn_decoded_pc has already been overwritten by later instructions
+                
+                // Execution trace for debugging (logs every instruction)
+                $display("[EXEC] @%0t PC=%0d, OPCODE=0x%h, insn=0x%04h, branch_pending=%b", 
+                         $time, insn_decoded_pc, insn_opcode, insn_decoded_reg, branch_pending);
                 
                 // Clear forwarding at start of decode
                 reg_write_pending <= 1'b0;
@@ -963,6 +1104,65 @@ module td4cpu_core #(
                             halt_reason <= HALT_REASON_BRK;
                             step_pending <= 1'b0;
                             step_insn_fetched <= 1'b0;
+                            pc_updated_by_branch <= 1'b0;  // Clear branch flag on halt
+                            branch_pending <= 1'b0;         // Clear pending branch
+                            insn_decoded_valid <= 1'b0;     // CRITICAL: Prevent re-execution
+                        end
+                    end
+                    
+                    OP_BR: begin
+                        // BR cond, off9 - Branch instruction
+                        logic [2:0] br_cond;
+                        logic [8:0] br_offset9;
+                        logic [15:0] br_offset_sext;
+                        logic [15:0] br_target_pc;
+                        logic br_taken;
+                        
+                        br_cond = insn_decoded_reg[11:9];
+                        br_offset9 = insn_decoded_reg[8:0];
+                        
+                        // Sign-extend 9-bit offset to 16-bit
+                        br_offset_sext = {{7{br_offset9[8]}}, br_offset9};
+                        
+                        // Calculate target PC: PC-relative to BR instruction location
+                        // Delay slot architecture (MIPS/SPARC style):
+                        //   BR at PC_BR: calculates target = (PC_BR + 1) + offset
+                        //   Delay slot at PC_BR+1: executes (PC increments naturally)
+                        //   After delay slot: PC = target
+                        //
+                        // Example: BR.AL +2 at PC=1
+                        //   Target = (1 + 1) + 2 = 4
+                        //   Delay slot at PC=2 executes
+                        //   Then jump to PC=4
+                        //
+                        // CRITICAL FIX: Use br_insn_pc (captured at decode time) to prevent
+                        // pipeline overwrites during multi-cycle execution.
+                        // br_insn_pc is captured when BR first enters decode stage.
+                        // Formula: target = PC_BR + 1 + offset
+                        br_target_pc = br_insn_pc + 16'd1 + br_offset_sext;
+                        
+                        // Evaluate branch condition based on flags
+                        case (br_cond)
+                            COND_AL: br_taken = 1'b1;              // Always
+                            COND_Z:  br_taken = flags[0];          // Zero flag
+                            COND_NZ: br_taken = ~flags[0];         // Not zero
+                            COND_C:  br_taken = flags[2];          // Carry flag
+                            COND_NC: br_taken = ~flags[2];         // Not carry
+                            COND_N:  br_taken = flags[1];          // Negative flag
+                            COND_NN: br_taken = ~flags[1];         // Not negative
+                            default: br_taken = 1'b0;              // Reserved (no branch)
+                        endcase
+                        
+                        // Update PC if branch taken
+                        // Delay slot architecture (MIPS/SPARC style):
+                        //   When BR executes, delay slot (PC+1) is already in pipeline
+                        //   Stage the target and let delay slot execute
+                        //   After delay slot completes, apply target to PC
+                        if (br_taken) begin
+                            branch_target_pending <= br_target_pc;  // Stage target
+                            branch_pending <= 1'b1;                 // Mark branch pending
+                            // Delay slot will execute in next cycle
+                            // Then branch_pending triggers PC update in fetch
                         end
                     end
                     
@@ -994,13 +1194,13 @@ module td4cpu_core #(
             // ========================================
             // Execute pending LD/ST operations from previous cycle
             // This runs in parallel with instruction decode, NOT inside insn_decoded_valid block
-            if (mem_op_pending) begin
+            if (mem_op_pending && running) begin  // BUG#7 FIX: Only execute when running
                 if (mem_op_is_load) begin
                     // LD instruction - STAGE 2: Execute memory read
                     if (mem_op_is_ram) begin
                         // RAM access
                         if (is_ram_addr_valid(mem_op_effective_addr)) begin
-                            ram_addr_reg <= mem_op_effective_addr;
+                            ram_addr_next <= mem_op_effective_addr;  // FIXED: Set wire
                             ram_rd_en <= 1'b1;
                         end else begin
                             // Out of bounds - load zero
@@ -1014,10 +1214,10 @@ module td4cpu_core #(
                         regfile[mem_op_rd_idx] <= 16'h0000;
                     end
                     
-                    // Data forwarding for loads
+                    // Data forwarding for loads (RAM data available next cycle)
                     reg_write_pending <= 1'b1;
                     reg_write_idx <= mem_op_rd_idx;
-                    reg_write_data <= mem_op_is_led ? {12'h000, led_reg} : 16'h0000;
+                    reg_write_data <= mem_op_is_led ? {12'h000, led_reg} : ram_rd_data;  // FIXED: Use ram_rd_data
                 end else begin
                     // ST instruction - STAGE 2: Execute memory write
                     if (mem_op_is_ram) begin
@@ -1057,8 +1257,8 @@ module td4cpu_core #(
                 step_pending <= 1'b0;
                 step_insn_fetched <= 1'b0;
             end
-        end
-    end
+        end  // else (not rst)
+    end  // always_ff @(posedge clk)
     
     // ========================================
     // Generate trace signals for UVM direct monitoring
