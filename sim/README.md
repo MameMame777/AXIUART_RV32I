@@ -13,6 +13,104 @@ This directory contains the complete UVM testbench infrastructure for the AXIUAR
 
 *Last updated: December 29, 2025*
 
+## Assertion Control (Performance vs Debug)
+
+**New Feature**: Assertions are now **disabled by default** for optimal compilation performance.
+
+### Quick Start
+
+**Normal Development (Fast):**
+```powershell
+python mcp_server/mcp_client.py --workspace . --tool run_uvm_simulation \
+  --test-name axiuart_cpu_simple_mem_test --mode compile --verbosity UVM_LOW
+```
+- Compiles: **22 modules**
+- Performance: Optimal (no assertion overhead)
+- Use for: Regular development, quick iterations
+
+**Debug Mode (Full Checking):**
+```powershell
+python mcp_server/mcp_client.py --workspace . --tool run_uvm_simulation \
+  --test-name axiuart_cpu_simple_mem_test --mode compile --verbosity UVM_LOW \
+  --plusarg +define+ENABLE_ASSERTIONS
+```
+- Compiles: **28 modules** (+6 assertion modules)
+- Performance: +19% compilation time, extensive runtime checking
+- Use for: Debugging timing issues, investigating failures, root cause analysis
+
+### What Assertions Check
+
+**When enabled**, the following verification assertions activate:
+
+1. **Branch Timing** (`td4cpu_br_timing_assertions.sv`)
+   - PC capture timing verification
+   - Delay slot execution order
+   - Branch target calculation accuracy
+
+2. **Address Flow** (`td4cpu_address_debug.sv`)
+   - Debug write → RAM write address propagation
+   - Fetch address matches PC tracking
+   - Instruction capture PC verification
+
+3. **Memory Read Path** (`td4cpu_debug_read_monitor.sv`)
+   - Read address propagation correctness
+   - Address pollution detection (write contamination)
+   - Read enable stability checks
+
+4. **RAM Read Investigation** (`td4cpu_ram_read_investigation.sv`)
+   - Control signal conflict detection
+   - Assignment race condition tracking
+   - Multi-cycle read sequence verification
+
+5. **RAM Read Enable Timing** (`td4cpu_ram_rd_en_timing.sv`)
+   - ram_rd_en set timing (within 1 cycle)
+   - Hold duration verification (prevents early clear)
+   - Complete sequence timing validation
+
+6. **Debug Memory Spec** (`td4cpu_debug_mem_spec.sv`)
+   - Debug interface protocol compliance
+   - Handshake timing verification
+   - Error condition detection
+
+### Performance Impact
+
+| Mode | Modules | td4cpu_core | Overhead | Use Case |
+|------|---------|-------------|----------|----------|
+| Assertions OFF | 22 | 100 func/568 blk | None | Normal dev |
+| Assertions ON  | 28 | 119 func/615 blk | +19% | Debug only |
+
+### Detected Bug Examples (When Enabled)
+
+**Example assertion output:**
+```
+[RAM_RD_EN_TIMING] ✗ CRITICAL: ram_rd_en cleared TOO EARLY
+[RAM_RD_EN_TIMING] It was 1 last cycle but now 0
+[RAM_RD_EN_TIMING] This prevents data capture!
+
+SVA Summary: 33 assertions, 229,199,058 evaluations, 13,890,807 passes
+```
+
+These errors indicate real timing bugs in the RTL that would be difficult to find by waveform inspection alone.
+
+### Implementation Details
+
+**Files:**
+- `sim/assertions/*.sv` - Assertion modules (only loaded when enabled)
+- `sim/uvm/tb/dsim_assertions.f` - File list for assertion modules
+- `sim/uvm/tb/dsim_config.f` - Main config (assertions removed for performance)
+
+**Automatic Detection:**
+The MCP server automatically detects `+define+ENABLE_ASSERTIONS` in plusargs and includes the assertion file list. No manual configuration needed.
+
+**API Usage (Python):**
+```python
+await run_uvm_simulation(
+    test_name="axiuart_cpu_simple_mem_test",
+    mode="compile",
+    enable_assertions=True  # Enables assertions via API
+)
+```
+
 ## Directory Structure
 
 ```
