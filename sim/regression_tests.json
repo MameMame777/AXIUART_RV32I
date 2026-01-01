@@ -54,6 +54,12 @@
           "description": "CPU MMIO LED control via LD/ST",
           "timeout": 300,
           "expected_duration": 60
+        },
+        {
+          "name": "axiuart_cpu_br_test",
+          "description": "CPU branch instruction with all conditions",
+          "timeout": 300,
+          "expected_duration": 90
         }
       ]
     },
@@ -101,6 +107,12 @@
           "description": "CPU MMIO LED control via LD/ST",
           "timeout": 300,
           "expected_duration": 60
+        },
+        {
+          "name": "axiuart_cpu_br_test",
+          "description": "CPU branch instruction with all conditions",
+          "timeout": 300,
+          "expected_duration": 90
         }
       ]
     }

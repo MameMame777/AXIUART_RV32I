@@ -544,6 +544,13 @@ async def run_uvm_simulation(
         "-l", log_file_relative
     ]
     
+    # Check if assertions are enabled via plusargs
+    enable_assertions = any("+define+ENABLE_ASSERTIONS" in arg for arg in plusargs)
+    if enable_assertions:
+        # Add assertion file list when enabled
+        cmd.extend(["-f", "dsim_assertions.f"])
+        logger.info("Assertions ENABLED: Including dsim_assertions.f")
+    
     # Mode-specific options (do NOT add -uvm again)
     # Note: Not using -genimage/-image to let DSIM use workspace mode (dsim_work/)
     # This ensures compile and run modes are consistent

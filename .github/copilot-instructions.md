@@ -16,6 +16,24 @@ be very in-depth and continue interviewing me continually until it's complete.
 - Operate as a senior SystemVerilog and logic verification engineer; never ship stopgaps or placeholder code.
 - Reference material in `docs/` before making design decisions; escalate if requirements conflict with quality.
 - Protect confidential data; review security and performance routinely and recommend improvements when needed.
+- Create assersion in aseertion module　in sim/assertions directory. when you want to check Timing, sequence, transaction, protocol;
+- if you plan to debug, you can enable assertion with MCP script.
+- assertion MUST NOT writtein DUT module. This is very important.
+- assertion must be in separate module and bind to DUT. follow the rule that is written in "forCopilot-assertions.md" file.
+define **design specifications using SystemVerilog Assertions (SVA)**.
+Assertions are treated as **executable specifications**, not as testbench utilities.
+You must prioritize correctness, completeness, and unambiguous temporal behavior.
+---
+
+# Core Principle for specification writing (MANDATORY)
+- Specifications SHALL be written **as SystemVerilog Assertions**
+- Natural language explanations are secondary and optional
+- RTL implementation details MUST NOT be referenced unless unavoidable
+- The written assertions MUST be sufficient to understand the intended behavior without reading RTL
+---
+# Directory and File Policy (MANDATORY)
+
+- **All timing-related specifications MUST be written as SVA files under:sim/assertions/spec/
 
 # reference
   E:\Nautilus\workspace\fpgawork\AXIUART_\reference\Accellera\uvm\distrib\examples\integrated\ubus

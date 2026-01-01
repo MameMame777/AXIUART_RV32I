@@ -22,5 +22,6 @@
 `include "axiuart_cpu_memory_test.sv"
 `include "axiuart_cpu_simple_mem_test.sv"
 `include "axiuart_cpu_mmio_led_test.sv"  // CPU MMIO LED control via LD/ST instructions
+`include "axiuart_cpu_br_test.sv"       // CPU Branch instruction (all conditions)
 
 `endif // AXIUART_TEST_PKG_SV

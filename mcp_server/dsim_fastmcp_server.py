@@ -451,6 +451,7 @@ def create_fastmcp_server() -> FastMCP:
         seed: Optional[int] = None,
         timeout: Optional[int] = None,
         plusargs: Optional[List[str]] = None,
+        enable_assertions: bool = False,
     ) -> Dict[str, Any]:
         """
         Execute a DSIM UVM simulation via the unified async API.
@@ -458,6 +459,8 @@ def create_fastmcp_server() -> FastMCP:
         The timeout parameter is optional. If not provided, the system will automatically
         select an appropriate timeout based on the test configuration from test_timing_config.json.
         Debug mode automatically selects timeout_debug if available and verbosity is UVM_DEBUG.
+        
+        Assertions are DISABLED by default for performance. Set enable_assertions=True for debug.
         """
         # Ensure PHASE_TRACE and OBJECTION_TRACE are always enabled
         if plusargs is None:
@@ -467,6 +470,14 @@ def create_fastmcp_server() -> FastMCP:
             plusargs.append("+UVM_PHASE_TRACE")
         if "+UVM_OBJECTION_TRACE" not in plusargs:
             plusargs.append("+UVM_OBJECTION_TRACE")
+        
+        # Enable assertions if requested (disabled by default for performance)
+        if enable_assertions:
+            if "+define+ENABLE_ASSERTIONS" not in plusargs:
+                plusargs.append("+define+ENABLE_ASSERTIONS")
+            logger.info("Assertions ENABLED for this run")
+        else:
+            logger.info("Assertions DISABLED (default)")
         
         # Determine if debug mode (affects timeout selection)
         debug_mode = (verbosity == "UVM_DEBUG")
