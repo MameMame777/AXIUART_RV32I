@@ -46,6 +46,37 @@
 | N | 5 |
 | NN | 6 |
 
+## Branch Delay Slot
+
+The TD4CPU implements a MIPS/SPARC-style **branch delay slot** architecture. When a BR instruction executes:
+
+1. **Delay Slot Semantics**: The instruction immediately following BR (at PC_BR + 1) ALWAYS executes before the branch is taken
+2. **Unconditional Execution**: The delay slot instruction executes regardless of whether the branch condition is met
+3. **Timing**: BR takes 2 cycles total (1 for BR decode + condition evaluation, 1 for delay slot execution)
+
+**Example**:
+```assembly
+0x0002: BR.AL +3      ; Branch always to PC+1+3 = 0x0006
+0x0003: LDI R7, #22   ; Delay slot - ALWAYS executes
+0x0004: LDI R0, #10   ; Skipped (not in delay slot)
+0x0005: LDI R0, #11   ; Skipped
+0x0006: LDI R1, #0xFF ; Branch target
+```
+
+**Execution Sequence**:
+- Cycle 1: BR decoded, condition evaluated (always true)
+- Cycle 2: LDI R7, #22 executes (delay slot), PC updated to 0x0006
+- Cycle 3: LDI R1, #0xFF fetched from branch target
+
+**Restrictions**:
+- **No BR in delay slot**: A BR instruction cannot be placed in another BR's delay slot (undefined behavior)
+- **LD/ST Caution**: Memory operations in delay slot are legal but increase complexity
+
+**Programming Guidelines**:
+- Fill delay slot with useful instruction (e.g., loop counter increment)
+- Use NOP (or any harmless instruction) if no useful work available
+- For loops, place loop counter adjustment in delay slot for efficiency
+
 ## Instruction list
 
 | Mnemonic | Format | Words | Operands |

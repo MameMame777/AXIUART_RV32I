@@ -355,7 +355,7 @@ virtual class axiuart_cpu_test_base extends axiuart_base_test;
     endtask
     
     protected task run_cpu();
-        write_reg(CPU_DBG_CTRL, 32'h00000008); // Run
+        write_reg(CPU_DBG_CTRL, 32'h00000002); // Run (bit 1)
         #100ns;
     endtask
     
