@@ -75,6 +75,13 @@ module Register_Block #(
     , input  logic        cpu_mem_busy
     , input  logic        cpu_mem_err
     
+    // RV32I CPU debug memory interface (32-bit, word-addressed)
+    , output logic [10:0] rv32i_mem_addr        // Word address (0-2047 for 8KB)
+    , output logic [31:0] rv32i_mem_wdata       // Write data
+    , input  logic [31:0] rv32i_mem_rdata       // Read data
+    , output logic [3:0]  rv32i_mem_we          // Byte write enables
+    , output logic        rv32i_mem_re          // Read enable
+    
     // Trace buffer interface (read-only access pattern like CPU_MEM)
     , input  logic [31:0] cpu_trace_buf_rdata  // Input: data from trace buffer at trace_addr
     , input  logic [7:0]  cpu_trace_write_ptr
@@ -149,6 +156,11 @@ module Register_Block #(
     logic        cpu_mem_busy_q;       // Delayed copy of cpu_mem_busy for falling edge detection
     logic        cpu_mem_busy_q2;      // Extra delay for data capture timing
     logic        cpu_mem_last_was_read;  // Track if last operation was read (not write)
+    
+    // RV32I memory access state
+    logic        rv32i_mem_busy;       // RV32I memory operation in progress
+    logic        rv32i_mem_busy_q;     // Delayed for edge detection
+    logic        rv32i_mem_last_was_read; // Track read vs write for rdata capture
     
     // AXI4-Lite response codes
     localparam bit [1:0] RESP_OKAY   = 2'b00;
@@ -361,6 +373,11 @@ module Register_Block #(
     assign cpu_trace_enable = cpu_trace_ctrl_reg[0];
     assign cpu_trace_clear_pulse = cpu_trace_ctrl_reg[1];
     
+    // RV32I memory interface (Option A: mask address to 11 bits for 8KB = 2048 words)
+    assign rv32i_mem_addr = cpu_mem_addr_reg[12:2];  // Byte addr [31:2] → word addr [10:0]
+    assign rv32i_mem_wdata = cpu_mem_wdata_reg;
+    // rv32i_mem_we and rv32i_mem_re assigned below in sequential logic
+    
     // Core AXI debug signals 
     wire axi_awvalid_debug = axi.awvalid;               // CRITICAL: Master awvalid reaches slave
     wire axi_wvalid_debug = axi.wvalid;                 // CRITICAL: Master wvalid reaches slave
@@ -479,6 +496,13 @@ module Register_Block #(
             cpu_reg_wdata <= 16'h0000;
             cpu_mem_read_req_pulse <= 1'b0;
             cpu_mem_write_req_pulse <= 1'b0;
+            
+            // RV32I memory interface
+            rv32i_mem_busy <= 1'b0;
+            rv32i_mem_busy_q <= 1'b0;
+            rv32i_mem_last_was_read <= 1'b0;
+            rv32i_mem_we <= 4'b0000;
+            rv32i_mem_re <= 1'b0;
         end else begin
             reset_stats_pulse <= 1'b0;
 
@@ -505,6 +529,7 @@ module Register_Block #(
             cpu_reg_write_pulse <= 1'b0;
             cpu_mem_read_req_pulse <= 1'b0;
             cpu_mem_write_req_pulse <= 1'b0;
+            \n            // RV32I memory access busy tracking (1-cycle registered RAM)\n            rv32i_mem_busy_q <= rv32i_mem_busy;\n            if (rv32i_mem_we != 4'b0000 || rv32i_mem_re) begin\n                rv32i_mem_busy <= 1'b1;\n                rv32i_mem_last_was_read <= rv32i_mem_re;\n            end else if (rv32i_mem_busy) begin\n                rv32i_mem_busy <= 1'b0;  // 1-cycle operation complete\n            end\n            \n            // Capture RV32I read data when busy completes\n            if (rv32i_mem_busy_q && !rv32i_mem_busy && rv32i_mem_last_was_read) begin\n                cpu_mem_rdata_reg <= rv32i_mem_rdata;\n            end\n            \n            // Clear RV32I control signals after operation starts\n            if (rv32i_mem_busy) begin\n                rv32i_mem_we <= 4'b0000;\n                rv32i_mem_re <= 1'b0;\n            end
             
             // Latch CPU memory read data ONLY for READ operations (not writes)
             // Capture 1 cycle after busy clears to allow CPU to update dbg_mem_rdata
@@ -700,23 +725,20 @@ module Register_Block #(
 
                         REG_CPU_MEM_CTRL: begin
                             masked_value = apply_wstrb_mask(cpu_mem_ctrl_reg, axi.wdata, axi.wstrb);
-                            cpu_mem_ctrl_reg <= 32'h0;
-                            cpu_mem_ctrl_reg[2] <= masked_value[2]; // AUTO_INC
+                            cpu_mem_ctrl_reg[2] <= masked_value[2]; // AUTO_INC (not used for RV32I)
 
-                            // write-1-to-pulse request bits (byte 0)
-                            // CRITICAL: Latch address BEFORE generating pulse to ensure correct address is used
-                            if (axi.wstrb[0] && (axi.wdata[0] || axi.wdata[1])) begin
-                                // Address auto-increment happens BEFORE the operation
-                                if (cpu_halted && cpu_mem_ctrl_reg[2]) begin
-                                    cpu_mem_addr_reg[15:0] <= cpu_mem_addr_reg[15:0] + 16'd1;
+                            // RV32I memory operations (32-bit, byte-granular)
+                            // Bits [3:0] = byte write enables (for write operations)
+                            // Bit [4] = read request
+                            // Bit [5] = write request
+                            if (axi.wstrb[0]) begin
+                                if (axi.wdata[4]) begin
+                                    // Read request: set read enable
+                                    rv32i_mem_re <= 1'b1;
+                                end else if (axi.wdata[5]) begin
+                                    // Write request: set byte enables from bits [3:0]
+                                    rv32i_mem_we <= axi.wdata[3:0];
                                 end
-                            end
-                            
-                            if (axi.wstrb[0] && axi.wdata[0]) begin
-                                cpu_mem_read_req_pulse <= 1'b1;
-                            end
-                            if (axi.wstrb[0] && axi.wdata[1]) begin
-                                cpu_mem_write_req_pulse <= 1'b1;
                             end
                         end
 

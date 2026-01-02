@@ -114,6 +114,10 @@ module rv32i_tb_top;
     //==========================================================================
     
     initial begin
+        // Load CPU test program from hex file (for simple CPU tests)
+        // For UART-driven tests, this will be skipped and memory loaded via AXI
+        $readmemh("../../tests/rv32i_ram_init.hex", dut.ram);
+        
         // Set virtual interface in config DB
         uvm_config_db#(virtual rv32i_tb_if)::set(null, "*", "vif", tb_if);
         

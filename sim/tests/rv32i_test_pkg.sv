@@ -22,5 +22,6 @@
 // Test classes (base first, then derived)
 `include "rv32i_base_test.sv"
 `include "rv32i_basic_test.sv"
+`include "rv32i_debug_load_test.sv"
 
 `endif // RV32I_TEST_PKG_SV

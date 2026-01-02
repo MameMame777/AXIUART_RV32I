@@ -118,6 +118,20 @@ module AXIUART_Top #(
     logic        cpu_trace_enable;
     logic        cpu_trace_clear_pulse;
     
+    // --------------------------------------------------------------------
+    // RV32I CPU debug wiring (Register_Block <-> RV32I CPU)
+    // --------------------------------------------------------------------
+    logic [10:0] rv32i_mem_addr;        // Word address from Register_Block
+    logic [31:0] rv32i_mem_wdata;       // Write data to RV32I RAM
+    logic [31:0] rv32i_mem_rdata;       // Read data from RV32I RAM
+    logic [3:0]  rv32i_mem_we;          // Byte write enables
+    logic        rv32i_mem_re;          // Read enable
+    
+    logic        rv32i_cpu_run;         // CPU run signal (from TD4 or dedicated control)
+    logic        rv32i_cpu_halted;      // CPU halted status
+    logic        rv32i_cpu_break;       // EBREAK detected
+    logic [3:0]  rv32i_led;             // LED output from RV32I
+    
     // Flow control signals
     logic        rx_fifo_full;
     logic        rx_fifo_high;
@@ -247,11 +261,51 @@ module AXIUART_Top #(
         , .cpu_trace_write_ptr(cpu_trace_write_ptr)
         , .cpu_trace_enable(cpu_trace_enable)
         , .cpu_trace_clear_pulse(cpu_trace_clear_pulse)
+        
+        // RV32I CPU memory debug interface
+        , .rv32i_mem_addr(rv32i_mem_addr)
+        , .rv32i_mem_wdata(rv32i_mem_wdata)
+        , .rv32i_mem_rdata(rv32i_mem_rdata)
+        , .rv32i_mem_we(rv32i_mem_we)
+        , .rv32i_mem_re(rv32i_mem_re)
     );
 
     // Derive trace buffer address from Register_Block's internal register
     assign cpu_trace_buf_addr = register_block_inst.cpu_trace_addr_reg[7:0];
 
+    // RV32I CPU run control - use TD4 CPU run signal for now
+    // (Future: add dedicated RV32I control registers)
+    assign rv32i_cpu_run = cpu_running;
+
+    // --------------------------------------------------------------------
+    // RV32I CPU Core Instantiation
+    // --------------------------------------------------------------------
+    rv32i_core rv32i_inst (
+        .clk(clk),
+        .rst_n(~rst),  // Active-low reset
+        
+        // CPU control
+        .cpu_run(rv32i_cpu_run),
+        .cpu_halt(1'b0),           // Not implemented yet
+        .cpu_step(1'b0),           // Not implemented yet
+        .cpu_halted(rv32i_cpu_halted),
+        .cpu_break(rv32i_cpu_break),
+        
+        // Debug memory interface (Port B - external debug access)
+        .dbg_mem_addr(rv32i_mem_addr),
+        .dbg_mem_wdata(rv32i_mem_wdata),
+        .dbg_mem_rdata(rv32i_mem_rdata),
+        .dbg_mem_we(rv32i_mem_we),
+        .dbg_mem_re(rv32i_mem_re),
+        
+        // LED output (memory-mapped I/O)
+        .led_out(rv32i_led)
+        
+        // Trace outputs not connected yet
+        // .trace_valid(), .trace_pc(), etc.
+    );
+
+    // --------------------------------------------------------------------
     // Minimal TD4CPU core (debug + RAM bring-up)
     // RAM reduced to 1024 words (2KB) for initial synthesis
     // Increase after verifying BRAM inference and timing closure
@@ -320,9 +374,12 @@ module AXIUART_Top #(
         .trace_buf_rdata(cpu_trace_buf_rdata),
         .trace_write_ptr_out(cpu_trace_write_ptr),
         
-        // Memory-Mapped IO: LED output
-        .led_out(led)  // Direct connection to top-level LED pins
+        // Memory-Mapped IO: LED output (not connected - using RV32I LED)
+        .led_out()  // Unconnected for now
     );
+    
+    // LED output: Use RV32I CPU LED for now
+    assign led = rv32i_led;
     
     // Hardware Flow Control Logic
     // RTS (Request to Send) - Active Low
@@ -339,8 +396,11 @@ module AXIUART_Top #(
         end
     end
     
-    // LED control now from CPU's Memory-Mapped IO (led_out signal connected above)
-    // Old: assign led = test_led_internal;  // REMOVED - LED now CPU-controlled
+    // LED control: Priority RV32I > TD4CPU
+    // For now, use RV32I LED output directly
+    // (Future: add mux control via register)
+    // assign led = rv32i_led;  // RV32I LED only
+    // Note: TD4CPU led_out already connected directly to top-level led port in TD4 instance above
     
     // AXI4-Lite Address Router and Interconnect
     // System status outputs (simulation only)

@@ -32,6 +32,13 @@ module rv32i_core
     output logic        cpu_halted,     // CPU halted status
     output logic        cpu_break,      // Breakpoint hit (EBREAK)
     
+    // Debug memory interface (Port B - external access when CPU halted)
+    input  logic [10:0] dbg_mem_addr,   // Word address for debug access
+    input  logic [31:0] dbg_mem_wdata,  // Write data
+    output logic [31:0] dbg_mem_rdata,  // Read data
+    input  logic [3:0]  dbg_mem_we,     // Byte write enables (active when cpu_halted)
+    input  logic        dbg_mem_re,     // Read enable
+    
     // MMIO interface (LED register)
     output logic [3:0]  led_out,
     
@@ -87,10 +94,14 @@ module rv32i_core
     logic [31:0] insn_mem;
     logic [31:0] insn_wb;
     
-    // Internal RAM (2048 x 32-bit = 8KB)
+    // Internal RAM (2048 x 32-bit = 8KB) - True Dual-Port
+    // Port A: CPU instruction fetch (IF) + data access (MEM)
+    // Port B: Debug/external access via dbg_mem_* (when CPU halted)
     (* ram_style = "block" *)
+    (* rw_addr_collision = "no" *)  // Avoid collision warnings (Port B has priority)
     logic [31:0] ram [0:2047];
     
+    // Port A - CPU access
     logic [10:0] ram_addr_if;   // Word address for instruction fetch
     logic [10:0] ram_addr_mem;  // Word address for data access
     logic        ram_we_mem;
@@ -98,6 +109,9 @@ module rv32i_core
     logic [31:0] ram_rdata_if;
     logic [31:0] ram_rdata_mem;
     logic [3:0]  ram_we_byte;   // Byte write enable for SB/SH/SW
+    
+    // Port B - Debug access (registered read, priority write)
+    logic [31:0] dbg_mem_rdata_reg;
     
     //==========================================================================
     // Register File (32 x 32-bit)
@@ -254,13 +268,16 @@ module rv32i_core
     end
     
     //==========================================================================
-    // INSTRUCTION MEMORY (Block RAM)
+    // INSTRUCTION MEMORY (Dual-Port Block RAM)
+    //==========================================================================
+    // Port A: CPU instruction fetch + data access
+    // Port B: Debug/external access (priority over Port A writes)
     //==========================================================================
     
     // Word address calculation (byte address [31:2] = word address)
     assign ram_addr_if = pc_if[12:2];  // IF stage fetch
     
-    // Registered read (1-cycle latency)
+    // Port A - Instruction Fetch (registered read, 1-cycle latency)
     always_ff @(posedge clk) begin
         if (!if_stall) begin
             ram_rdata_if <= ram[ram_addr_if];
@@ -692,9 +709,19 @@ module rv32i_core
         end
     end
     
-    // Data memory write with byte enables
+    // Port A - Data Memory Write (CPU MEM stage) with byte enables
+    // Port B has priority: if both write same address, Port B wins
     always_ff @(posedge clk) begin
-        if (ex_mem_reg.ctrl.mem_write && mem_is_ram) begin
+        // Port B write (debug access - only when CPU halted, but logic allows override)
+        if (|dbg_mem_we) begin
+            // Port B write with byte enables (priority over Port A)
+            if (dbg_mem_we[0]) ram[dbg_mem_addr][7:0]   <= dbg_mem_wdata[7:0];
+            if (dbg_mem_we[1]) ram[dbg_mem_addr][15:8]  <= dbg_mem_wdata[15:8];
+            if (dbg_mem_we[2]) ram[dbg_mem_addr][23:16] <= dbg_mem_wdata[23:16];
+            if (dbg_mem_we[3]) ram[dbg_mem_addr][31:24] <= dbg_mem_wdata[31:24];
+        end
+        // Port A write (CPU data access) - only if Port B not writing same address
+        else if (ex_mem_reg.ctrl.mem_write && mem_is_ram) begin
             // Write only enabled byte lanes
             if (mem_byte_enable[0]) ram[ram_addr_mem][7:0]   <= mem_store_data[7:0];
             if (mem_byte_enable[1]) ram[ram_addr_mem][15:8]  <= mem_store_data[15:8];
@@ -702,6 +729,15 @@ module rv32i_core
             if (mem_byte_enable[3]) ram[ram_addr_mem][31:24] <= mem_store_data[31:24];
         end
     end
+    
+    // Port B - Debug Memory Read (registered, 1-cycle latency)
+    always_ff @(posedge clk) begin
+        if (dbg_mem_re) begin
+            dbg_mem_rdata_reg <= ram[dbg_mem_addr];
+        end
+    end
+    
+    assign dbg_mem_rdata = dbg_mem_rdata_reg;
     
     //==========================================================================
     // MEM/WB PIPELINE REGISTER
@@ -917,59 +953,12 @@ module rv32i_core
     assign trace_rd_data = wb_result;
     
     //==========================================================================
-    // INITIALIZATION (TEST PROGRAM LOADER)
+    // RAM INITIALIZATION
     //==========================================================================
-    
-    initial begin
-        // Initialize RAM to NOP (ADDI x0, x0, 0)
-        for (int i = 0; i < 2048; i++) begin
-            ram[i] = 32'h00000013;  // NOP
-        end
-        
-        // Comprehensive test program (will be replaced by UART loader)
-        // TODO: Replace with ELF loader in Phase 12
-        
-        // Test 1: Basic ALU operations
-        ram[0] = 32'h00A00093;  // ADDI x1, x0, 10      (x1 = 10)
-        ram[1] = 32'h00500113;  // ADDI x2, x0, 5       (x2 = 5)
-        ram[2] = 32'h002081B3;  // ADD x3, x1, x2       (x3 = 15)
-        ram[3] = 32'h40208233;  // SUB x4, x1, x2       (x4 = 5)
-        ram[4] = 32'h002092B3;  // SLL x5, x1, x2       (x5 = 10 << 5)
-        ram[5] = 32'h0020A333;  // SLT x6, x1, x2       (x6 = 0, 10 >= 5)
-        
-        // Test 2: Immediate operations
-        ram[6] = 32'h00A08393;  // ADDI x7, x1, 10      (x7 = 20)
-        ram[7] = 32'h0FF0F413;  // ANDI x8, x1, 0xFF    (x8 = 10)
-        ram[8] = 32'h00A0E493;  // ORI x9, x1, 10       (x9 = 10)
-        ram[9] = 32'h00A0C513;  // XORI x10, x1, 10     (x10 = 0)
-        
-        // Test 3: Load Upper Immediate
-        ram[10] = 32'h123455B7; // LUI x11, 0x12345     (x11 = 0x12345000)
-        ram[11] = 32'h00000617; // AUIPC x12, 0         (x12 = PC)
-        
-        // Test 4: Branch test (BEQ)
-        ram[12] = 32'h00208663; // BEQ x1, x2, 12       (skip if x1==x2, should not branch)
-        ram[13] = 32'h00100693; // ADDI x13, x0, 1      (x13 = 1, executed)
-        
-        // Test 5: Jump and Link
-        ram[14] = 32'h008000EF; // JAL x1, 8            (x1 = PC+4, jump to ram[16])
-        ram[15] = 32'h00000013; // NOP                  (skipped)
-        ram[16] = 32'h00200713; // ADDI x14, x0, 2      (x14 = 2)
-        
-        // Test 6: Memory operations
-        ram[17] = 32'h00A02023; // SW x10, 0(x0)        (store to RAM[0])
-        ram[18] = 32'h00002783; // LW x15, 0(x0)        (load from RAM[0])
-        
-        // Test 7: LED MMIO write (byte address 0x407C) - BEFORE EBREAK
-        ram[19] = 32'h000048B7; // LUI x17, 0x4         (x17 = 0x4000, MMIO base)
-        ram[20] = 32'h00500813; // ADDI x16, x0, 5      (x16 = 5, LED value)
-        ram[21] = 32'h0708AE23; // SW x16, 0x7C(x17)    (store to 0x407C, LED = 5)
-        
-        // Test 8: Debug - EBREAK (breakpoint) - AFTER LED write
-        ram[22] = 32'h00100073; // EBREAK               (halt execution, cpu_break = 1)
-        
-        // Infinite loop (should not reach here)
-        ram[30] = 32'h0000006F; // JAL x0, 0            (infinite loop)
-    end
+    // RAM Initialization (Simulation Only)
+    // For synthesis: initial blocks ignored, RAM has undefined values at power-on
+    // For simulation: Testbench loads program via $readmemh
+    // CRITICAL: No zero-fill loop here to avoid race with testbench $readmemh
+    //==========================================================================
 
 endmodule : rv32i_core

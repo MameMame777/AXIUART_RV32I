@@ -23,11 +23,12 @@ class rv32i_scoreboard extends uvm_scoreboard;
     // Virtual interface (for LED checking)
     virtual rv32i_tb_if vif;
     
-    // Expected values
-    localparam int EXPECTED_INSN_COUNT_MIN = 23;  // Actual instructions (ram[0-22])
-    localparam int EXPECTED_INSN_COUNT_MAX = 26;  // +3 for pipeline drain (ID/EX/MEM stages after EBREAK)
-    localparam bit [3:0] EXPECTED_LED_VALUE = 4'h5;
-    localparam int EXPECTED_EBREAK_COUNT = 1;
+    // Expected values (defaults for rv32i_basic_test)
+    // Can be overridden via uvm_config_db for custom tests
+    int EXPECTED_INSN_COUNT_MIN = 23;  // Actual instructions (ram[0-22])
+    int EXPECTED_INSN_COUNT_MAX = 26;  // +3 for pipeline drain (ID/EX/MEM stages after EBREAK)
+    int EXPECTED_LED_VALUE = 4'h5;
+    int EXPECTED_EBREAK_COUNT = 1;
     
     // Collected data
     rv32i_transaction transactions[$];
@@ -52,9 +53,22 @@ class rv32i_scoreboard extends uvm_scoreboard;
     virtual function void build_phase(uvm_phase phase);
         super.build_phase(phase);
         
+        // Get virtual interface
         if (!uvm_config_db#(virtual rv32i_tb_if)::get(this, "", "vif", vif)) begin
             `uvm_fatal("RV32I_SCOREBOARD", "Failed to get virtual interface from config DB")
         end
+        
+        // Get expected values from config DB (if set by test)
+        void'(uvm_config_db#(int)::get(this, "", "expected_insn_min", EXPECTED_INSN_COUNT_MIN));
+        void'(uvm_config_db#(int)::get(this, "", "expected_insn_max", EXPECTED_INSN_COUNT_MAX));
+        void'(uvm_config_db#(int)::get(this, "", "expected_led_value", EXPECTED_LED_VALUE));
+        void'(uvm_config_db#(int)::get(this, "", "expected_ebreak_count", EXPECTED_EBREAK_COUNT));
+        
+        `uvm_info("RV32I_SCOREBOARD", 
+            $sformatf("Configuration: insn=[%0d-%0d], led=0x%h, ebreak=%0d",
+                      EXPECTED_INSN_COUNT_MIN, EXPECTED_INSN_COUNT_MAX,
+                      EXPECTED_LED_VALUE, EXPECTED_EBREAK_COUNT),
+            UVM_MEDIUM)
     endfunction
     
     //--------------------------------------------------------------------------
