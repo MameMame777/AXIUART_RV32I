@@ -14,6 +14,29 @@
           "description": "Basic UART transaction test",
           "timeout": 120,
           "expected_duration": 30
+        },
+        {
+          "name": "rv32i_basic",
+          "description": "RV32I CPU basic functionality test",
+          "timeout": 30,
+          "expected_duration": 10
+        }
+      ]
+    },
+    "rv32i": {
+      "description": "RV32I CPU verification tests",
+      "tests": [
+        {
+          "name": "rv32i_smoke",
+          "description": "Quick RV32I smoke test",
+          "timeout": 10,
+          "expected_duration": 5
+        },
+        {
+          "name": "rv32i_basic",
+          "description": "RV32I basic instruction execution test",
+          "timeout": 30,
+          "expected_duration": 10
         }
       ]
     },
@@ -60,6 +83,12 @@
           "description": "CPU branch instruction with all conditions",
           "timeout": 300,
           "expected_duration": 90
+        },
+        {
+          "name": "rv32i_basic",
+          "description": "RV32I CPU UVM verification",
+          "timeout": 30,
+          "expected_duration": 10
         }
       ]
     },
