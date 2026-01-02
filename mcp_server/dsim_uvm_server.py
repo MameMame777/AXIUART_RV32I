@@ -501,14 +501,22 @@ async def run_uvm_simulation(
         
     # Use simplified environment (only environment available)
     uvm_dir = workspace_root / "sim" / "uvm" / "tb"
-    config_file = uvm_dir / "dsim_config.f"
-    top_module = "axiuart_tb_top"
+    
+    # Detect RV32I tests and use appropriate config
+    if test_name and "rv32i" in test_name.lower():
+        config_file = uvm_dir / "dsim_config_rv32i.f"
+        top_module = "rv32i_tb_top"
+        config_relative = "dsim_config_rv32i.f"
+    else:
+        config_file = uvm_dir / "dsim_config.f"
+        top_module = "axiuart_tb_top"
+        config_relative = "dsim_config.f"
 
     if not config_file.exists():
         raise DSIMError(
             f"DSIM configuration file not found: {config_file}",
             "configuration",
-            f"Ensure dsim_config.f exists in {uvm_dir}"
+            f"Ensure {config_file.name} exists in {uvm_dir}"
         )
     
     # Create timestamped log directory and prune older entries to limit clutter
@@ -527,17 +535,12 @@ async def run_uvm_simulation(
     # Build command with enhanced options
     # Use relative config file path since we're executing from sim/uvm directory
     # Note: -uvm must be specified BEFORE mode-specific options (DSIM requirement)
-    if use_simplified:
-        config_relative = "dsim_config.f"  # Already in tb/ directory
-    else:
-        config_relative = "config/dsim_config.f"  # In config/ subdirectory
-    
     cmd = [
         str(dsim_exe),
         "-uvm", "1.2",  # CRITICAL: UVM library version (DSIM official requirement)
         "-timescale", "1ns/1ps",  # Global timescale to fix 1000x slowdown issue
-        "-f", config_relative,
-        "-top", top_module,  # Top-level module specification
+        "-f", config_relative,  # Config file determined above (axiuart or rv32i)
+        "-top", top_module,  # Top module determined above
         f"+UVM_TESTNAME={test_name}",
         f"+UVM_VERBOSITY={verbosity}",
         "-sv_seed", str(seed),
@@ -547,9 +550,14 @@ async def run_uvm_simulation(
     # Check if assertions are enabled via plusargs
     enable_assertions = any("+define+ENABLE_ASSERTIONS" in arg for arg in plusargs)
     if enable_assertions:
-        # Add assertion file list when enabled
-        cmd.extend(["-f", "dsim_assertions.f"])
-        logger.info("Assertions ENABLED: Including dsim_assertions.f")
+        # Select assertion file based on test type
+        if "rv32i" in test_name.lower():
+            assertion_file = "dsim_assertions_rv32i.f"
+            logger.info("Assertions ENABLED: Including dsim_assertions_rv32i.f for RV32I test")
+        else:
+            assertion_file = "dsim_assertions.f"
+            logger.info("Assertions ENABLED: Including dsim_assertions.f")
+        cmd.extend(["-f", assertion_file])
     
     # Mode-specific options (do NOT add -uvm again)
     # Note: Not using -genimage/-image to let DSIM use workspace mode (dsim_work/)
