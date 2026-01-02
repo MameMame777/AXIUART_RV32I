@@ -105,19 +105,20 @@ class axiuart_cpu_br_test extends axiuart_cpu_test_base;
         
         `uvm_info(get_type_name(), "--- Test 1: BR.AL (Unconditional Branch) ---", UVM_LOW)
         
-        // Program (with delay slot):
-        // 0x0000: LDI R0, #0x5
-        // 0x0001: BR.AL +2       (branch to 0x0004)
-        // 0x0002: LDI R7, #0x16  (DELAY SLOT - always executes!)
-        // 0x0003: LDI R0, #0xA   (skipped)
-        // 0x0004: LDI R1, #0xFF  (branch target)
-        // 0x0005: BRK
+        // Program (with delay slot) - Memory range: 0x0000-0x0005
+        // PC=1: LDI R0, #0x5     (addr 0x0000)
+        // PC=2: BR.AL +3         (target = 2 + 3 = 5)
+        // PC=3: LDI R7, #0x16    (DELAY SLOT - always executes!)
+        // PC=4: LDI R0, #0xA     (skipped)
+        // PC=5: LDI R1, #0xFF    (branch target)
+        // PC=6: BRK
         
         halt_cpu();
         #500ns;
+        clear_cpu_memory(16'h0000, 16'h00FF); // Clear all memory to prevent contamination
         
         write_insn(16'h0000, {OP_LDI, 3'd0, 9'd5});           // LDI R0, #5
-        write_insn(16'h0001, build_br(COND_AL, 9'd2));        // BR.AL +2
+        write_insn(16'h0001, build_br(COND_AL, 9'd3));        // BR.AL +3 (target = 2+3 = 5)
         write_insn(16'h0002, {OP_LDI, 3'd7, 9'h16});          // LDI R7, #0x16 (DELAY SLOT)
         write_insn(16'h0003, {OP_LDI, 3'd0, 9'd10});          // LDI R0, #0xA (skipped)
         write_insn(16'h0004, {OP_LDI, 3'd1, 9'd255});         // LDI R1, #0xFF
@@ -134,7 +135,7 @@ class axiuart_cpu_br_test extends axiuart_cpu_test_base;
         wait_for_halt(1ms);
         
         read_cpu_pc(pc_val);
-        assert_equal_16(pc_val, 16'h0006, "PC after BR.AL");
+        assert_equal_16(pc_val, 16'h0008, "PC after BR.AL");
         
         assert_cpu_reg_equal(3'd0, 16'h0005, "R0 = 5 (initial value)");
         assert_cpu_reg_equal(3'd7, 16'h0016, "R7 = 0x16 (delay slot executed!)");
@@ -152,25 +153,25 @@ class axiuart_cpu_br_test extends axiuart_cpu_test_base;
         // Test 2a: BR.Z taken (Z=1)
         `uvm_info(get_type_name(), "Test 2a: BR.Z taken when Z=1", UVM_MEDIUM)
         
-        // Program (with delay slot):
-        // 0x0000: LDI R0, #1
-        // 0x0001: ADDI R0, #-1      (R0=0, Z=1)
-        // 0x0002: BR.Z +2           (taken, branch to 0x0005)
-        // 0x0003: LDI R7, #0x77     (DELAY SLOT - executes regardless!)
-        // 0x0004: LDI R1, #0xAA     (skipped)
-        // 0x0005: LDI R1, #0xCC     (branch target)
-        // 0x0006: BRK
+        // Program (with delay slot) - Memory range: 0x0010-0x0016
+        // PC=0x11: LDI R0, #1       (addr 0x0010)
+        // PC=0x12: ADDI R0, #-1     (R0=0, Z=1)
+        // PC=0x13: BR.Z +3          (target = 0x13+3 = 0x16)
+        // PC=0x14: LDI R7, #0x77    (DELAY SLOT - executes regardless!)
+        // PC=0x15: LDI R1, #0xAA    (skipped)
+        // PC=0x16: LDI R1, #0xCC    (branch target)
+        // PC=0x17: BRK
         
-        write_insn(16'h0000, {OP_LDI, 3'd0, 9'd1});           // LDI R0, #1
-        write_insn(16'h0001, {OP_ADDI, 3'd0, 9'h1FF});        // ADDI R0, #-1 (sets Z=1)
-        write_insn(16'h0002, build_br(COND_Z, 9'd2));         // BR.Z +2
-        write_insn(16'h0003, {OP_LDI, 3'd7, 9'h77});          // LDI R7, #0x77 (DELAY SLOT)
-        write_insn(16'h0004, {OP_LDI, 3'd1, 9'hAA});          // LDI R1, #0xAA (skipped)
-        write_insn(16'h0005, {OP_LDI, 3'd1, 9'hCC});          // LDI R1, #0xCC
-        write_insn(16'h0006, {OP_SYS, 9'h000, SYSOP_BRK});    // BRK
+        write_insn(16'h0010, {OP_LDI, 3'd0, 9'd1});           // LDI R0, #1
+        write_insn(16'h0011, {OP_ADDI, 3'd0, 9'h1FF});        // ADDI R0, #-1 (sets Z=1)
+        write_insn(16'h0012, build_br(COND_Z, 9'd3));         // BR.Z +3 (target = 0x13+3 = 0x16)
+        write_insn(16'h0013, {OP_LDI, 3'd7, 9'h77});          // LDI R7, #0x77 (DELAY SLOT)
+        write_insn(16'h0014, {OP_LDI, 3'd1, 9'hAA});          // LDI R1, #0xAA (skipped)
+        write_insn(16'h0015, {OP_LDI, 3'd1, 9'hCC});          // LDI R1, #0xCC
+        write_insn(16'h0016, {OP_SYS, 9'h000, SYSOP_BRK});    // BRK
         
         reset_cpu();
-        set_cpu_pc(16'h0000);
+        set_cpu_pc(16'h0010);
         run_cpu();
         wait_for_halt(1ms);
         
@@ -181,23 +182,23 @@ class axiuart_cpu_br_test extends axiuart_cpu_test_base;
         // Test 2b: BR.NZ not taken (Z=1)
         `uvm_info(get_type_name(), "Test 2b: BR.NZ not taken when Z=1", UVM_MEDIUM)
         
-        // Program (with delay slot):
-        // 0x0000: LDI R0, #1
-        // 0x0001: ADDI R0, #-1      (R0=0, Z=1)
-        // 0x0002: BR.NZ +2          (not taken)
-        // 0x0003: LDI R3, #0x55     (DELAY SLOT - still executes!)
-        // 0x0004: LDI R2, #0xDD     (executed - sequential)
-        // 0x0005: BRK
+        // Program (with delay slot) - Memory range: 0x0020-0x0025
+        // PC=0x21: LDI R0, #1       (addr 0x0020)
+        // PC=0x22: ADDI R0, #-1     (R0=0, Z=1)
+        // PC=0x23: BR.NZ +2         (not taken)
+        // PC=0x24: LDI R3, #0x55    (DELAY SLOT - still executes!)
+        // PC=0x25: LDI R2, #0xDD    (executed - sequential)
+        // PC=0x26: BRK
         
-        write_insn(16'h0000, {OP_LDI, 3'd0, 9'd1});           // LDI R0, #1
-        write_insn(16'h0001, {OP_ADDI, 3'd0, 9'h1FF});        // ADDI R0, #-1
-        write_insn(16'h0002, build_br(COND_NZ, 9'd2));        // BR.NZ +2 (not taken)
-        write_insn(16'h0003, {OP_LDI, 3'd3, 9'h55});          // LDI R3, #0x55 (DELAY SLOT)
-        write_insn(16'h0004, {OP_LDI, 3'd2, 9'hDD});          // LDI R2, #0xDD
-        write_insn(16'h0005, {OP_SYS, 9'h000, SYSOP_BRK});    // BRK
+        write_insn(16'h0020, {OP_LDI, 3'd0, 9'd1});           // LDI R0, #1
+        write_insn(16'h0021, {OP_ADDI, 3'd0, 9'h1FF});        // ADDI R0, #-1
+        write_insn(16'h0022, build_br(COND_NZ, 9'd2));        // BR.NZ +2 (not taken)
+        write_insn(16'h0023, {OP_LDI, 3'd3, 9'h55});          // LDI R3, #0x55 (DELAY SLOT)
+        write_insn(16'h0024, {OP_LDI, 3'd2, 9'hDD});          // LDI R2, #0xDD
+        write_insn(16'h0025, {OP_SYS, 9'h000, SYSOP_BRK});    // BRK
         
         reset_cpu();
-        set_cpu_pc(16'h0000);
+        set_cpu_pc(16'h0020);
         run_cpu();
         wait_for_halt(1ms);
         
@@ -214,23 +215,23 @@ class axiuart_cpu_br_test extends axiuart_cpu_test_base;
         // Test 3a: BR.C taken (C=1 from overflow)
         `uvm_info(get_type_name(), "Test 3a: BR.C taken when C=1", UVM_MEDIUM)
         
-        // Program (with delay slot):
-        // 0x0000: LDI R0, #0xFF
-        // 0x0001: ADDI R0, #1       (overflow, C=1)
-        // 0x0002: BR.C +1           (taken, branch to 0x0004)
-        // 0x0003: LDI R7, #0x88     (DELAY SLOT)
-        // 0x0004: LDI R3, #0x22     (branch target)
-        // 0x0005: BRK
+        // Program (with delay slot) - Memory range: 0x0030-0x0035
+        // PC=0x31: LDI R0, #0xFF    (addr 0x0030)
+        // PC=0x32: ADDI R0, #1      (overflow, C=1)
+        // PC=0x33: BR.C +1          (taken, branch to PC=0x35)
+        // PC=0x34: LDI R7, #0x88    (DELAY SLOT)
+        // PC=0x35: LDI R3, #0x22    (branch target)
+        // PC=0x36: BRK
         
-        write_insn(16'h0000, {OP_LDI, 3'd0, 9'h0FF});         // LDI R0, #0xFF
-        write_insn(16'h0001, {OP_ADDI, 3'd0, 9'd1});          // ADDI R0, #1 (sets C=1)
-        write_insn(16'h0002, build_br(COND_C, 9'd1));         // BR.C +1
-        write_insn(16'h0003, {OP_LDI, 3'd7, 9'h88});          // LDI R7, #0x88 (DELAY SLOT)
-        write_insn(16'h0004, {OP_LDI, 3'd3, 9'h22});          // LDI R3, #0x22
-        write_insn(16'h0005, {OP_SYS, 9'h000, SYSOP_BRK});    // BRK
+        write_insn(16'h0030, {OP_LDI, 3'd0, 9'h0FF});         // LDI R0, #0xFF
+        write_insn(16'h0031, {OP_ADDI, 3'd0, 9'd1});          // ADDI R0, #1 (sets C=1)
+        write_insn(16'h0032, build_br(COND_C, 9'd1));         // BR.C +1
+        write_insn(16'h0033, {OP_LDI, 3'd7, 9'h88});          // LDI R7, #0x88 (DELAY SLOT)
+        write_insn(16'h0034, {OP_LDI, 3'd3, 9'h22});          // LDI R3, #0x22
+        write_insn(16'h0035, {OP_SYS, 9'h000, SYSOP_BRK});    // BRK
         
         reset_cpu();
-        set_cpu_pc(16'h0000);
+        set_cpu_pc(16'h0030);
         run_cpu();
         wait_for_halt(1ms);
         
@@ -247,23 +248,23 @@ class axiuart_cpu_br_test extends axiuart_cpu_test_base;
         // Test 4a: BR.N taken (N=1, MSB set)
         `uvm_info(get_type_name(), "Test 4a: BR.N taken when N=1", UVM_MEDIUM)
         
-        // Program (with delay slot):
-        // 0x0000: LDI R0, #0
-        // 0x0001: ADDI R0, #-1      (R0=0xFFFF, N=1)
-        // 0x0002: BR.N +1           (taken, branch to 0x0004)
-        // 0x0003: LDI R7, #0x99     (DELAY SLOT)
-        // 0x0004: LDI R4, #0x44     (branch target)
-        // 0x0005: BRK
+        // Program (with delay slot) - Memory range: 0x0040-0x0045
+        // PC=0x41: LDI R0, #0       (addr 0x0040)
+        // PC=0x42: ADDI R0, #-1     (R0=0xFFFF, N=1)
+        // PC=0x43: BR.N +1          (taken, branch to PC=0x45)
+        // PC=0x44: LDI R7, #0x99    (DELAY SLOT)
+        // PC=0x45: LDI R4, #0x44    (branch target)
+        // PC=0x46: BRK
         
-        write_insn(16'h0000, {OP_LDI, 3'd0, 9'd0});           // LDI R0, #0
-        write_insn(16'h0001, {OP_ADDI, 3'd0, 9'h1FF});        // ADDI R0, #-1 (sets N=1)
-        write_insn(16'h0002, build_br(COND_N, 9'd1));         // BR.N +1
-        write_insn(16'h0003, {OP_LDI, 3'd7, 9'h99});          // LDI R7, #0x99 (DELAY SLOT)
-        write_insn(16'h0004, {OP_LDI, 3'd4, 9'h44});          // LDI R4, #0x44
-        write_insn(16'h0005, {OP_SYS, 9'h000, SYSOP_BRK});    // BRK
+        write_insn(16'h0040, {OP_LDI, 3'd0, 9'd0});           // LDI R0, #0
+        write_insn(16'h0041, {OP_ADDI, 3'd0, 9'h1FF});        // ADDI R0, #-1 (sets N=1)
+        write_insn(16'h0042, build_br(COND_N, 9'd1));         // BR.N +1
+        write_insn(16'h0043, {OP_LDI, 3'd7, 9'h99});          // LDI R7, #0x99 (DELAY SLOT)
+        write_insn(16'h0044, {OP_LDI, 3'd4, 9'h44});          // LDI R4, #0x44
+        write_insn(16'h0045, {OP_SYS, 9'h000, SYSOP_BRK});    // BRK
         
         reset_cpu();
-        set_cpu_pc(16'h0000);
+        set_cpu_pc(16'h0040);
         run_cpu();
         wait_for_halt(1ms);
         
@@ -277,23 +278,24 @@ class axiuart_cpu_br_test extends axiuart_cpu_test_base;
     task test_br_loop();
         `uvm_info(get_type_name(), "--- Test 5: Loop Construct (Backward Branch) ---", UVM_LOW)
         
-        // Program: Count R0 from 0 to 3 (optimized with delay slot)
-        // 0x0000: LDI R0, #0        ; Counter
-        // 0x0001: LDI R1, #3        ; Loop limit
-        // 0x0002: CMP R0, R1        ; Compare (sets flags)
-        // 0x0003: BR.NZ -1          ; Loop if not equal (backward to 0x0003)
-        // 0x0004: ADDI R0, #1       ; DELAY SLOT: R++ (executes every iteration!)
-        // 0x0005: BRK
+        // Program: Count R0 from 0 to 3 (loop with delay slot) - Memory range: 0x0050-0x0055
+        // PC=0x51: LDI R0, #0        ; Counter (addr 0x0050)
+        // PC=0x52: LDI R1, #3        ; Loop limit (addr 0x0051)
+        // PC=0x53: CMP R0, R1        ; Compare (sets flags) (addr 0x0052)
+        // PC=0x54: BR.NZ -1          ; Loop if not equal (addr 0x0053)
+        //                            ; target = 0x54 + (-1) = 0x53 (CMP) ✓
+        // PC=0x55: ADDI R0, #1       ; DELAY SLOT: R++ (executes every iteration!)
+        // PC=0x56: BRK               ; Exit
         
-        write_insn(16'h0000, {OP_LDI, 3'd0, 9'd0});                    // LDI R0, #0
-        write_insn(16'h0001, {OP_LDI, 3'd1, 9'd3});                    // LDI R1, #3
-        write_insn(16'h0002, {OP_R_ALU, 3'd0, 3'd1, FUNCT_CMP});       // CMP R0, R1
-        write_insn(16'h0003, build_br(COND_NZ, -9'sd1));               // BR.NZ -1 (to 0x0003)
-        write_insn(16'h0004, {OP_ADDI, 3'd0, 9'd1});                   // ADDI R0, #1 (DELAY SLOT)
-        write_insn(16'h0005, {OP_SYS, 9'h000, SYSOP_BRK});             // BRK
+        write_insn(16'h0050, {OP_LDI, 3'd0, 9'd0});                    // LDI R0, #0
+        write_insn(16'h0051, {OP_LDI, 3'd1, 9'd3});                    // LDI R1, #3
+        write_insn(16'h0052, {OP_R_ALU, 3'd0, 3'd1, FUNCT_CMP});       // CMP R0, R1
+        write_insn(16'h0053, build_br(COND_NZ, -9'sd1));               // BR.NZ -1 (to PC=0x53: CMP)
+        write_insn(16'h0054, {OP_ADDI, 3'd0, 9'd1});                   // ADDI R0, #1 (DELAY SLOT)
+        write_insn(16'h0055, {OP_SYS, 9'h000, SYSOP_BRK});             // BRK
         
         reset_cpu();
-        set_cpu_pc(16'h0000);
+        set_cpu_pc(16'h0050);
         run_cpu();
         wait_for_halt(2ms);  // Longer timeout for loop
         
@@ -307,33 +309,33 @@ class axiuart_cpu_br_test extends axiuart_cpu_test_base;
     task test_br_forward_backward();
         `uvm_info(get_type_name(), "--- Test 6: Forward/Backward Branch Mix ---", UVM_LOW)
         
-        // Program: Simple state machine (with delay slots)
-        // 0x0000: LDI R5, #0x10
-        // 0x0001: BR.AL +3          ; Forward to 0x0005
-        // 0x0002: LDI R6, #0x01     ; DELAY SLOT (first branch marker)
-        // 0x0003: LDI R5, #0x20     ; (skipped initially)
-        // 0x0004: BR.AL +3          ; Forward to 0x0008
-        // 0x0005: LDI R6, #0x02     ; DELAY SLOT (second branch marker)
-        // 0x0006: LDI R5, #0x30     ; (never executed)
-        // 0x0007: LDI R5, #0x40     ; First forward target
-        // 0x0008: BR.AL -4          ; Backward to 0x0005
-        // 0x0009: LDI R6, #0x03     ; DELAY SLOT (third branch marker)
-        // 0x000A: BRK               ; Second forward target
+        // Program: Simple state machine (with delay slots) - Memory range: 0x0060-0x006A
+        // PC=0x61: LDI R5, #0x10    (addr 0x0060)
+        // PC=0x62: BR.AL +4         ; Forward to PC=0x66 (target = 0x62 + 4 = 0x66)
+        // PC=0x63: LDI R6, #0x01    ; DELAY SLOT (first branch marker)
+        // PC=0x64: LDI R5, #0x20    ; (skipped initially)
+        // PC=0x65: BR.AL +3         ; Forward to PC=0x68 (target = 0x65 + 3 = 0x68)
+        // PC=0x66: LDI R6, #0x02    ; DELAY SLOT (second branch marker) 
+        // PC=0x67: LDI R5, #0x30    ; (never executed)
+        // PC=0x68: LDI R5, #0x40    ; First forward target
+        // PC=0x69: BR.AL -3         ; Backward to PC=0x66 (target = 0x69 + (-3) = 0x66)
+        // PC=0x6A: LDI R6, #0x03    ; DELAY SLOT (third branch marker)
+        // PC=0x6B: BRK              ; Second forward target
         
-        write_insn(16'h0000, {OP_LDI, 3'd5, 9'h10});          // LDI R5, #0x10
-        write_insn(16'h0001, build_br(COND_AL, 9'd3));        // BR.AL +3
-        write_insn(16'h0002, {OP_LDI, 3'd6, 9'h01});          // LDI R6, #0x01 (DELAY SLOT 1)
-        write_insn(16'h0003, {OP_LDI, 3'd5, 9'h20});          // LDI R5, #0x20 (skipped)
-        write_insn(16'h0004, build_br(COND_AL, 9'd3));        // BR.AL +3
-        write_insn(16'h0005, {OP_LDI, 3'd6, 9'h02});          // LDI R6, #0x02 (DELAY SLOT 2)
-        write_insn(16'h0006, {OP_LDI, 3'd5, 9'h30});          // LDI R5, #0x30 (never)
-        write_insn(16'h0007, {OP_LDI, 3'd5, 9'h40});          // LDI R5, #0x40
-        write_insn(16'h0008, build_br(COND_AL, -9'sd4));      // BR.AL -4 (to 0x0005)
-        write_insn(16'h0009, {OP_LDI, 3'd6, 9'h03});          // LDI R6, #0x03 (DELAY SLOT 3)
-        write_insn(16'h000A, {OP_SYS, 9'h000, SYSOP_BRK});    // BRK
+        write_insn(16'h0060, {OP_LDI, 3'd5, 9'h10});          // LDI R5, #0x10
+        write_insn(16'h0061, build_br(COND_AL, 9'd4));        // BR.AL +4 (to PC=0x66)
+        write_insn(16'h0062, {OP_LDI, 3'd6, 9'h01});          // LDI R6, #0x01 (DELAY SLOT 1)
+        write_insn(16'h0063, {OP_LDI, 3'd5, 9'h20});          // LDI R5, #0x20 (skipped)
+        write_insn(16'h0064, build_br(COND_AL, 9'd3));        // BR.AL +3 (to PC=0x68)
+        write_insn(16'h0065, {OP_LDI, 3'd6, 9'h02});          // LDI R6, #0x02 (DELAY SLOT 2)
+        write_insn(16'h0066, {OP_LDI, 3'd5, 9'h30});          // LDI R5, #0x30 (never)
+        write_insn(16'h0067, {OP_LDI, 3'd5, 9'h40});          // LDI R5, #0x40
+        write_insn(16'h0068, build_br(COND_AL, -9'sd3));      // BR.AL -3 (to PC=0x66)
+        write_insn(16'h0069, {OP_LDI, 3'd6, 9'h03});          // LDI R6, #0x03 (DELAY SLOT 3)
+        write_insn(16'h006A, {OP_SYS, 9'h000, SYSOP_BRK});    // BRK
         
         reset_cpu();
-        set_cpu_pc(16'h0000);
+        set_cpu_pc(16'h0060);
         run_cpu();
         wait_for_halt(1ms);
         

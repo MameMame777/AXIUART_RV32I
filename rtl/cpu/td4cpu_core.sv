@@ -121,6 +121,9 @@ module td4cpu_core #(
     logic [15:0] ram_addr_reg;      // Registered address (for debug visibility)
     logic [15:0] ram_addr_next;     // Next address wire (set before clock edge)
     logic        ram_rd_en;
+    
+    // Branch delay slot state machine
+    logic        branch_delay_slot_active;  // Set when delay slot should execute next cycle
     logic [15:0] ram_rd_data;
     logic        ram_wr_en;
     logic [15:0] ram_wr_addr;
@@ -182,8 +185,9 @@ module td4cpu_core #(
     // Break critical path: PC→RAM fetch (cycle N) → decode (cycle N+1) → execute (cycle N+2)
     logic [15:0] insn_fetched;          // Fetched instruction from RAM
     logic        insn_valid;            // Valid instruction fetched
-    logic [15:0] fetch_pc;              // PC of fetched instruction
+    logic [15:0] exec_pc;               // PC of instruction to be executed (next cycle)
     logic [15:0] insn_fetched_pc;       // PC of instruction in insn_fetched register
+    logic [15:0] pending_insn_pc;       // PC saved at fetch request (preserved until fetch completion)
     logic        pc_updated_by_branch;  // Flag to skip PC increment after branch
     
     // Additional pipeline register to break timing path (insn_fetched → regfile CE)
@@ -524,7 +528,7 @@ module td4cpu_core #(
             insn_fetched <= 16'h0000;
             insn_fetched_pc <= 16'h0000;
             insn_valid <= 1'b0;
-            fetch_pc <= 16'h0000;
+            exec_pc <= 16'h0000;
             
             // Pipeline decode register reset (timing optimization)
             insn_decoded_reg <= 16'h0000;
@@ -569,6 +573,7 @@ module td4cpu_core #(
             branch_pending <= 1'b0;
             branch_target_pending <= 16'd0;
             br_insn_pc <= 16'd0;
+            pending_insn_pc <= 16'd0;
 
             // RAM contents are left uninitialized by default.
             // In simulation, use $readmemh from a testbench if needed.
@@ -833,10 +838,22 @@ module td4cpu_core #(
             // CRITICAL: Block fetch while ram_rd_en is active (prevents double-fetch)
             // NOTE: Delay slot architecture - PC increments naturally except after branch
             if (running && !insn_valid && !mem_op_executing && !mem_op_pending && !ram_rd_en && !(step_pending && step_insn_fetched)) begin
-                // Branch delay slot handling
-                // CRITICAL FIX: Fetch from branch target in SAME cycle as PC update
-                // This ensures fetch_pc always matches pc, eliminating timing mismatch
-                if (branch_pending) begin
+                // Two-stage branch delay slot state machine
+                // STAGE 1: Delay slot wait - instruction already fetched, just wait for execution
+                if (branch_delay_slot_active) begin
+                    // CRITICAL: Delay slot instruction was already fetched when branch decoded
+                    // During branch decode cycle, normal fetch logic ran: pc <= pc + 1
+                    // So delay slot instruction is already in pipeline (or will complete this cycle)
+                    // Do NOT issue another fetch - that would fetch PC+1 which should be skipped
+                    // Simply transition to branch_pending and wait for delay slot to execute
+                    branch_delay_slot_active <= 1'b0;  // Clear delay slot flag
+                    branch_pending <= 1'b1;            // Set branch pending for next cycle
+                    // No ram_rd_en, no PC change - just state transition
+                    // Branch target will be fetched in next cycle when branch_pending applies
+                    if (step_pending) step_insn_fetched <= 1'b1;
+                    
+                // STAGE 2: Branch application - apply target and fetch from target
+                end else if (branch_pending) begin
                     // Branch delay slot completed - apply branch target and fetch immediately
                     branch_pending <= 1'b0;
                     // Fetch from branch target immediately (breakpoint/validity checks)
@@ -858,16 +875,19 @@ module td4cpu_core #(
                         step_insn_fetched <= 1'b0;
                         insn_valid <= 1'b0;
                     end else begin
-                        // Fetch from branch target and increment PC (same as normal fetch)
-                        ram_addr_next <= branch_target_pending;  // FIXED: Set wire for immediate use
+                        // Fetch from branch target
+                        // CRITICAL: Set PC = target (absolute assignment, no increment)
+                        ram_addr_next <= (branch_target_pending <= 16'd1) ? 16'd0 : (branch_target_pending - 16'd1);
                         ram_rd_en <= 1'b1;
-                        fetch_pc <= branch_target_pending;
-                        pc <= branch_target_pending + 16'd1;  // PC advances after fetch
+                        exec_pc <= branch_target_pending;  // Instruction will execute at target PC
+                        pending_insn_pc <= branch_target_pending;  // Save PC for fetch completion
+                        pc <= branch_target_pending;  // Set PC = target
                         // Track step fetch
                         if (step_pending) step_insn_fetched <= 1'b1;
                     end
+                    
+                // Normal fetch operations (no branch active)
                 end else begin
-                    // Normal fetch operations
                     // Breakpoint/validity checks happen here (simplified)
                     if (pc_matches_breakpoint(pc)) begin
                         halted <= 1'b1;
@@ -888,11 +908,13 @@ module td4cpu_core #(
                         branch_pending <= 1'b0;
                     end else begin
                         // Fetch instruction - request RAM read
-                        ram_addr_next <= pc;  // FIXED: Set wire for immediate use
+                        // CRITICAL: PC uses pre-increment, so current PC reads ram[PC-1]
+                        // Label instruction with current PC (where it will execute)
+                        ram_addr_next <= (pc <= 16'd1) ? 16'd0 : (pc - 16'd1);
                         ram_rd_en <= 1'b1;
-                        fetch_pc <= pc;
-                        // PC increment happens after every fetch
-                        pc <= pc + 16'd1;
+                        exec_pc <= pc;  // Record current PC where instruction executes
+                        pending_insn_pc <= pc;  // Save PC for fetch completion
+                        pc <= pc + 16'd1;  // Increment PC for next cycle
                         
                         // Track that step instruction has been fetched
                         if (step_pending) step_insn_fetched <= 1'b1;
@@ -912,9 +934,23 @@ module td4cpu_core #(
             // CRITICAL: Only capture if CPU is still running (prevent halt-time fetch completion)
             if (ram_rd_en && running) begin
                 insn_fetched <= ram_rd_data;
-                insn_fetched_pc <= fetch_pc;  // Capture fetch_pc at instruction valid time
+                insn_fetched_pc <= pending_insn_pc;  // Use saved PC from fetch request (NOT exec_pc)
                 insn_valid <= 1'b1;
                 ram_rd_en <= 1'b0;  // Clear enable
+                
+                // CRITICAL: Also capture decode pipeline immediately to prevent pending_insn_pc overwrite
+                // insn_fetched_pc will be overwritten by next fetch before decode stage runs
+                insn_decoded_reg <= ram_rd_data;
+                insn_decoded_valid <= 1'b1;
+                insn_decoded_pc <= pending_insn_pc;  // Capture atomically with fetch
+                
+                // BUG FIX: Capture br_insn_pc using pending_insn_pc (the PC saved at fetch request)
+                // CRITICAL: exec_pc is global state that updates every fetch cycle and may have
+                // already advanced to PC+1 by fetch completion. Use pending_insn_pc which was
+                // saved atomically with the fetch request and represents the PC of THIS instruction.
+                if (ram_rd_data[15:12] == OP_BR) begin
+                    br_insn_pc <= pending_insn_pc;  // Use fetch-request PC, not stale exec_pc
+                end
             end else if (ram_rd_en && !running && !ram_read_phase) begin
                 // BUG#7 FIX: Discard fetch that completed during halt
                 // ONLY clear if NOT in debug read phase
@@ -922,21 +958,11 @@ module td4cpu_core #(
             end
             
             // Pipeline register: insn_fetched → insn_decoded_reg (timing optimization)
-            // NOTE: Delay slot architecture - pipeline flows continuously, no interlock needed
+            // NOTE: Now captured atomically at fetch completion (line ~950) to prevent overwrite
             // This breaks the critical path from insn_fetched[7] to regfile CE
             if (insn_valid) begin
-                insn_decoded_reg <= insn_fetched;
-                insn_decoded_valid <= 1'b1;
-                insn_decoded_pc <= insn_fetched_pc;  // CRITICAL: Use fetched PC, not current fetch_pc
-                
-                // CRITICAL: Capture PC for BR instructions at decode entry
-                // Use insn_fetched_pc (captured in previous cycle when instruction was fetched).
-                // insn_fetched contains the instruction, insn_fetched_pc contains its PC.
-                // This prevents using fetch_pc which has already advanced to next instruction.
-                if (insn_fetched[15:12] == OP_BR) begin
-                    br_insn_pc <= insn_fetched_pc;  // Use captured PC from fetch stage
-                end
-                
+                // Decode pipeline already captured at fetch completion
+                // Just clear insn_valid flag here
                 insn_valid <= 1'b0;  // Clear after decode
             end
             // NOTE: insn_decoded_valid is cleared after execution, not here
@@ -1117,6 +1143,7 @@ module td4cpu_core #(
                         logic [15:0] br_offset_sext;
                         logic [15:0] br_target_pc;
                         logic br_taken;
+                        logic [2:0] effective_flags;  // FLAG FORWARDING: Use ALU Stage 3 flags if pending
                         
                         br_cond = insn_decoded_reg[11:9];
                         br_offset9 = insn_decoded_reg[8:0];
@@ -1126,43 +1153,72 @@ module td4cpu_core #(
                         
                         // Calculate target PC: PC-relative to BR instruction location
                         // Delay slot architecture (MIPS/SPARC style):
-                        //   BR at PC_BR: calculates target = (PC_BR + 1) + offset
+                        //   BR at PC_BR: calculates target = PC_BR + offset
                         //   Delay slot at PC_BR+1: executes (PC increments naturally)
                         //   After delay slot: PC = target
                         //
                         // Example: BR.AL +2 at PC=1
-                        //   Target = (1 + 1) + 2 = 4
+                        //   Target = 1 + 2 = 3
                         //   Delay slot at PC=2 executes
-                        //   Then jump to PC=4
+                        //   Then jump to PC=3
+                        //
+                        // Example: BR.AL -2 at PC=5
+                        //   Target = 5 + (-2) = 3
+                        //   Delay slot at PC=6 executes  
+                        //   Then jump to PC=3
                         //
                         // CRITICAL FIX: Use br_insn_pc (captured at decode time) to prevent
                         // pipeline overwrites during multi-cycle execution.
                         // br_insn_pc is captured when BR first enters decode stage.
-                        // Formula: target = PC_BR + 1 + offset
-                        br_target_pc = br_insn_pc + 16'd1 + br_offset_sext;
+                        // Formula: target = PC_BR + offset (branch offset is relative to branch PC)
+                        br_target_pc = br_insn_pc + br_offset_sext;
                         
-                        // Evaluate branch condition based on flags
+                        // FLAG FORWARDING: Resolve 3-cycle data hazard for CMP→BR / ADDI→BR
+                        // Problem: CMP/ADDI updates flags in ALU Stage 4 (writeback), but BR
+                        //          reads flags in decode stage (3 cycles earlier).
+                        // Solution: If ALU Stage 3 has pending flag update, forward those flags
+                        //           instead of reading the committed (stale) flags register.
+                        // Example timeline:
+                        //   Cycle N:   CMP decoded
+                        //   Cycle N+1: BR decoded ← reads effective_flags (forwarded from Stage 3)
+                        //              CMP in ALU Stage 2
+                        //   Cycle N+2: BR delay slot, CMP in Stage 3 (flags computed)
+                        //   Cycle N+3: Branch taken, CMP flags written (no longer needed)
+                        if (alu_flags_update_en_hold) begin
+                            effective_flags = alu_flags_hold;  // Forward from ALU Stage 3
+                            $display("[FLAG_FWD] @%0t PC=%0d: Forwarding flags from ALU Stage 3: Z=%b N=%b C=%b (committed: Z=%b N=%b C=%b)", 
+                                    $time, pc, alu_flags_hold[0], alu_flags_hold[1], alu_flags_hold[2],
+                                    flags[0], flags[1], flags[2]);
+                        end else begin
+                            effective_flags = flags;           // Use committed flags
+                            $display("[FLAG_FWD] @%0t PC=%0d: Using committed flags: Z=%b N=%b C=%b", 
+                                    $time, pc, flags[0], flags[1], flags[2]);
+                        end
+                        
+                        // Evaluate branch condition using forwarded flags
                         case (br_cond)
-                            COND_AL: br_taken = 1'b1;              // Always
-                            COND_Z:  br_taken = flags[0];          // Zero flag
-                            COND_NZ: br_taken = ~flags[0];         // Not zero
-                            COND_C:  br_taken = flags[2];          // Carry flag
-                            COND_NC: br_taken = ~flags[2];         // Not carry
-                            COND_N:  br_taken = flags[1];          // Negative flag
-                            COND_NN: br_taken = ~flags[1];         // Not negative
-                            default: br_taken = 1'b0;              // Reserved (no branch)
+                            COND_AL: br_taken = 1'b1;                    // Always
+                            COND_Z:  br_taken = effective_flags[0];      // Zero flag
+                            COND_NZ: br_taken = ~effective_flags[0];     // Not zero
+                            COND_C:  br_taken = effective_flags[2];      // Carry flag
+                            COND_NC: br_taken = ~effective_flags[2];     // Not carry
+                            COND_N:  br_taken = effective_flags[1];      // Negative flag
+                            COND_NN: br_taken = ~effective_flags[1];     // Not negative
+                            default: br_taken = 1'b0;                    // Reserved (no branch)
                         endcase
                         
                         // Update PC if branch taken
-                        // Delay slot architecture (MIPS/SPARC style):
-                        //   When BR executes, delay slot (PC+1) is already in pipeline
-                        //   Stage the target and let delay slot execute
-                        //   After delay slot completes, apply target to PC
+                        // Two-stage branch delay slot architecture:
+                        //   STAGE 1: Branch decodes at PC=N, set branch_delay_slot_active
+                        //   STAGE 2: Delay slot at PC=N+1 executes, then set branch_pending
+                        //   STAGE 3: Branch target applied at PC=T
                         if (br_taken) begin
-                            branch_target_pending <= br_target_pc;  // Stage target
-                            branch_pending <= 1'b1;                 // Mark branch pending
-                            // Delay slot will execute in next cycle
-                            // Then branch_pending triggers PC update in fetch
+                            branch_target_pending <= br_target_pc;      // Stage target
+                            branch_delay_slot_active <= 1'b1;           // Flag delay slot for next cycle
+                            $display("[BR_TARGET] @%0t PC=%0d: Branch taken to target=%0d (br_insn_pc=%0d, offset=%0d)", 
+                                    $time, insn_decoded_pc, br_target_pc, br_insn_pc, $signed(br_offset_sext));
+                            // Delay slot will execute in next fetch cycle
+                            // After delay slot fetch, branch_pending will be set
                         end
                     end
                     
