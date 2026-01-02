@@ -292,6 +292,8 @@ virtual class axiuart_cpu_test_base extends axiuart_base_test;
         #50ns;
     endtask
     
+    // Write instruction to RAM at physical address
+    // Tests must handle CPU fetch offset themselves
     protected task write_insn(bit [15:0] addr, bit [15:0] insn);
         write_reg(CPU_MEM_ADDR, {16'h0000, addr});
         #2us;
@@ -342,6 +344,13 @@ virtual class axiuart_cpu_test_base extends axiuart_base_test;
         read_reg(CPU_MEM_RDATA, rdata);
         data = rdata[15:0];
         #10ns;
+    endtask
+    
+    protected task clear_cpu_memory(bit [15:0] start_addr, bit [15:0] end_addr);
+        for (int i = start_addr; i <= end_addr; i++) begin
+            write_ram_direct(i[15:0], 16'h0000);
+        end
+        `uvm_info(get_type_name(), $sformatf("Cleared memory range 0x%04h - 0x%04h", start_addr, end_addr), UVM_LOW)
     endtask
     
     protected task set_cpu_pc(bit [15:0] pc_value);
