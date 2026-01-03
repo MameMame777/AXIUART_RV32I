@@ -20,8 +20,11 @@ module AXIUART_Top #(
     output logic        uart_tx,
     output logic        uart_rts_n,         // Request to Send (active low)
     input  logic        uart_cts_n,         // Clear to Send (active low)
-    output logic [3:0]  led                 // 4-bit LED control
+    output logic [3:0]  led,                 // 4-bit LED control
     
+    output logic        led5_r,             // RGB LED Red
+    output logic        led5_g,             // RGB LED Green
+    output logic        led5_b             // RGB LED Blue
     // Simulation-only outputs
     `ifdef DEFINE_SIM
     // System status outputs
@@ -89,6 +92,16 @@ module AXIUART_Top #(
         end
     end
     
+    // RGB LED Control
+    always @(posedge clk) begin
+        // Red LED indicates CPU_HALT
+        led5_r = rv32i_cpu_halt ? 1'b1 : 1'b0;
+        // Green LED indicates CPU not halted
+        led5_g = rv32i_cpu_halted ? 1'b0 : 1'b1;
+        // Blue LED is off
+        led5_b = 1'b0;
+    end
+
     // Keep DUT baud rate aligned with UVM driver configuration in all builds
     localparam int EFFECTIVE_BAUD_RATE = BAUD_RATE;
 
