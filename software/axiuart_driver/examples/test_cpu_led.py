@@ -38,7 +38,8 @@ def write_cpu_mem(driver, word_addr, data):
     # Trigger write (full word = 0xF byte enables)
     driver.write_reg32(driver.REG_CPU_MEM_CTRL, MEM_WRITE | 0xF)
     # Wait for completion
-    for _ in range(10):
+    time.sleep(0.002)  # Give hardware time to process
+    for _ in range(20):
         ctrl = driver.read_reg32(driver.REG_CPU_MEM_CTRL)
         if not (ctrl & MEM_BUSY):
             break
