@@ -49,18 +49,16 @@ class axiuart_scoreboard extends uvm_scoreboard;
         pending_cpu_mem_addr = 16'h0000;
         
         // Initialize exclude list for registers that shouldn't be verified against shadow
-        exclude_verify_addrs.push_back(axiuart_reg_pkg::REG_CPU_DBG_STATUS);  // Dynamic: halted/running state
+        // Read-only registers
         exclude_verify_addrs.push_back(axiuart_reg_pkg::REG_VERSION);         // Read-only: hardware version
         exclude_verify_addrs.push_back(axiuart_reg_pkg::REG_TX_COUNT);        // Read-only: TX counter
         exclude_verify_addrs.push_back(axiuart_reg_pkg::REG_RX_COUNT);        // Read-only: RX counter
         exclude_verify_addrs.push_back(axiuart_reg_pkg::REG_FIFO_STAT);       // Read-only: FIFO status
-        exclude_verify_addrs.push_back(axiuart_reg_pkg::REG_CPU_REG_DATA);    // Dynamic: CPU regfile
-        exclude_verify_addrs.push_back(axiuart_reg_pkg::REG_CPU_TRACE_RDATA); // Read-only: trace data
-        exclude_verify_addrs.push_back(axiuart_reg_pkg::REG_CPU_TRACE_PTR);   // Read-only: trace pointer
-        exclude_verify_addrs.push_back(axiuart_reg_pkg::REG_CPU_ID);          // Read-only: CPU ID
         exclude_verify_addrs.push_back(axiuart_reg_pkg::REG_REVISION);        // Read-only: revision
-        exclude_verify_addrs.push_back(axiuart_reg_pkg::REG_CPU_PC);          // Dynamic: changes on execution
-        exclude_verify_addrs.push_back(axiuart_reg_pkg::REG_CPU_SP);          // Dynamic: changes on execution
+        exclude_verify_addrs.push_back(axiuart_reg_pkg::REG_CPU_MEM_RDATA);   // Read-only: CPU memory read data
+        
+        // Dynamic registers (RV32I CPU status/control)
+        exclude_verify_addrs.push_back(axiuart_reg_pkg::REG_CPU_MEM_CTRL);    // Dynamic: CPU control/status bits
     endfunction
     
     // Helper function: Check if address should be excluded from verification

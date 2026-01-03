@@ -52,38 +52,8 @@
       ]
     },
     "cpu": {
-      "description": "CPU functionality tests",
+      "description": "RV32I CPU functionality tests",
       "tests": [
-        {
-          "name": "axiuart_cpu_simple_mem_test",
-          "description": "Simple CPU memory operations",
-          "timeout": 300,
-          "expected_duration": 60
-        },
-        {
-          "name": "axiuart_cpu_memory_test",
-          "description": "Comprehensive CPU memory test",
-          "timeout": 600,
-          "expected_duration": 180
-        },
-        {
-          "name": "axiuart_cpu_debug_test",
-          "description": "CPU debug interface test",
-          "timeout": 300,
-          "expected_duration": 90
-        },
-        {
-          "name": "axiuart_cpu_mmio_led_test",
-          "description": "CPU MMIO LED control via LD/ST",
-          "timeout": 300,
-          "expected_duration": 60
-        },
-        {
-          "name": "axiuart_cpu_br_test",
-          "description": "CPU branch instruction with all conditions",
-          "timeout": 300,
-          "expected_duration": 90
-        },
         {
           "name": "rv32i_basic",
           "description": "RV32I CPU UVM verification",
@@ -93,7 +63,7 @@
       ]
     },
     "full": {
-      "description": "Complete regression test suite",
+      "description": "Complete regression test suite (RV32I-only)",
       "tests": [
         {
           "name": "axiuart_reset_test",
@@ -112,34 +82,39 @@
           "description": "Register read/write operations",
           "timeout": 180,
           "expected_duration": 45
-        },
+        }
+      ]
+    },
+    "td4_deprecated": {
+      "description": "TD4 CPU tests (deprecated, kept for reference)",
+      "tests": [
         {
           "name": "axiuart_cpu_simple_mem_test",
-          "description": "Simple CPU memory operations",
+          "description": "Simple CPU memory operations (TD4-specific)",
           "timeout": 300,
           "expected_duration": 60
         },
         {
           "name": "axiuart_cpu_memory_test",
-          "description": "Comprehensive CPU memory test",
+          "description": "Comprehensive CPU memory test (TD4-specific)",
           "timeout": 600,
           "expected_duration": 180
         },
         {
           "name": "axiuart_cpu_debug_test",
-          "description": "CPU debug interface test",
+          "description": "CPU debug interface test (TD4-specific)",
           "timeout": 300,
           "expected_duration": 90
         },
         {
           "name": "axiuart_cpu_mmio_led_test",
-          "description": "CPU MMIO LED control via LD/ST",
+          "description": "CPU MMIO LED control via LD/ST (TD4-specific)",
           "timeout": 300,
           "expected_duration": 60
         },
         {
           "name": "axiuart_cpu_br_test",
-          "description": "CPU branch instruction with all conditions",
+          "description": "CPU branch instruction with all conditions (TD4-specific)",
           "timeout": 300,
           "expected_duration": 90
         }

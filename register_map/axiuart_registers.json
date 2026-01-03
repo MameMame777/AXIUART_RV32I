@@ -108,164 +108,44 @@
       "description": "Test register 4 - gap test"
     },
     {
-      "name": "CPU_DBG_CTRL",
-      "offset": "0x200",
-      "access": "RW",
-      "width_bits": 32,
-      "reset": "0x00000000",
-      "description": "CPU debug control: halt/run/step requests, halt_on_reset, breakpoint global enable"
-    },
-    {
-      "name": "CPU_DBG_STATUS",
-      "offset": "0x204",
-      "access": "RO",
-      "width_bits": 32,
-      "reset": "0x00000001",
-      "description": "CPU debug status: halted/running, break/brk hit, halt reason"
-    },
-    {
-      "name": "CPU_PC",
-      "offset": "0x208",
-      "access": "RW",
-      "width_bits": 32,
-      "reset": "0x00000000",
-      "description": "CPU program counter (word address). Write allowed only when halted"
-    },
-    {
-      "name": "CPU_SP",
-      "offset": "0x20C",
-      "access": "RW",
-      "width_bits": 32,
-      "reset": "0x0000FFFE",
-      "description": "CPU stack pointer (word address). Write allowed only when halted"
-    },
-    {
-      "name": "CPU_FLAGS",
-      "offset": "0x210",
-      "access": "RW",
-      "width_bits": 32,
-      "reset": "0x00000000",
-      "description": "CPU flags (Z/N/C in low bits). Write allowed only when halted"
-    },
-    {
-      "name": "CPU_REG_INDEX",
-      "offset": "0x214",
-      "access": "RW",
-      "width_bits": 32,
-      "reset": "0x00000000",
-      "description": "CPU register index selector (0..7)"
-    },
-    {
-      "name": "CPU_REG_DATA",
-      "offset": "0x218",
-      "access": "RW",
-      "width_bits": 32,
-      "reset": "0x00000000",
-      "description": "CPU selected register data (16-bit). Write allowed only when halted"
-    },
-    {
-      "name": "CPU_BP0_PC",
-      "offset": "0x21C",
-      "access": "RW",
-      "width_bits": 32,
-      "reset": "0x00000000",
-      "description": "Breakpoint 0 PC match value (word address)"
-    },
-    {
-      "name": "CPU_BP1_PC",
-      "offset": "0x220",
-      "access": "RW",
-      "width_bits": 32,
-      "reset": "0x00000000",
-      "description": "Breakpoint 1 PC match value (word address)"
-    },
-    {
-      "name": "CPU_BP_CTRL",
-      "offset": "0x224",
-      "access": "RW",
-      "width_bits": 32,
-      "reset": "0x00000004",
-      "description": "Breakpoint control (BP0_EN/BP1_EN/BP_MATCH_FETCH)"
-    },
-    {
       "name": "CPU_MEM_ADDR",
-      "offset": "0x228",
+      "offset": "0x1228",
       "access": "RW",
       "width_bits": 32,
       "reset": "0x00000000",
-      "description": "Debug memory address (word address)"
+      "description": "RV32I CPU memory address (32-bit byte address, converted to word address [12:2] internally for 8KB RAM)"
     },
     {
       "name": "CPU_MEM_WDATA",
-      "offset": "0x22C",
+      "offset": "0x122C",
       "access": "RW",
       "width_bits": 32,
       "reset": "0x00000000",
-      "description": "Debug memory write data (16-bit in low bits)"
+      "description": "RV32I CPU memory write data (full 32-bit data)"
     },
     {
       "name": "CPU_MEM_RDATA",
-      "offset": "0x230",
+      "offset": "0x1230",
       "access": "RO",
       "width_bits": 32,
       "reset": "0x00000000",
-      "description": "Debug memory read data (16-bit in low bits)"
+      "description": "RV32I CPU memory read data (full 32-bit data, captured after read operation)"
     },
     {
       "name": "CPU_MEM_CTRL",
-      "offset": "0x234",
+      "offset": "0x1234",
       "access": "RW",
       "width_bits": 32,
       "reset": "0x00000000",
-      "description": "Debug memory control: read/write request, auto-inc, busy/err"
-    },
-    {
-      "name": "CPU_TRACE_ADDR",
-      "offset": "0x238",
-      "access": "RW",
-      "width_bits": 32,
-      "reset": "0x00000000",
-      "description": "Trace buffer read address (entry index 0-255)"
-    },
-    {
-      "name": "CPU_TRACE_RDATA",
-      "offset": "0x23C",
-      "access": "RO",
-      "width_bits": 32,
-      "reset": "0x00000000",
-      "description": "Trace buffer read data (32-bit: [31:16]=insn, [15:0]=result)"
-    },
-    {
-      "name": "CPU_TRACE_CTRL",
-      "offset": "0x240",
-      "access": "RW",
-      "width_bits": 32,
-      "reset": "0x00000001",
-      "description": "Trace control: [0]=enable (default 1), [1]=clear_pulse"
-    },
-    {
-      "name": "CPU_TRACE_PTR",
-      "offset": "0x244",
-      "access": "RO",
-      "width_bits": 32,
-      "reset": "0x00000000",
-      "description": "Trace buffer write pointer (0-255, increments on each execution)"
-    },
-    {
-      "name": "CPU_ID",
-      "offset": "0x248",
-      "access": "RO",
-      "width_bits": 32,
-      "reset": "0x54443331",
-      "description": "CPU identification/version (ASCII 'TD31' placeholder)"
+      "description": "RV32I CPU control and memory access: [3:0]=byte_enables, [4]=read_req(W1P), [5]=write_req(W1P), [6]=busy(RO), [7]=cpu_run, [8]=cpu_halt, [9]=cpu_halted(RO), [10]=cpu_break(RO)"
     },
     {
       "name": "REVISION",
-      "offset": "0x24C",
+      "offset": "0x123C",
       "access": "RO",
       "width_bits": 32,
-      "reset": "0x20251228",
-      "description": "Hardware revision (date-based: 0xYYYYMMDD)"
+      "reset": "0x20260103",
+      "description": "Hardware revision (RV32I-only design, date: 2026-01-03)"
     }
   ]
 }

@@ -12,16 +12,6 @@ module axiuart_tb_top;
     // Instantiate interfaces
     uart_if uart_vif(clk);
     
-    // CPU trace signals from DUT
-    logic        cpu_trace_valid;
-    logic [15:0] cpu_trace_insn;
-    logic [15:0] cpu_trace_pc;
-    logic [2:0]  cpu_trace_rd_idx;
-    logic [15:0] cpu_trace_rd_value;
-    logic [2:0]  cpu_trace_rs_idx;
-    logic [15:0] cpu_trace_rs_value;
-    logic [2:0]  cpu_trace_flags;
-    
     // LED output from DUT
     logic [3:0] led;
     
@@ -44,17 +34,7 @@ module axiuart_tb_top;
         .uart_tx(uart_vif.uart_tx),
         .uart_rts_n(uart_vif.uart_rts_n),
         .uart_cts_n(uart_vif.uart_cts_n),
-        .led(led),  // Connect LED output to testbench signal
-        
-        // CPU trace outputs
-        .cpu_trace_valid(cpu_trace_valid),
-        .cpu_trace_insn(cpu_trace_insn),
-        .cpu_trace_pc(cpu_trace_pc),
-        .cpu_trace_rd_idx(cpu_trace_rd_idx),
-        .cpu_trace_rd_value(cpu_trace_rd_value),
-        .cpu_trace_rs_idx(cpu_trace_rs_idx),
-        .cpu_trace_rs_value(cpu_trace_rs_value),
-        .cpu_trace_flags(cpu_trace_flags)
+        .led(led)  // Connect LED output to testbench signal
     );
     
     // Clock generation
