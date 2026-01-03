@@ -114,15 +114,15 @@ module AXIUART_Top #(
 
     always_ff @(posedge clk) begin
         if (rst) begin
-            led_r_brightness <= CPU_HALT_BRIGHTNESS; // Default: 50% brightness
-            led_g_brightness <= CPU_RUN_BRIGHTNESS;  // Default: 50% brightness
-            led_b_brightness <= 8'd0;    // Default: Off
+            led_r_brightness <= CPU_HALT_BRIGHTNESS; // Default: 50% brightness (halted at reset)
+            led_g_brightness <= 8'd0;                // Default: Off (not running at reset)
+            led_b_brightness <= 8'd0;                // Default: Off
         end else begin
-            // Red LED: Full brightness when CPU halted, dim when running
-            led_r_brightness <= rv32i_cpu_halt ? 8'd255 : 8'd32;
-            // Green LED: Full brightness when CPU running, off when halted
+            // Red LED: Bright when CPU halted, off when running
+            led_r_brightness <= rv32i_cpu_halted ? 8'd255 : 8'd0;
+            // Green LED: Bright when CPU running, off when halted
             led_g_brightness <= rv32i_cpu_halted ? 8'd0 : 8'd192;
-            // Blue LED: Blink on CPU break
+            // Blue LED: Bright on CPU break
             led_b_brightness <= rv32i_cpu_break ? 8'd255 : 8'd0;
         end
     end
