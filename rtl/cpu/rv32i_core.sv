@@ -431,22 +431,23 @@ module rv32i_core
     
     // Forwarding multiplexers using pre-computed controls (Phase 2B)
     // Control signals are registered in id_ex_reg, eliminating combinational logic
+    // Encoding: 2'b00=RF, 2'b01=EX/MEM forward, 2'b10=MEM/WB forward, 2'b11=MEM/WB forward
     always_comb begin
         (* parallel_case, full_case *)
         case (id_ex_reg.forward_rs1)
             2'b00:   ex_rs1_forwarded = id_ex_reg.rs1_data;      // Register file
-            2'b01:   ex_rs1_forwarded = ex_mem_reg.alu_result;   // EX stage forward
-            2'b10:   ex_rs1_forwarded = ex_mem_reg.alu_result;   // MEM stage forward
-            2'b11:   ex_rs1_forwarded = mem_wb_reg.result;       // WB stage forward
+            2'b01:   ex_rs1_forwarded = ex_mem_reg.alu_result;   // EX-to-EX forward (from EX/MEM)
+            2'b10:   ex_rs1_forwarded = mem_wb_reg.result;       // MEM-to-EX forward (from MEM/WB)
+            2'b11:   ex_rs1_forwarded = mem_wb_reg.result;       // WB-to-EX forward (from MEM/WB)
             default: ex_rs1_forwarded = id_ex_reg.rs1_data;
         endcase
         
         (* parallel_case, full_case *)
         case (id_ex_reg.forward_rs2)
             2'b00:   ex_rs2_forwarded = id_ex_reg.rs2_data;      // Register file
-            2'b01:   ex_rs2_forwarded = ex_mem_reg.alu_result;   // EX stage forward
-            2'b10:   ex_rs2_forwarded = ex_mem_reg.alu_result;   // MEM stage forward
-            2'b11:   ex_rs2_forwarded = mem_wb_reg.result;       // WB stage forward
+            2'b01:   ex_rs2_forwarded = ex_mem_reg.alu_result;   // EX-to-EX forward (from EX/MEM)
+            2'b10:   ex_rs2_forwarded = mem_wb_reg.result;       // MEM-to-EX forward (from MEM/WB)
+            2'b11:   ex_rs2_forwarded = mem_wb_reg.result;       // WB-to-EX forward (from MEM/WB)
             default: ex_rs2_forwarded = id_ex_reg.rs2_data;
         endcase
     end
