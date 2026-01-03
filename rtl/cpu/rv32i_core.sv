@@ -312,6 +312,9 @@ module rv32i_core
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             pc_if <= 32'h00000000;
+        end else if (cpu_run && cpu_halted) begin
+            // Reset PC to 0 when starting from halted state
+            pc_if <= 32'h00000000;
         end else if (running && !cpu_halt) begin
             pc_if <= pc_next;
         end

@@ -53,6 +53,13 @@
 # Top Level
 ../../../rtl/AXIUART_Top.sv
 
+# Assertions - Debug Port
+../../assertions/rv32i_debug_port_assertions.sv
+
+# Assertions - Register Block CPU Memory Interface
+../../assertions/register_block_cpu_mem_assertions.sv
+../../assertions/bind_register_block_cpu_mem.sv
+
 # Testbench Top Module (includes package and test_lib)
 +incdir+.
 ./axiuart_tb_top.sv

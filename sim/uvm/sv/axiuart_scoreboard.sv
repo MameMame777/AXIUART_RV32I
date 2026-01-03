@@ -18,10 +18,10 @@ class axiuart_scoreboard extends uvm_scoreboard;
     // Register write tracking: address -> expected data
     bit [31:0] write_shadow_regs[bit [31:0]];
     
-    // CPU Memory Debug tracking
-    bit [15:0] cpu_memory_shadow[bit [15:0]];  // CPU internal memory shadow
-    bit [15:0] pending_cpu_mem_addr;            // Current CPU_MEM_ADDR value
-    bit [15:0] cpu_mem_read_queue[$];          // Queue of addresses for pending reads
+    // CPU Memory Debug tracking (32-bit words, 11-bit word address)
+    bit [31:0] cpu_memory_shadow[bit [10:0]];  // Shadow memory: 2048 words × 32-bit
+    bit [10:0] pending_cpu_mem_addr;            // Current CPU_MEM_ADDR value (word address)
+    bit [10:0] cpu_mem_read_queue[$];          // Queue of word addresses for pending reads
     int cpu_memory_match_count;
     int cpu_memory_mismatch_count;
     int cpu_memory_write_count;
@@ -123,23 +123,23 @@ class axiuart_scoreboard extends uvm_scoreboard;
     virtual function void track_write_transaction(uart_transaction trans);
         // Track CPU memory debug operations
         if (trans.address == axiuart_reg_pkg::REG_CPU_MEM_ADDR) begin
-            pending_cpu_mem_addr = trans.data[15:0];
+            pending_cpu_mem_addr = trans.data[10:0];  // Extract 11-bit word address
             `uvm_info("SCOREBOARD", 
-                $sformatf("CPU_MEM_ADDR set: 0x%04X", pending_cpu_mem_addr), 
+                $sformatf("CPU_MEM_ADDR set: 0x%03X (word address)", pending_cpu_mem_addr), 
                 UVM_HIGH)
         end else if (trans.address == axiuart_reg_pkg::REG_CPU_MEM_WDATA) begin
-            cpu_memory_shadow[pending_cpu_mem_addr] = trans.data[15:0];
+            cpu_memory_shadow[pending_cpu_mem_addr] = trans.data;  // Full 32-bit data
             cpu_memory_write_count++;
             `uvm_info("SCOREBOARD", 
-                $sformatf("CPU_MEM write: ADDR=0x%04X DATA=0x%04X (total: %0d)", 
-                          pending_cpu_mem_addr, trans.data[15:0], cpu_memory_write_count), 
+                $sformatf("CPU_MEM write: ADDR=0x%03X DATA=0x%08X (total: %0d)", 
+                          pending_cpu_mem_addr, trans.data, cpu_memory_write_count), 
                 UVM_MEDIUM)
         end else if (trans.address == axiuart_reg_pkg::REG_CPU_MEM_CTRL) begin
-            // If read request (bit 0), enqueue current address for future verification
-            if (trans.data[0] == 1'b1) begin
+            // If read request (bit 4), enqueue current address for future verification
+            if (trans.data[4] == 1'b1) begin
                 cpu_mem_read_queue.push_back(pending_cpu_mem_addr);
                 `uvm_info("SCOREBOARD", 
-                    $sformatf("CPU_MEM read request queued: ADDR=0x%04X (queue size: %0d)", 
+                    $sformatf("CPU_MEM read request queued: ADDR=0x%03X (queue size: %0d)", 
                               pending_cpu_mem_addr, cpu_mem_read_queue.size()), 
                     UVM_HIGH)
             end
@@ -159,19 +159,19 @@ class axiuart_scoreboard extends uvm_scoreboard;
         
         read_count++;
         
-        // Special handling for CPU_MEM_RDATA
+        // Special handling for CPU_MEM_RDATA (32-bit register)
         if (trans.address == axiuart_reg_pkg::REG_CPU_MEM_RDATA) begin
-            bit [15:0] expected_mem_data;
-            bit [15:0] actual_mem_data;
-            bit [15:0] read_addr;
+            bit [31:0] expected_mem_data;
+            bit [31:0] actual_mem_data;
+            bit [10:0] read_addr;  // 11-bit word address (0x000-0x7FF)
             
             cpu_memory_read_count++;
-            actual_mem_data = trans.read_response_data[15:0];
+            actual_mem_data = trans.read_response_data;  // Full 32-bit value
             
             // Pop address from queue for this read response
             if (cpu_mem_read_queue.size() == 0) begin
                 `uvm_error("SCOREBOARD", 
-                    $sformatf("CPU_MEM_RDATA response with empty read queue! DATA=0x%04X", actual_mem_data))
+                    $sformatf("CPU_MEM_RDATA response with empty read queue! DATA=0x%08X", actual_mem_data))
                 return;
             end
             
@@ -183,18 +183,18 @@ class axiuart_scoreboard extends uvm_scoreboard;
                 if (actual_mem_data == expected_mem_data) begin
                     cpu_memory_match_count++;
                     `uvm_info("SCOREBOARD", 
-                        $sformatf("CPU_MEM READ MATCH: ADDR=0x%04X Expected=0x%04X Got=0x%04X", 
+                        $sformatf("CPU_MEM READ MATCH: ADDR=0x%03X Expected=0x%08X Got=0x%08X", 
                                   read_addr, expected_mem_data, actual_mem_data), 
                         UVM_MEDIUM)
                 end else begin
                     cpu_memory_mismatch_count++;
                     `uvm_error("SCOREBOARD", 
-                        $sformatf("CPU_MEM READ MISMATCH: ADDR=0x%04X Expected=0x%04X Got=0x%04X",
+                        $sformatf("CPU_MEM READ MISMATCH: ADDR=0x%03X Expected=0x%08X Got=0x%08X",
                                   read_addr, expected_mem_data, actual_mem_data))
                 end
             end else begin
                 `uvm_warning("SCOREBOARD", 
-                    $sformatf("CPU_MEM read from unwritten address: ADDR=0x%04X DATA=0x%04X",
+                    $sformatf("CPU_MEM read from unwritten address: ADDR=0x%03X DATA=0x%08X",
                               read_addr, actual_mem_data))
             end
             return;  // Skip normal register verification for CPU_MEM_RDATA
