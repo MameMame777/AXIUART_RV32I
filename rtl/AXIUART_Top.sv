@@ -92,14 +92,52 @@ module AXIUART_Top #(
         end
     end
     
-    // RGB LED Control
-    always @(posedge clk) begin
-        // Red LED indicates CPU_HALT
-        led5_r = rv32i_cpu_halt ? 1'b1 : 1'b0;
-        // Green LED indicates CPU not halted
-        led5_g = rv32i_cpu_halted ? 1'b0 : 1'b1;
-        // Blue LED is off
-        led5_b = 1'b0;
+    // RGB LED PWM Control
+    // 8-bit PWM counter for brightness control
+    logic [7:0] pwm_counter;
+    logic [7:0] led_r_brightness;  // Red brightness threshold (0=off, 255=full)
+    logic [7:0] led_g_brightness;  // Green brightness threshold
+    logic [7:0] led_b_brightness;  // Blue brightness threshold
+    
+    // PWM counter: Free-running 8-bit counter (488kHz @ 125MHz)
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            pwm_counter <= 8'h00;
+        end else begin
+            pwm_counter <= pwm_counter + 1'b1;  // Wrap at 255
+        end
+    end
+    
+    // Brightness control logic
+    localparam int CPU_HALT_BRIGHTNESS = 8'd128;
+    localparam int CPU_RUN_BRIGHTNESS  = 8'd128;
+
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            led_r_brightness <= CPU_HALT_BRIGHTNESS; // Default: 50% brightness
+            led_g_brightness <= CPU_RUN_BRIGHTNESS;  // Default: 50% brightness
+            led_b_brightness <= 8'd0;    // Default: Off
+        end else begin
+            // Red LED: Full brightness when CPU halted, dim when running
+            led_r_brightness <= rv32i_cpu_halt ? 8'd255 : 8'd32;
+            // Green LED: Full brightness when CPU running, off when halted
+            led_g_brightness <= rv32i_cpu_halted ? 8'd0 : 8'd192;
+            // Blue LED: Blink on CPU break
+            led_b_brightness <= rv32i_cpu_break ? 8'd255 : 8'd0;
+        end
+    end
+    
+    // PWM output generation: LED on when counter < brightness
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            led5_r <= 1'b0;
+            led5_g <= 1'b0;
+            led5_b <= 1'b0;
+        end else begin
+            led5_r <= (pwm_counter < led_r_brightness);
+            led5_g <= (pwm_counter < led_g_brightness);
+            led5_b <= (pwm_counter < led_b_brightness);
+        end
     end
 
     // Keep DUT baud rate aligned with UVM driver configuration in all builds
