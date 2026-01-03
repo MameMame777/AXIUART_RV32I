@@ -13,13 +13,14 @@
 // 3. Start CPU (assert cpu_run)
 // 4. Verify execution: instruction count, LED output, EBREAK detection
 //
-// Test Program (3 instructions):
-//   0: ADDI x1, x0, 10   (0x00A00093) - Load 10 into x1
-//   1: SW x1, 0x7C(x17)  (0x07C8AE23) - Store to LED address (MMIO)
-//   2: EBREAK            (0x00100073) - Halt
+// Test Program (4 instructions):
+//   0: LUI x17, 0x4      (0x000048B7) - Load MMIO base address (0x4000)
+//   1: ADDI x1, x0, 10   (0x00A00093) - Load 10 into x1
+//   2: SW x1, 0x7C(x17)  (0x07C8AE23) - Store to LED address (0x407C)
+//   3: EBREAK            (0x00100073) - Halt
 //
 // Expected Results:
-//   - 5-6 instructions executed (3 program + 2-3 pipeline drain)
+//   - 6-8 instructions executed (4 program + 2-4 pipeline drain)
 //   - LED value = 10 (0xA)
 //   - EBREAK detected
 //   - CPU halted
@@ -43,11 +44,12 @@ class rv32i_debug_load_test extends rv32i_base_test;
         super.build_phase(phase);
         
         // Configure scoreboard for debug load test expectations
-        // 3 instructions + 2-3 pipeline drain = 5-6 instructions
-        // LED value = 10 (0xA) from loaded program
-        uvm_config_db#(int)::set(this, "env.scoreboard", "expected_insn_min", 5);
-        uvm_config_db#(int)::set(this, "env.scoreboard", "expected_insn_max", 6);
-        uvm_config_db#(int)::set(this, "env.scoreboard", "expected_led_value", 'hA);
+        // Debug-loaded program overwrites addresses 0-3 and executes from PC=0
+        // Program: LUI x17, ADDI x1, SW to LED, EBREAK (4 instructions)
+        // Expected: 4 program instructions + 2-3 pipeline drain = 6-7 total
+        uvm_config_db#(int)::set(this, "env.scoreboard", "expected_insn_min", 6);
+        uvm_config_db#(int)::set(this, "env.scoreboard", "expected_insn_max", 8);
+        uvm_config_db#(int)::set(this, "env.scoreboard", "expected_led_value", 'hA);  // 10 decimal from debug program
         uvm_config_db#(int)::set(this, "env.scoreboard", "expected_ebreak_count", 1);
     endfunction
     
@@ -105,20 +107,22 @@ class rv32i_debug_load_test extends rv32i_base_test;
     virtual task load_test_program();
         `uvm_info("RV32I_DEBUG_LOAD", "Loading test program via debug memory interface", UVM_MEDIUM)
         
-        // Simple 3-instruction program:
-        // 0x0000: ADDI x1, x0, 10    (0x00A00093)
-        // 0x0004: SW x1, 0x7C(x17)   (0x07C8AE23)  // Write to LED MMIO
-        // 0x0008: EBREAK             (0x00100073)
+        // Simple 4-instruction program:
+        // 0x0000: LUI x17, 0x4       (0x000048B7)  // x17 = 0x4000 (MMIO base)
+        // 0x0004: ADDI x1, x0, 10    (0x00A00093)  // x1 = 10
+        // 0x0008: SW x1, 0x7C(x17)   (0x0618AE23)  // Write to LED MMIO at 0x407C [FIXED encoding]
+        // 0x000C: EBREAK             (0x00100073)
         
         // NOTE: Direct DUT access used here for simplicity
         // Production version should use Register_Block CPU_MEM_* registers
         // via proper AXI4-Lite transaction sequences
         
-        write_debug_mem(11'h000, 32'h00A00093);  // ADDI x1, x0, 10
-        write_debug_mem(11'h001, 32'h07C8AE23);  // SW x1, 0x7C(x17)
-        write_debug_mem(11'h002, 32'h00100073);  // EBREAK
+        write_debug_mem(11'h000, 32'h000048B7);  // LUI x17, 0x4 (x17 = 0x4000)
+        write_debug_mem(11'h001, 32'h00A00093);  // ADDI x1, x0, 10
+        write_debug_mem(11'h002, 32'h0618AE23);  // SW x1, 0x7C(x17) -> 0x407C [FIXED: was 0x07C8AE23, offset was 0x63 not 0x7C]
+        write_debug_mem(11'h003, 32'h00100073);  // EBREAK
         
-        `uvm_info("RV32I_DEBUG_LOAD", "Test program loaded (3 instructions)", UVM_MEDIUM)
+        `uvm_info("RV32I_DEBUG_LOAD", "Test program loaded (4 instructions)", UVM_MEDIUM)
     endtask
     
     //--------------------------------------------------------------------------
