@@ -60,12 +60,12 @@ class RegressionRunner:
         self.results.append(result)
         
         if result['status'] == 'PASS':
-            print(f"  ✓ PASS ({result['duration']:.1f}s)")
+            print(f"  [PASS] ({result['duration']:.1f}s)")
         elif result['status'] == 'FAIL':
-            print(f"  ✗ FAIL ({result['duration']:.1f}s)")
+            print(f"  [FAIL] ({result['duration']:.1f}s)")
             print(f"    Error: {result['error']}")
         else:
-            print(f"  ⊘ SKIP - {result['error']}")
+            print(f"  [SKIP] - {result['error']}")
         
         self.end_time = datetime.now()
         
@@ -130,18 +130,18 @@ class RegressionRunner:
             
             if result['status'] == 'PASS':
                 passed += 1
-                print(f"  ✓ PASS ({result['duration']:.1f}s)")
+                print(f"  [PASS] ({result['duration']:.1f}s)")
             elif result['status'] == 'FAIL':
                 failed += 1
-                print(f"  ✗ FAIL ({result['duration']:.1f}s)")
+                print(f"  [FAIL] ({result['duration']:.1f}s)")
                 print(f"    Error: {result['error']}")
                 
                 if stop_on_failure:
-                    print(f"\n⚠ Stopping on failure (--stop-on-failure enabled)")
+                    print(f"\n[WARNING] Stopping on failure (--stop-on-failure enabled)")
                     break
             else:
                 skipped += 1
-                print(f"  ⊘ SKIP - {result['error']}")
+                print(f"  [SKIP] - {result['error']}")
         
         self.end_time = datetime.now()
         

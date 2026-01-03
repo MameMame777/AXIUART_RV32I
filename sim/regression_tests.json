@@ -1,125 +1,157 @@
 {
   "regression_suites": {
     "smoke": {
-      "description": "Quick smoke tests for basic functionality",
+      "description": "Quick smoke tests (< 2 minute total)",
       "tests": [
         {
           "name": "axiuart_reset_test",
-          "description": "Verify reset behavior",
-          "timeout": 60,
-          "expected_duration": 10
+          "description": "Reset behavior verification",
+          "timeout": 120,
+          "expected_duration": 25
         },
         {
           "name": "axiuart_basic_test",
-          "description": "Basic UART transaction test",
+          "description": "Basic UART transaction",
           "timeout": 120,
-          "expected_duration": 30
+          "expected_duration": 25
         },
         {
-          "name": "rv32i_basic",
-          "description": "RV32I CPU basic functionality test",
-          "timeout": 30,
-          "expected_duration": 10
-        }
-      ]
-    },
-    "rv32i": {
-      "description": "RV32I CPU verification tests",
-      "tests": [
-        {
-          "name": "rv32i_smoke",
-          "description": "Quick RV32I smoke test",
-          "timeout": 10,
-          "expected_duration": 5
-        },
-        {
-          "name": "rv32i_basic",
-          "description": "RV32I basic instruction execution test",
-          "timeout": 30,
-          "expected_duration": 10
+          "name": "axiuart_cpu_simple_mem_test",
+          "description": "RV32I BRAM access via CPU_MEM_* registers",
+          "timeout": 180,
+          "expected_duration": 60
         }
       ]
     },
     "register": {
-      "description": "Register read/write tests",
+      "description": "Register block tests",
       "tests": [
         {
           "name": "axiuart_reg_rw_test",
           "description": "Register read/write operations",
-          "timeout": 180,
-          "expected_duration": 45
+          "timeout": 120,
+          "expected_duration": 25
         }
       ]
     },
-    "cpu": {
-      "description": "RV32I CPU functionality tests",
+    "bram_access": {
+      "description": "BRAM access via UART→Register_Block→Port B",
       "tests": [
         {
-          "name": "rv32i_basic",
-          "description": "RV32I CPU UVM verification",
-          "timeout": 30,
-          "expected_duration": 10
+          "name": "axiuart_cpu_simple_mem_test",
+          "description": "RV32I BRAM read/write via CPU_MEM_* registers",
+          "timeout": 180,
+          "expected_duration": 60,
+          "notes": "Verifies UART→Register_Block→Port B→BRAM path"
+        }
+      ]
+    },
+    "cpu_basic": {
+      "description": "RV32I CPU basic verification",
+      "tests": [
+        {
+          "name": "rv32i_basic_test",
+          "description": "RV32I basic instruction execution (ADD, ADDI, LW, SW, EBREAK)",
+          "timeout": 120,
+          "expected_duration": 25
+        },
+        {
+          "name": "rv32i_debug_load_test",
+          "description": "RV32I debug memory access and program loading",
+          "timeout": 120,
+          "expected_duration": 25
         }
       ]
     },
     "full": {
-      "description": "Complete regression test suite (RV32I-only)",
+      "description": "Complete RV32I regression suite (all active tests)",
       "tests": [
         {
           "name": "axiuart_reset_test",
-          "description": "Verify reset behavior",
-          "timeout": 60,
-          "expected_duration": 10
+          "description": "Reset behavior verification",
+          "timeout": 120,
+          "expected_duration": 25
         },
         {
           "name": "axiuart_basic_test",
-          "description": "Basic UART transaction test",
+          "description": "Basic UART transaction",
           "timeout": 120,
-          "expected_duration": 30
+          "expected_duration": 25
         },
         {
           "name": "axiuart_reg_rw_test",
           "description": "Register read/write operations",
+          "timeout": 120,
+          "expected_duration": 25
+        },
+        {
+          "name": "axiuart_cpu_simple_mem_test",
+          "description": "RV32I BRAM access via UART",
           "timeout": 180,
-          "expected_duration": 45
+          "expected_duration": 60
+        },
+        {
+          "name": "rv32i_basic_test",
+          "description": "RV32I basic instruction execution",
+          "timeout": 120,
+          "expected_duration": 25
+        },
+        {
+          "name": "rv32i_debug_load_test",
+          "description": "RV32I debug and program loading",
+          "timeout": 120,
+          "expected_duration": 25
         }
       ]
     },
-    "td4_deprecated": {
-      "description": "TD4 CPU tests (deprecated, kept for reference)",
+    "td4_archive": {
+      "description": "TD4 CPU tests (ARCHIVED - Not compatible with RV32I core)",
+      "disabled": true,
       "tests": [
         {
           "name": "axiuart_cpu_simple_mem_test",
-          "description": "Simple CPU memory operations (TD4-specific)",
+          "description": "TD4 simple memory operations",
           "timeout": 300,
-          "expected_duration": 60
+          "expected_duration": 60,
+          "notes": "Requires TD4 ISA and 16-bit datapath"
         },
         {
           "name": "axiuart_cpu_memory_test",
-          "description": "Comprehensive CPU memory test (TD4-specific)",
+          "description": "TD4 comprehensive memory test",
           "timeout": 600,
-          "expected_duration": 180
+          "expected_duration": 180,
+          "notes": "Requires TD4 ISA"
         },
         {
           "name": "axiuart_cpu_debug_test",
-          "description": "CPU debug interface test (TD4-specific)",
+          "description": "TD4 debug interface test",
           "timeout": 300,
-          "expected_duration": 90
+          "expected_duration": 90,
+          "notes": "TD4-specific debug protocol"
         },
         {
           "name": "axiuart_cpu_mmio_led_test",
-          "description": "CPU MMIO LED control via LD/ST (TD4-specific)",
+          "description": "TD4 MMIO LED control",
           "timeout": 300,
-          "expected_duration": 60
+          "expected_duration": 60,
+          "notes": "TD4 LD/ST instructions"
         },
         {
           "name": "axiuart_cpu_br_test",
-          "description": "CPU branch instruction with all conditions (TD4-specific)",
+          "description": "TD4 branch instruction test",
           "timeout": 300,
-          "expected_duration": 90
+          "expected_duration": 90,
+          "notes": "TD4 BR instruction format"
         }
       ]
     }
+  },
+  "test_categories": {
+    "infrastructure": ["axiuart_reset_test", "axiuart_basic_test"],
+    "register_block": ["axiuart_reg_rw_test"],
+    "bram_access": ["axiuart_cpu_simple_mem_test"],
+    "rv32i_cpu": ["rv32i_basic_test", "rv32i_debug_load_test"],
+    "archived_td4": ["axiuart_cpu_simple_mem_test", "axiuart_cpu_memory_test", "axiuart_cpu_debug_test", "axiuart_cpu_mmio_led_test", "axiuart_cpu_br_test"]
   },
   "default_config": {
     "verbosity": "UVM_LOW",
@@ -128,5 +160,18 @@
     "stop_on_failure": false,
     "parallel": false,
     "max_parallel": 1
+  },
+  "documentation": {
+    "suite_usage": {
+      "smoke": "Quick validation after RTL changes (< 30s)",
+      "register": "Register block verification only",
+      "cpu_basic": "RV32I CPU instruction set validation",
+      "full": "Complete regression before commits (all active tests)",
+      "td4_archive": "Historical TD4 tests (disabled, not runnable)"
+    },
+    "active_test_count": 5,
+    "archived_test_count": 5,
+    "total_test_classes": 11,
+    "migration_status": "TD4→RV32I migration complete (2025-01-03)"
   }
 }

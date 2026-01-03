@@ -1,27 +1,24 @@
 //------------------------------------------------------------------------------
-// AXIUART CPU Simple Memory Test
-// Purpose: Debug basic CPU memory read/write via debug interface
-// Description: Minimal test to verify single address write and read
+// AXIUART CPU Simple Memory Test (RV32I)
+// Purpose: Verify UART→Register_Block→Port B→BRAM read/write path
+// Description: Tests CPU_MEM_* registers for 32-bit BRAM access via UART
 //------------------------------------------------------------------------------
 `timescale 1ns / 1ps
 
-import td4cpu_isa_pkg::*;
 import axiuart_reg_pkg::*;
 
 class axiuart_cpu_simple_mem_test extends axiuart_base_test;
     `uvm_component_utils(axiuart_cpu_simple_mem_test)
     
-    // Use addresses from axiuart_reg_pkg
-    localparam bit [31:0] CPU_DBG_CTRL     = REG_CPU_DBG_CTRL;
-    localparam bit [31:0] CPU_DBG_STATUS   = REG_CPU_DBG_STATUS;
-    localparam bit [31:0] CPU_MEM_ADDR     = REG_CPU_MEM_ADDR;
-    localparam bit [31:0] CPU_MEM_WDATA    = REG_CPU_MEM_WDATA;
-    localparam bit [31:0] CPU_MEM_RDATA    = REG_CPU_MEM_RDATA;
-    localparam bit [31:0] CPU_MEM_CTRL     = REG_CPU_MEM_CTRL;
+    // Use addresses from axiuart_reg_pkg (imported by axiuart_pkg)
+    localparam bit [31:0] CPU_MEM_ADDR     = axiuart_reg_pkg::REG_CPU_MEM_ADDR;
+    localparam bit [31:0] CPU_MEM_WDATA    = axiuart_reg_pkg::REG_CPU_MEM_WDATA;
+    localparam bit [31:0] CPU_MEM_RDATA    = axiuart_reg_pkg::REG_CPU_MEM_RDATA;
+    localparam bit [31:0] CPU_MEM_CTRL     = axiuart_reg_pkg::REG_CPU_MEM_CTRL;
     
-    // CPU_MEM_CTRL bits
-    localparam bit [31:0] MEM_RD_REQ = 32'h0000_0001;  // Bit 0: read request
-    localparam bit [31:0] MEM_WR_REQ = 32'h0000_0002;  // Bit 1: write request
+    // CPU_MEM_CTRL bits (check actual bitfield from REG_CPU_MEM_CTRL definition)
+    localparam bit [31:0] MEM_RD_REQ = 32'h0000_0010;  // Bit 4: read request
+    localparam bit [31:0] MEM_WR_REQ = 32'h0000_0020;  // Bit 5: write request
     
     function new(string name = "axiuart_cpu_simple_mem_test", uvm_component parent = null);
         super.new(name, parent);
@@ -61,18 +58,19 @@ class axiuart_cpu_simple_mem_test extends axiuart_base_test;
         `uvm_info(get_type_name(), "UART reset complete", UVM_LOW)
     endtask
     
-    // Write to CPU memory and report details
-    task write_mem_debug(input bit [15:0] addr, input bit [15:0] data);
+    // Write to CPU memory (32-bit word address and data for RV32I)
+    task write_mem_debug(input bit [10:0] word_addr, input bit [31:0] data);
         `uvm_info(get_type_name(), 
-            $sformatf(">>> WRITE: addr=0x%04X data=0x%04X", addr, data), UVM_LOW)
+            $sformatf(">>> WRITE: word_addr=0x%03X data=0x%08X", word_addr, data), UVM_LOW)
         
-        // Set address
-        write_reg(CPU_MEM_ADDR, {16'h0000, addr});
+        // Set address (convert word address to byte address by shifting left 2)
+        // Register expects byte address, extracts word address via [12:2]
+        write_reg(CPU_MEM_ADDR, {20'h0, word_addr, 2'b00});
         `uvm_info(get_type_name(), "  - Address set", UVM_MEDIUM)
         #1us;
         
-        // Set write data
-        write_reg(CPU_MEM_WDATA, {16'h0000, data});
+        // Set write data (full 32-bit word)
+        write_reg(CPU_MEM_WDATA, data);
         `uvm_info(get_type_name(), "  - Write data set", UVM_MEDIUM)
         #1us;
         
@@ -85,14 +83,15 @@ class axiuart_cpu_simple_mem_test extends axiuart_base_test;
     endtask
     
     // Read from CPU memory - Scoreboard will verify response
-    task read_mem_debug(input bit [15:0] addr);
+    task read_mem_debug(input bit [10:0] word_addr);
         bit [31:0] dummy_data;
         
         `uvm_info(get_type_name(), 
-            $sformatf("<<< READ: addr=0x%04X", addr), UVM_LOW)
+            $sformatf("<<< READ: word_addr=0x%03X", word_addr), UVM_LOW)
         
-        // Set address
-        write_reg(CPU_MEM_ADDR, {16'h0000, addr});
+        // Set address (convert word address to byte address by shifting left 2)
+        // Register expects byte address, extracts word address via [12:2]
+        write_reg(CPU_MEM_ADDR, {20'h0, word_addr, 2'b00});
         `uvm_info(get_type_name(), "  - Address set", UVM_MEDIUM)
         #1us;
         
@@ -108,77 +107,63 @@ class axiuart_cpu_simple_mem_test extends axiuart_base_test;
         `uvm_info(get_type_name(), "  - Read complete (Scoreboard verifying)", UVM_MEDIUM)
     endtask
     
-    // Note: Verification now done by Scoreboard automatically
-    
     //--------------------------------------------------------------------------
     task run_phase(uvm_phase phase);
-        bit [31:0] status;
         
         super.run_phase(phase);
         
         phase.raise_objection(this);
         
         `uvm_info(get_type_name(), "========================================", UVM_LOW)
-        `uvm_info(get_type_name(), "  Simple CPU Memory Debug Test", UVM_LOW)
+        `uvm_info(get_type_name(), "  RV32I BRAM Access Test (UART→Port B)", UVM_LOW)
         `uvm_info(get_type_name(), "========================================", UVM_LOW)
         
-        // Reset and halt CPU
+        // Reset DUT
         do_reset();
         #50us;
         
-        `uvm_info(get_type_name(), "\n--- Halting CPU ---", UVM_LOW)
-        write_reg(CPU_DBG_CTRL, 32'h0000_0001);  // Assert HALT_REQ
-        #20us;
-        
-        read_reg(CPU_DBG_STATUS, status);
-        `uvm_info(get_type_name(), 
-            $sformatf("CPU Status: 0x%08X (bit 0=%b = halted)", 
-                status, status[0]), UVM_LOW)
-        
-        if (status[0] != 1'b1) begin
-            `uvm_error(get_type_name(), "CPU failed to halt!")
-        end
+        `uvm_info(get_type_name(), "\n--- Note: RV32I CPU debug interface allows memory access anytime ---", UVM_LOW)
         
         `uvm_info(get_type_name(), "\n========================================", UVM_LOW)
-        `uvm_info(get_type_name(), "Test 1: Write 0x1234 to address 0x0000", UVM_LOW)
+        `uvm_info(get_type_name(), "Test 1: Write RV32I instruction to addr 0x000", UVM_LOW)
         `uvm_info(get_type_name(), "========================================", UVM_LOW)
         
-        write_mem_debug(16'h0000, 16'h1234);
+        write_mem_debug(11'h000, 32'h00A00093);  // ADDI x1, x0, 10
         #10us;
-        read_mem_debug(16'h0000);
+        read_mem_debug(11'h000);
         
         `uvm_info(get_type_name(), "\n========================================", UVM_LOW)
-        `uvm_info(get_type_name(), "Test 2: Write 0x5678 to same address", UVM_LOW)
+        `uvm_info(get_type_name(), "Test 2: Overwrite same address", UVM_LOW)
         `uvm_info(get_type_name(), "========================================", UVM_LOW)
         
-        write_mem_debug(16'h0000, 16'h5678);
+        write_mem_debug(11'h000, 32'h000048B7);  // LUI x17, 0x4
         #10us;
-        read_mem_debug(16'h0000);
+        read_mem_debug(11'h000);
         
         `uvm_info(get_type_name(), "\n========================================", UVM_LOW)
-        `uvm_info(get_type_name(), "Test 3: Write to different addresses", UVM_LOW)
+        `uvm_info(get_type_name(), "Test 3: Write to multiple addresses", UVM_LOW)
         `uvm_info(get_type_name(), "========================================", UVM_LOW)
         
-        write_mem_debug(16'h0001, 16'hAAAA);
-        write_mem_debug(16'h0002, 16'hBBBB);
-        write_mem_debug(16'h0003, 16'hCCCC);
+        write_mem_debug(11'h001, 32'h00500113);  // ADDI x2, x0, 5
+        write_mem_debug(11'h002, 32'h002081B3);  // ADD x3, x1, x2
+        write_mem_debug(11'h003, 32'h00100073);  // EBREAK
         #10us;
         
-        read_mem_debug(16'h0001);
-        read_mem_debug(16'h0002);
-        read_mem_debug(16'h0003);
-        read_mem_debug(16'h0000);  // Verify 0x0000 unchanged
+        read_mem_debug(11'h001);
+        read_mem_debug(11'h002);
+        read_mem_debug(11'h003);
+        read_mem_debug(11'h000);  // Verify addr 0x000 unchanged
         
         `uvm_info(get_type_name(), "\n========================================", UVM_LOW)
-        `uvm_info(get_type_name(), "Test 4: Pattern test (0x0000, 0xFFFF)", UVM_LOW)
+        `uvm_info(get_type_name(), "Test 4: Pattern test (0x00000000, 0xFFFFFFFF)", UVM_LOW)
         `uvm_info(get_type_name(), "========================================", UVM_LOW)
         
-        write_mem_debug(16'h0010, 16'h0000);
-        write_mem_debug(16'h0011, 16'hFFFF);
+        write_mem_debug(11'h010, 32'h00000000);
+        write_mem_debug(11'h011, 32'hFFFFFFFF);
         #10us;
         
-        read_mem_debug(16'h0010);
-        read_mem_debug(16'h0011);
+        read_mem_debug(11'h010);
+        read_mem_debug(11'h011);
         
         // Final summary - check Scoreboard results
         `uvm_info(get_type_name(), "\n========================================", UVM_LOW)

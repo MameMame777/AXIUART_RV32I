@@ -279,9 +279,14 @@ module Register_Block #(
     assign rv32i_cpu_run = cpu_mem_ctrl_reg[7];   // Bit[7]: CPU RUN
     assign rv32i_cpu_halt = cpu_mem_ctrl_reg[8];  // Bit[8]: CPU HALT
     
+    // Latched address/data for stable values during BUSY period
+    logic [31:0] latched_mem_addr;
+    logic [31:0] latched_mem_wdata;
+    
     // RV32I memory interface (Option A: mask address to 11 bits for 8KB = 2048 words)
-    assign rv32i_mem_addr = cpu_mem_addr_reg[12:2];  // Byte addr [31:2] → word addr [10:0]
-    assign rv32i_mem_wdata = cpu_mem_wdata_reg;
+    // Use latched values during BUSY to prevent register overwrites from affecting ongoing operations
+    assign rv32i_mem_addr = rv32i_mem_busy ? latched_mem_addr[12:2] : cpu_mem_addr_reg[12:2];
+    assign rv32i_mem_wdata = rv32i_mem_busy ? latched_mem_wdata : cpu_mem_wdata_reg;
     // rv32i_mem_we and rv32i_mem_re assigned below in sequential logic
     
     // Core AXI debug signals 
@@ -368,6 +373,8 @@ module Register_Block #(
             cpu_mem_wdata_reg <= 32'h0000_0000;
             cpu_mem_rdata_reg <= 32'h0000_0000;
             cpu_mem_ctrl_reg <= 32'h0000_0000;
+            latched_mem_addr <= 32'h0000_0000;
+            latched_mem_wdata <= 32'h0000_0000;
             
             // RV32I memory interface
             rv32i_mem_busy <= 1'b0;
@@ -378,16 +385,24 @@ module Register_Block #(
         end else begin
             reset_stats_pulse <= 1'b0;
             
-            // RV32I memory access busy tracking (1-cycle registered RAM)
+            // RV32I memory access busy tracking (registered BlockRAM with Read-First)
+            // BlockRAM timing: RE asserted cycle N → data valid cycle N+1
+            // Therefore, need 2-cycle busy for reads (1 cycle for writes)
             rv32i_mem_busy_q <= rv32i_mem_busy;
             if (rv32i_mem_we != 4'b0000 || rv32i_mem_re) begin
                 rv32i_mem_busy <= 1'b1;
                 rv32i_mem_last_was_read <= rv32i_mem_re;
             end else if (rv32i_mem_busy) begin
-                rv32i_mem_busy <= 1'b0;  // 1-cycle operation complete
+                // For reads: keep busy for 2 cycles (BRAM latency)
+                // For writes: 1 cycle is sufficient
+                if (rv32i_mem_last_was_read && rv32i_mem_busy_q) begin
+                    rv32i_mem_busy <= 1'b1;  // Stay busy 1 more cycle for read
+                end else begin
+                    rv32i_mem_busy <= 1'b0;  // Operation complete
+                end
             end
             
-            // Capture RV32I read data when busy completes
+            // Capture RV32I read data when busy completes (data now valid)
             if (rv32i_mem_busy_q && !rv32i_mem_busy && rv32i_mem_last_was_read) begin
                 cpu_mem_rdata_reg <= rv32i_mem_rdata;
             end
@@ -525,13 +540,17 @@ module Register_Block #(
 
                             if (axi.wstrb[0]) begin
                                 if (axi.wdata[4]) begin
-                                    // Read request: set read enable
+                                    // Read request: set read enable and latch address
+                                    latched_mem_addr <= cpu_mem_addr_reg;
                                     rv32i_mem_re <= 1'b1;
                                     rv32i_mem_busy <= 1'b1;
                                     rv32i_mem_last_was_read <= 1'b1;
                                 end else if (axi.wdata[5]) begin
-                                    // Write request: set byte enables from bits [3:0]
-                                    rv32i_mem_we <= axi.wdata[3:0];
+                                    // Write request: get byte enables from bits [3:0] and latch address/data
+                                    // If byte enables are 0, default to full-word write (all bytes)
+                                    latched_mem_addr <= cpu_mem_addr_reg;
+                                    latched_mem_wdata <= cpu_mem_wdata_reg;
+                                    rv32i_mem_we <= (axi.wdata[3:0] != 4'b0000) ? axi.wdata[3:0] : 4'b1111;
                                     rv32i_mem_busy <= 1'b1;
                                     rv32i_mem_last_was_read <= 1'b0;
                                 end
