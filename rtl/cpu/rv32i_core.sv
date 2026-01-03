@@ -94,24 +94,21 @@ module rv32i_core
     logic [31:0] insn_mem;
     logic [31:0] insn_wb;
     
-    // Internal RAM (2048 x 32-bit = 8KB) - True Dual-Port
-    // Port A: CPU instruction fetch (IF) + data access (MEM)
-    // Port B: Debug/external access via dbg_mem_* (when CPU halted)
-    (* ram_style = "block" *)
-    (* rw_addr_collision = "no" *)  // Avoid collision warnings (Port B has priority)
-    logic [31:0] ram [0:2047];
+    // Internal RAM (2048 x 32-bit = 8KB) - True Dual-Port BlockRAM
+    // Port A: Instruction fetch (IF) - Read only
+    // Port B: Data memory (MEM) + Debug access - Read/Write
+    (* RAM_STYLE = "block" *) logic [31:0] ram [0:2047];
     
-    // Port A - CPU access
+    // Port A - Instruction Fetch
     logic [10:0] ram_addr_if;   // Word address for instruction fetch
-    logic [10:0] ram_addr_mem;  // Word address for data access
-    logic        ram_we_mem;
-    logic [31:0] ram_wdata_mem;
-    logic [31:0] ram_rdata_if;
-    logic [31:0] ram_rdata_mem;
-    logic [3:0]  ram_we_byte;   // Byte write enable for SB/SH/SW
+    logic        ram_ena_a;     // Port A enable
+    logic [31:0] ram_rdata_if;  // IF instruction data
     
-    // Port B - Debug access (registered read, priority write)
-    logic [31:0] dbg_mem_rdata_reg;
+    // Port B - Data Memory + Debug
+    logic [10:0] ram_addr_mem;  // Word address for data access
+    logic        ram_ena_b;     // Port B enable
+    logic [31:0] ram_rdata_mem; // MEM data (unified for MEM and Debug)
+    logic [3:0]  ram_we_byte;   // Byte write enable for SB/SH/SW
     
     //==========================================================================
     // Register File (32 x 32-bit)
@@ -149,6 +146,8 @@ module rv32i_core
         logic [31:0] insn;
         logic [31:0] rs1_data;
         logic [31:0] rs2_data;
+        logic [1:0]  forward_rs1;  // Pre-computed forwarding control (Phase 2B)
+        logic [1:0]  forward_rs2;  // Pre-computed forwarding control (Phase 2B)
         decode_ctrl_t ctrl;
         logic        valid;
     } id_ex_reg_t;
@@ -164,6 +163,8 @@ module rv32i_core
         logic [31:0] insn;
         logic [31:0] alu_result;
         logic [31:0] rs2_data;      // For store operations
+        logic        branch_taken;  // Branch decision (pipelined from EX)
+        logic [31:0] branch_target; // Branch target address (pipelined from EX)
         decode_ctrl_t ctrl;
         logic        valid;
     } ex_mem_reg_t;
@@ -198,8 +199,12 @@ module rv32i_core
     logic [31:0] ex_alu_result;
     logic [31:0] ex_alu_op1;
     logic [31:0] ex_alu_op2;        // Assigned to ex_rs2_forwarded for stores
-    logic        ex_branch_taken;
-    logic [31:0] ex_branch_target;
+    logic        ex_branch_cond;    // Branch condition evaluation (EX stage)
+    logic [31:0] ex_branch_target;  // Branch target calculation (EX stage)
+    
+    // MEM stage branch signals (pipelined)
+    logic        mem_branch_taken;  // Actual branch taken decision (MEM stage)
+    logic [31:0] mem_branch_target; // Branch target (MEM stage)
     
     //==========================================================================
     // Memory Stage Signals
@@ -277,12 +282,11 @@ module rv32i_core
     // Word address calculation (byte address [31:2] = word address)
     assign ram_addr_if = pc_if[12:2];  // IF stage fetch
     
-    // Port A - Instruction Fetch (registered read, 1-cycle latency)
-    always_ff @(posedge clk) begin
-        if (!if_stall) begin
-            ram_rdata_if <= ram[ram_addr_if];
-        end
-    end
+    // Port A: Dedicated to IF (instruction fetch)
+    // Port B: Dedicated to MEM (data memory) + Debug (multiplexed)
+    // True Dual-Port BlockRAM: both ports operate independently (UG901)
+    assign ram_ena_a = 1'b1;  // Always enabled
+    assign ram_ena_b = 1'b1;  // Always enabled
     
     assign insn_if = ram_rdata_if;
     
@@ -349,6 +353,45 @@ module rv32i_core
     assign rf_raddr2 = id_ctrl.rs2_addr;
     
     //==========================================================================
+    // FORWARDING LOGIC - ID STAGE PRE-COMPUTATION (PHASE 2B OPTIMIZATION)
+    //==========================================================================
+    // Pre-compute forwarding control in ID stage to eliminate combinational
+    // logic in critical path. Comparisons use ID-stage register addresses
+    // (id_ctrl) against pipeline stage destinations.
+    // Encoding: 2'b00=RF, 2'b01=EX, 2'b10=MEM, 2'b11=WB (unused)
+    //==========================================================================
+    
+    logic [1:0] forward_rs1_next, forward_rs2_next;
+    logic id_rs1_match_ex, id_rs1_match_mem, id_rs1_match_wb;
+    logic id_rs2_match_ex, id_rs2_match_mem, id_rs2_match_wb;
+    logic ex_writes_rd, mem_writes_rd, wb_writes_rd;
+    
+    // Forward write detection signals (reused from hazard detection)
+    assign ex_writes_rd  = id_ex_reg.ctrl.rf_wen && (id_ex_reg.ctrl.rd_addr != 5'b0) && id_ex_reg.valid;
+    assign mem_writes_rd = ex_mem_reg.ctrl.rf_wen && (ex_mem_reg.ctrl.rd_addr != 5'b0) && ex_mem_reg.valid;
+    assign wb_writes_rd  = mem_wb_reg.rf_wen && (mem_wb_reg.rd_addr != 5'b0) && mem_wb_reg.valid;
+    
+    // RS1 forwarding pre-computation (ID stage)
+    assign id_rs1_match_ex  = (id_ctrl.rs1_addr != 5'b0) && ex_writes_rd  && (id_ex_reg.ctrl.rd_addr == id_ctrl.rs1_addr);
+    assign id_rs1_match_mem = (id_ctrl.rs1_addr != 5'b0) && mem_writes_rd && (ex_mem_reg.ctrl.rd_addr == id_ctrl.rs1_addr);
+    assign id_rs1_match_wb  = (id_ctrl.rs1_addr != 5'b0) && wb_writes_rd  && (mem_wb_reg.rd_addr == id_ctrl.rs1_addr);
+    
+    assign forward_rs1_next = id_rs1_match_ex  ? 2'b01 :  // EX stage (highest priority)
+                              id_rs1_match_mem ? 2'b10 :  // MEM stage
+                              id_rs1_match_wb  ? 2'b11 :  // WB stage
+                                                 2'b00;   // Register file
+    
+    // RS2 forwarding pre-computation (ID stage)
+    assign id_rs2_match_ex  = (id_ctrl.rs2_addr != 5'b0) && ex_writes_rd  && (id_ex_reg.ctrl.rd_addr == id_ctrl.rs2_addr);
+    assign id_rs2_match_mem = (id_ctrl.rs2_addr != 5'b0) && mem_writes_rd && (ex_mem_reg.ctrl.rd_addr == id_ctrl.rs2_addr);
+    assign id_rs2_match_wb  = (id_ctrl.rs2_addr != 5'b0) && wb_writes_rd  && (mem_wb_reg.rd_addr == id_ctrl.rs2_addr);
+    
+    assign forward_rs2_next = id_rs2_match_ex  ? 2'b01 :  // EX stage (highest priority)
+                              id_rs2_match_mem ? 2'b10 :  // MEM stage
+                              id_rs2_match_wb  ? 2'b11 :  // WB stage
+                                                 2'b00;   // Register file
+    
+    //==========================================================================
     // ID/EX PIPELINE REGISTER
     //==========================================================================
     
@@ -360,12 +403,14 @@ module rv32i_core
             id_ex_reg.valid <= 1'b0;
         end else if (!id_stall) begin
             // Normal progression
-            id_ex_reg.pc       <= pc_id;
-            id_ex_reg.insn     <= insn_id;
-            id_ex_reg.rs1_data <= rf_rdata1;
-            id_ex_reg.rs2_data <= rf_rdata2;
-            id_ex_reg.ctrl     <= id_ctrl;
-            id_ex_reg.valid    <= id_valid;
+            id_ex_reg.pc          <= pc_id;
+            id_ex_reg.insn        <= insn_id;
+            id_ex_reg.rs1_data    <= rf_rdata1;
+            id_ex_reg.rs2_data    <= rf_rdata2;
+            id_ex_reg.forward_rs1 <= forward_rs1_next;  // Phase 2B: Register forwarding control
+            id_ex_reg.forward_rs2 <= forward_rs2_next;  // Phase 2B: Register forwarding control
+            id_ex_reg.ctrl        <= id_ctrl;
+            id_ex_reg.valid       <= id_valid;
         end
         // Else: stall - hold current value
     end
@@ -384,19 +429,24 @@ module rv32i_core
     logic [31:0] ex_alu_src1;
     logic [31:0] ex_alu_src2;
     
-    // Forwarding multiplexers for rs1 and rs2
+    // Forwarding multiplexers using pre-computed controls (Phase 2B)
+    // Control signals are registered in id_ex_reg, eliminating combinational logic
     always_comb begin
-        case (forward_rs1)
-            2'b00:   ex_rs1_forwarded = id_ex_reg.rs1_data;
-            2'b01:   ex_rs1_forwarded = ex_mem_reg.alu_result;
-            2'b10:   ex_rs1_forwarded = mem_wb_reg.result;
+        (* parallel_case, full_case *)
+        case (id_ex_reg.forward_rs1)
+            2'b00:   ex_rs1_forwarded = id_ex_reg.rs1_data;      // Register file
+            2'b01:   ex_rs1_forwarded = ex_mem_reg.alu_result;   // EX stage forward
+            2'b10:   ex_rs1_forwarded = ex_mem_reg.alu_result;   // MEM stage forward
+            2'b11:   ex_rs1_forwarded = mem_wb_reg.result;       // WB stage forward
             default: ex_rs1_forwarded = id_ex_reg.rs1_data;
         endcase
         
-        case (forward_rs2)
-            2'b00:   ex_rs2_forwarded = id_ex_reg.rs2_data;
-            2'b01:   ex_rs2_forwarded = ex_mem_reg.alu_result;
-            2'b10:   ex_rs2_forwarded = mem_wb_reg.result;
+        (* parallel_case, full_case *)
+        case (id_ex_reg.forward_rs2)
+            2'b00:   ex_rs2_forwarded = id_ex_reg.rs2_data;      // Register file
+            2'b01:   ex_rs2_forwarded = ex_mem_reg.alu_result;   // EX stage forward
+            2'b10:   ex_rs2_forwarded = ex_mem_reg.alu_result;   // MEM stage forward
+            2'b11:   ex_rs2_forwarded = mem_wb_reg.result;       // WB stage forward
             default: ex_rs2_forwarded = id_ex_reg.rs2_data;
         endcase
     end
@@ -419,8 +469,8 @@ module rv32i_core
     logic [31:0] alu_compare_result;
     logic [31:0] alu_logic_result;
     
-    // Adder/Subtractor
-    logic [32:0] add_sub_temp;  // Extra bit for carry
+    // Adder/Subtractor with DSP48 optimization
+    (* use_dsp = "yes" *) logic [32:0] add_sub_temp;  // Extra bit for carry
     assign add_sub_temp = (id_ex_reg.ctrl.alu_op == ALU_SUB) ?
                           {1'b0, ex_alu_src1} + {1'b0, ~ex_alu_src2} + 33'd1 :  // SUB: A + ~B + 1
                           {1'b0, ex_alu_src1} + {1'b0, ex_alu_src2};             // ADD: A + B
@@ -510,8 +560,18 @@ module rv32i_core
         endcase
     end
     
-    // Branch taken signal
-    assign ex_branch_taken = id_ex_reg.ctrl.is_branch && branch_condition_met && ex_valid;
+    // Branch condition evaluation (EX stage)
+    // NOTE: This is only the condition check, not the final branch decision
+    assign ex_branch_cond = id_ex_reg.ctrl.is_branch && branch_condition_met && ex_valid;
+    
+    //==========================================================================
+    // MEMORY STAGE - BRANCH RESOLUTION (PIPELINED)
+    //==========================================================================
+    // Branch decision is made in MEM stage to break critical timing path
+    // This adds 1-cycle branch latency but improves Fmax significantly
+    
+    assign mem_branch_taken = ex_mem_reg.branch_taken && ex_mem_reg.valid;
+    assign mem_branch_target = ex_mem_reg.branch_target;
     
     //==========================================================================
     // EXECUTE STAGE - JUMP & BRANCH TARGET CALCULATION
@@ -530,7 +590,7 @@ module rv32i_core
     // Jump detection
     assign is_jump = id_ex_reg.ctrl.is_jump && ex_valid;
     
-    // Branch/jump target selection
+    // Branch/jump target selection (EX stage - will be registered to MEM)
     always_comb begin
         if (is_jump) begin
             // Jump instruction (JAL or JALR)
@@ -538,7 +598,7 @@ module rv32i_core
                 ex_branch_target = jump_target_jalr;
             else
                 ex_branch_target = jump_target_jal;
-        end else if (ex_branch_taken) begin
+        end else if (ex_branch_cond) begin
             // Branch instruction (taken)
             ex_branch_target = pc_ex + id_ex_reg.ctrl.immediate;
         end else begin
@@ -548,8 +608,9 @@ module rv32i_core
     end
     
     // Control hazard: flush pipeline on branch/jump
-    assign pc_sel_branch = ex_branch_taken || is_jump;
-    assign pc_branch_target = ex_branch_target;
+    // Branch decision now comes from MEM stage, jumps still in EX
+    assign pc_sel_branch = mem_branch_taken || is_jump;
+    assign pc_branch_target = is_jump ? ex_branch_target : mem_branch_target;
     
     //==========================================================================
     // EX/MEM PIPELINE REGISTER
@@ -563,12 +624,14 @@ module rv32i_core
             ex_mem_reg.valid <= 1'b0;
         end else begin
             // Normal progression
-            ex_mem_reg.pc         <= pc_ex;
-            ex_mem_reg.insn       <= insn_ex;
-            ex_mem_reg.alu_result <= ex_alu_result;
-            ex_mem_reg.rs2_data   <= ex_alu_op2;  // Forwarded rs2 for stores
-            ex_mem_reg.ctrl       <= id_ex_reg.ctrl;
-            ex_mem_reg.valid      <= ex_valid;
+            ex_mem_reg.pc            <= pc_ex;
+            ex_mem_reg.insn          <= insn_ex;
+            ex_mem_reg.alu_result    <= ex_alu_result;
+            ex_mem_reg.rs2_data      <= ex_alu_op2;  // Forwarded rs2 for stores
+            ex_mem_reg.branch_taken  <= ex_branch_cond || is_jump;  // Pipeline branch/jump decision
+            ex_mem_reg.branch_target <= ex_branch_target;            // Pipeline target address
+            ex_mem_reg.ctrl          <= id_ex_reg.ctrl;
+            ex_mem_reg.valid         <= ex_valid;
         end
     end
     
@@ -601,14 +664,10 @@ module rv32i_core
     // LOAD OPERATIONS: Byte Lane Selection and Sign/Zero Extension
     //--------------------------------------------------------------------------
     
-    // Data memory read (registered)
-    always_ff @(posedge clk) begin
-        if (ex_mem_reg.ctrl.mem_read) begin
-            mem_raw_data <= ram[ram_addr_mem];
-        end
-    end
+    // Data memory read comes from Port A unified read (below in BlockRAM section)
+    // ram_rdata_mem is populated by Port A when port_a_is_if=0
     
-    assign ram_rdata_mem = mem_raw_data;  // Keep for debug
+    assign mem_raw_data = ram_rdata_mem;
     
     // Byte lane extraction based on address offset
     logic [7:0]  load_byte;
@@ -709,35 +768,71 @@ module rv32i_core
         end
     end
     
-    // Port A - Data Memory Write (CPU MEM stage) with byte enables
-    // Port B has priority: if both write same address, Port B wins
-    always_ff @(posedge clk) begin
-        // Port B write (debug access - only when CPU halted, but logic allows override)
-        if (|dbg_mem_we) begin
-            // Port B write with byte enables (priority over Port A)
-            if (dbg_mem_we[0]) ram[dbg_mem_addr][7:0]   <= dbg_mem_wdata[7:0];
-            if (dbg_mem_we[1]) ram[dbg_mem_addr][15:8]  <= dbg_mem_wdata[15:8];
-            if (dbg_mem_we[2]) ram[dbg_mem_addr][23:16] <= dbg_mem_wdata[23:16];
-            if (dbg_mem_we[3]) ram[dbg_mem_addr][31:24] <= dbg_mem_wdata[31:24];
-        end
-        // Port A write (CPU data access) - only if Port B not writing same address
-        else if (ex_mem_reg.ctrl.mem_write && mem_is_ram) begin
-            // Write only enabled byte lanes
-            if (mem_byte_enable[0]) ram[ram_addr_mem][7:0]   <= mem_store_data[7:0];
-            if (mem_byte_enable[1]) ram[ram_addr_mem][15:8]  <= mem_store_data[15:8];
-            if (mem_byte_enable[2]) ram[ram_addr_mem][23:16] <= mem_store_data[23:16];
-            if (mem_byte_enable[3]) ram[ram_addr_mem][31:24] <= mem_store_data[31:24];
+    //==========================================================================
+    // BlockRAM: True-Dual-Port BRAM Inference (UG901 Strict Compliance)
+    //==========================================================================
+    // CRITICAL UG901 REQUIREMENTS:
+    // 1. Exactly 2 physical ports (Port A + Port B)
+    // 2. ONE address per port per cycle (no dynamic switching in always_ff)
+    // 3. NO reset on read data registers
+    // 4. Explicit byte-enable pattern (no for-loops)
+    // 5. Static Read-First mode
+    //
+    // Port A: IF (instruction fetch) - Read-only
+    // Port B: MEM/Debug MUTEX - Read/Write
+    //   - running==1: MEM uses Port B (ram_addr_mem)
+    //   - running==0: Debug uses Port B (dbg_mem_addr)
+    //   - NEVER both in same cycle (enforced by running signal)
+    //==========================================================================
+    
+    // Port B unified signals (MEM or Debug, mutually exclusive)
+    logic [10:0] port_b_addr;
+    logic [31:0] port_b_wdata;
+    logic [3:0]  port_b_we;
+    logic        port_b_re;
+    
+    // Port B multiplexer: MEM (running==1) vs Debug (running==0)
+    always_comb begin
+        if (running) begin
+            // MEM active: Use MEM signals
+            port_b_addr  = ram_addr_mem;
+            port_b_wdata = mem_store_data;
+            port_b_we    = (ex_mem_reg.ctrl.mem_write && mem_is_ram) ? mem_byte_enable : 4'b0000;
+            port_b_re    = ex_mem_reg.ctrl.mem_read && mem_is_ram;
+        end else begin
+            // Debug active: Use Debug signals
+            port_b_addr  = dbg_mem_addr;
+            port_b_wdata = dbg_mem_wdata;
+            port_b_we    = dbg_mem_we;
+            port_b_re    = dbg_mem_re;
         end
     end
     
-    // Port B - Debug Memory Read (registered, 1-cycle latency)
+    // Port A: Instruction Fetch (IF) - Read Only, NO RESET (UG901)
     always_ff @(posedge clk) begin
-        if (dbg_mem_re) begin
-            dbg_mem_rdata_reg <= ram[dbg_mem_addr];
+        if (ram_ena_a) begin
+            ram_rdata_if <= ram[ram_addr_if];
         end
     end
     
-    assign dbg_mem_rdata = dbg_mem_rdata_reg;
+    // Port B: MEM/Debug Unified - Read/Write, NO RESET (UG901)
+    always_ff @(posedge clk) begin
+        if (ram_ena_b) begin
+            // WRITE: Explicit byte-enable pattern (UG901 requirement, no for-loop)
+            if (port_b_we[0]) ram[port_b_addr][7:0]   <= port_b_wdata[7:0];
+            if (port_b_we[1]) ram[port_b_addr][15:8]  <= port_b_wdata[15:8];
+            if (port_b_we[2]) ram[port_b_addr][23:16] <= port_b_wdata[23:16];
+            if (port_b_we[3]) ram[port_b_addr][31:24] <= port_b_wdata[31:24];
+            
+            // READ: Read-First mode, NO RESET (UG901 requirement)
+            if (port_b_re) begin
+                ram_rdata_mem <= ram[port_b_addr];
+            end
+        end
+    end
+    
+    // Debug read data output (unified with MEM)
+    assign dbg_mem_rdata = ram_rdata_mem;
     
     //==========================================================================
     // MEM/WB PIPELINE REGISTER
@@ -788,74 +883,13 @@ module rv32i_core
     // RAW (Read-After-Write) hazard detection:
     // - Occurs when an instruction reads a register that a previous instruction writes
     // - Forwarding paths: EX→EX, MEM→EX, WB→EX (priority: EX > MEM > WB)
+    // - Forwarding control pre-computed in ID stage (Phase 2B optimization)
     // - Load-use hazard: Special case requiring 1-cycle stall (load result not ready)
     
-    logic ex_writes_rd;   // EX stage writes to rd
-    logic mem_writes_rd;  // MEM stage writes to rd
-    logic wb_writes_rd;   // WB stage writes to rd
     logic ex_is_load;     // EX stage is a load instruction
-    
-    // Detect if pipeline stages write to registers
-    assign ex_writes_rd  = id_ex_reg.ctrl.rf_wen && (id_ex_reg.ctrl.rd_addr != 5'b0) && id_ex_reg.valid;
-    assign mem_writes_rd = ex_mem_reg.ctrl.rf_wen && (ex_mem_reg.ctrl.rd_addr != 5'b0) && ex_mem_reg.valid;
-    assign wb_writes_rd  = mem_wb_reg.rf_wen && (mem_wb_reg.rd_addr != 5'b0) && mem_wb_reg.valid;
     
     // Detect if EX stage is a load (result not ready until MEM stage)
     assign ex_is_load = id_ex_reg.ctrl.mem_read && id_ex_reg.valid;
-    
-    //--------------------------------------------------------------------------
-    // FORWARDING LOGIC FOR RS1
-    //--------------------------------------------------------------------------
-    // Priority: EX stage > MEM stage > WB stage > Register File
-    
-    always_comb begin
-        forward_rs1 = 2'b00;  // Default: use register file
-        
-        // Check if EX stage reads rs1 (rs1_addr != 0)
-        if (id_ex_reg.ctrl.rs1_addr != 5'b0) begin
-            // Check WB stage (lowest priority)
-            if (wb_writes_rd && (mem_wb_reg.rd_addr == id_ex_reg.ctrl.rs1_addr)) begin
-                forward_rs1 = 2'b10;  // Forward from WB (mem_wb_reg.result)
-            end
-            
-            // Check MEM stage (medium priority) - result ready in MEM
-            if (mem_writes_rd && (ex_mem_reg.ctrl.rd_addr == id_ex_reg.ctrl.rs1_addr)) begin
-                forward_rs1 = 2'b01;  // Forward from MEM (ex_mem_reg.alu_result)
-            end
-            
-            // Check EX stage (highest priority) - result ready in MEM next cycle
-            if (ex_writes_rd && (id_ex_reg.ctrl.rd_addr == id_ex_reg.ctrl.rs1_addr)) begin
-                forward_rs1 = 2'b01;  // Forward from MEM (ex_mem_reg in next cycle)
-            end
-        end
-    end
-    
-    //--------------------------------------------------------------------------
-    // FORWARDING LOGIC FOR RS2
-    //--------------------------------------------------------------------------
-    // Same priority as rs1: EX > MEM > WB > RF
-    
-    always_comb begin
-        forward_rs2 = 2'b00;  // Default: use register file
-        
-        // Check if EX stage reads rs2 (rs2_addr != 0)
-        if (id_ex_reg.ctrl.rs2_addr != 5'b0) begin
-            // Check WB stage (lowest priority)
-            if (wb_writes_rd && (mem_wb_reg.rd_addr == id_ex_reg.ctrl.rs2_addr)) begin
-                forward_rs2 = 2'b10;  // Forward from WB (mem_wb_reg.result)
-            end
-            
-            // Check MEM stage (medium priority) - result ready in MEM
-            if (mem_writes_rd && (ex_mem_reg.ctrl.rd_addr == id_ex_reg.ctrl.rs2_addr)) begin
-                forward_rs2 = 2'b01;  // Forward from MEM (ex_mem_reg.alu_result)
-            end
-            
-            // Check EX stage (highest priority) - result ready in MEM next cycle
-            if (ex_writes_rd && (id_ex_reg.ctrl.rd_addr == id_ex_reg.ctrl.rs2_addr)) begin
-                forward_rs2 = 2'b01;  // Forward from MEM (ex_mem_reg in next cycle)
-            end
-        end
-    end
     
     //--------------------------------------------------------------------------
     // LOAD-USE HAZARD DETECTION
@@ -876,8 +910,10 @@ module rv32i_core
     assign hazard_load_use = load_use_rs1 || load_use_rs2;
     
     //==========================================================================
-    // PIPELINE CONTROL - PLACEHOLDER
+    // PIPELINE CONTROL
     //==========================================================================
+    // True Dual-Port BlockRAM: Port A (IF) and Port B (MEM) operate independently
+    // No serialization needed - both can access RAM simultaneously
     
     assign if_valid = running && !cpu_halt;
     assign if_stall = hazard_load_use;
