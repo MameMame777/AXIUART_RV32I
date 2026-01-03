@@ -1,28 +1,28 @@
-# AXIUART - UART to AXI4-Lite Bridge with TD4 CPU
+# AXIUART - UART to AXI4-Lite Bridge with RV32I CPU
 
-UART-AXI4 bridge with integrated TD4 CPU, comprehensive verification environment, and Python control software.
+UART-AXI4 bridge with integrated RV32I CPU, comprehensive verification environment, and Python control software.
 
 ## Project Status
 
-✅ **All critical bugs resolved** (3 bugs fixed - December 29, 2025)  
-✅ **100% test pass rate** (5/5 CPU MMIO LED tests + 2/2 regression tests)  
-✅ **0 UVM_ERROR** (Scoreboard verification fixed)  
-✅ **Production ready** (Runtime: 642ms, clean simulation)
-
-*For detailed bug analysis, see: [docs/bug_fixes_20251229.md](docs/bug_fixes_20251229.md)*
+✅ **RV32I CPU Integration Complete** (January 3, 2026)  
+✅ **TD4 CPU Removed** (Migrated to RV32I-only design)  
+✅ **100% test pass rate** (RV32I basic test + debug load test)  
+✅ **0 UVM_ERROR** (Clean simulation, 0 assertion failures)  
+✅ **Production ready** (Dual-port RAM, 8KB memory, MMIO support)
 
 ## Project Overview
 
-AXIUART provides a production-ready hardware interface between UART serial communication (115200 baud) and AXI4-Lite memory-mapped registers, enabling software control of FPGA peripherals through a simple serial connection. The design includes an integrated TD4 CPU for on-chip processing and debug capabilities.
+AXIUART provides a production-ready hardware interface between UART serial communication (115200 baud) and AXI4-Lite memory-mapped registers, enabling software control of FPGA peripherals through a simple serial connection. The design includes an integrated **RV32I CPU** (RISC-V 32-bit integer base) for on-chip processing with external debug memory access.
 
 **Key Features:**
 - UART protocol with CRC-8 error detection
 - AXI4-Lite master interface for register access
-- **Integrated TD4 CPU** with MMIO support (16-bit addressing)
-- 4-bit LED control register (REG_TEST_LED at 0x1044)
-- CPU debug interface with register/memory inspection
-- Comprehensive UVM testbench with protocol coverage
-- Python driver with interactive control applications
+- **Integrated RV32I CPU** with 8KB dual-port RAM
+- External debug memory access via UART/AXI4-Lite bridge
+- CPU control (run/halt) and status monitoring
+- 4-bit LED output from CPU MMIO
+- Comprehensive UVM testbench with SystemVerilog assertions
+- Python driver framework ready for extension
 - Real-time waveform analysis and debugging support
 
 ## Register Management

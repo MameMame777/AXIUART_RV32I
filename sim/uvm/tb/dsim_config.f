@@ -25,8 +25,8 @@
 # Generated Register Package (from register_map/axiuart_registers.json)
 ../../../rtl/register_block/axiuart_reg_pkg.sv
 
-# Generated ISA package (from isa/td4cpu_isa.json)
-../../../rtl/cpu/td4cpu_isa_pkg.sv
+# Generated ISA package (from isa/)
+../../../rtl/cpu/rv32i_isa_pkg.sv
 
 # RTL Interface Definitions
 ../../../rtl/interfaces/uart_if.sv
@@ -47,7 +47,8 @@
 ../../../rtl/register_block/Register_Block.sv
 
 # RTL Design Files - CPU core (project-specific)
-../../../rtl/cpu/td4cpu_core.sv
+../../../rtl/cpu/rv32i_core.sv
+../../../rtl/cpu/rv32i_trace_buffer.sv
 
 # Top Level
 ../../../rtl/AXIUART_Top.sv

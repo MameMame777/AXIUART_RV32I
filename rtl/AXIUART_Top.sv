@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+// UART to AXI4-Lite Bridge with RV32I CPU
 // FIXED BAUD RATE: 115200 bps
 module AXIUART_Top #(
     parameter int CLK_FREQ_HZ = 125_000_000,    // System clock frequency (125MHz)
@@ -23,18 +24,8 @@ module AXIUART_Top #(
     
     // Simulation-only outputs
     `ifdef DEFINE_SIM
-    // CPU trace outputs for fast UVM verification
-    , output logic        cpu_trace_valid,
-    output logic [15:0] cpu_trace_insn,
-    output logic [15:0] cpu_trace_pc,
-    output logic [2:0]  cpu_trace_rd_idx,
-    output logic [15:0] cpu_trace_rd_value,
-    output logic [2:0]  cpu_trace_rs_idx,
-    output logic [15:0] cpu_trace_rs_value,
-    output logic [2:0]  cpu_trace_flags,
-    
     // System status outputs
-    output logic        system_busy,
+    , output logic        system_busy,
     output logic [7:0]  system_error,
     output logic        system_ready
     `endif
@@ -62,62 +53,6 @@ module AXIUART_Top #(
     logic [15:0] rx_count;
     logic [7:0]  fifo_status;
     
-    // LED control is now CPU-driven via MMIO (test_led_internal removed)
-    // logic [3:0]  test_led_internal;  // REMOVED - LED now from CPU MMIO
-
-    // --------------------------------------------------------------------
-    // TD4CPU debug wiring (Register_Block <-> CPU)
-    // --------------------------------------------------------------------
-    logic        cpu_halt_req_pulse;
-    logic        cpu_run_req_pulse;
-    logic        cpu_step_req_pulse;
-    logic        cpu_clr_halt_reason_pulse;
-    logic        cpu_halt_on_reset;
-    logic        cpu_bp_global_en;
-    logic        cpu_bp0_en;
-    logic        cpu_bp1_en;
-    logic        cpu_bp_match_fetch;
-    logic [15:0] cpu_bp0_pc;
-    logic [15:0] cpu_bp1_pc;
-
-    logic        cpu_halted;
-    logic        cpu_running;
-    logic        cpu_break_hit;
-    logic        cpu_brk_hit;
-    logic [7:0]  cpu_halt_reason;
-
-    logic [15:0] cpu_pc;
-    logic [15:0] cpu_sp;
-    logic [2:0]  cpu_flags;
-    logic        cpu_wr_pc_pulse;
-    logic [15:0] cpu_wr_pc_data;
-    logic        cpu_wr_sp_pulse;
-    logic [15:0] cpu_wr_sp_data;
-    logic        cpu_wr_flags_pulse;
-    logic [2:0]  cpu_wr_flags_data;
-
-    logic [2:0]  cpu_reg_index;
-    logic [15:0] cpu_reg_rdata;
-    logic        cpu_reg_read_pulse;   // NEW: Read pulse for latch trigger
-    logic        cpu_reg_write_pulse;
-    logic [15:0] cpu_reg_wdata;
-
-    logic [15:0] cpu_mem_addr;
-    logic [15:0] cpu_mem_wdata;
-    logic [15:0] cpu_mem_rdata;
-    logic        cpu_mem_read_req_pulse;
-    logic        cpu_mem_write_req_pulse;
-    logic        cpu_mem_auto_inc;
-    logic        cpu_mem_busy;
-    logic        cpu_mem_err;
-    
-    // Trace buffer interface (register-based like CPU_MEM)
-    logic [7:0]  cpu_trace_buf_addr;  // Derived from Register_Block.cpu_trace_addr_reg
-    logic [31:0] cpu_trace_buf_rdata;
-    logic [7:0]  cpu_trace_write_ptr;
-    logic        cpu_trace_enable;
-    logic        cpu_trace_clear_pulse;
-    
     // --------------------------------------------------------------------
     // RV32I CPU debug wiring (Register_Block <-> RV32I CPU)
     // --------------------------------------------------------------------
@@ -127,7 +62,8 @@ module AXIUART_Top #(
     logic [3:0]  rv32i_mem_we;          // Byte write enables
     logic        rv32i_mem_re;          // Read enable
     
-    logic        rv32i_cpu_run;         // CPU run signal (from TD4 or dedicated control)
+    logic        rv32i_cpu_run;         // CPU run signal from Register_Block
+    logic        rv32i_cpu_halt;        // CPU halt signal from Register_Block
     logic        rv32i_cpu_halted;      // CPU halted status
     logic        rv32i_cpu_break;       // EBREAK detected
     logic [3:0]  rv32i_led;             // LED output from RV32I
@@ -210,72 +146,19 @@ module AXIUART_Top #(
         .error_code(bridge_error_code),
         .tx_count(tx_count),
         .rx_count(rx_count),
-        .fifo_status(fifo_status)
-
-        // CPU debug interface
-        , .cpu_halt_req_pulse(cpu_halt_req_pulse)
-        , .cpu_run_req_pulse(cpu_run_req_pulse)
-        , .cpu_step_req_pulse(cpu_step_req_pulse)
-        , .cpu_clr_halt_reason_pulse(cpu_clr_halt_reason_pulse)
-        , .cpu_halt_on_reset(cpu_halt_on_reset)
-        , .cpu_bp_global_en(cpu_bp_global_en)
-        , .cpu_bp0_en(cpu_bp0_en)
-        , .cpu_bp1_en(cpu_bp1_en)
-        , .cpu_bp_match_fetch(cpu_bp_match_fetch)
-        , .cpu_bp0_pc(cpu_bp0_pc)
-        , .cpu_bp1_pc(cpu_bp1_pc)
-
-        , .cpu_halted(cpu_halted)
-        , .cpu_running(cpu_running)
-        , .cpu_break_hit(cpu_break_hit)
-        , .cpu_brk_hit(cpu_brk_hit)
-        , .cpu_halt_reason(cpu_halt_reason)
-
-        , .cpu_pc(cpu_pc)
-        , .cpu_sp(cpu_sp)
-        , .cpu_flags(cpu_flags)
-        , .cpu_wr_pc_pulse(cpu_wr_pc_pulse)
-        , .cpu_wr_pc_data(cpu_wr_pc_data)
-        , .cpu_wr_sp_pulse(cpu_wr_sp_pulse)
-        , .cpu_wr_sp_data(cpu_wr_sp_data)
-        , .cpu_wr_flags_pulse(cpu_wr_flags_pulse)
-        , .cpu_wr_flags_data(cpu_wr_flags_data)
-
-        , .cpu_reg_index(cpu_reg_index)
-        , .cpu_reg_rdata(cpu_reg_rdata)
-        , .cpu_reg_read_pulse(cpu_reg_read_pulse)   // NEW: Read pulse output
-        , .cpu_reg_write_pulse(cpu_reg_write_pulse)
-        , .cpu_reg_wdata(cpu_reg_wdata)
-
-        , .cpu_mem_addr(cpu_mem_addr)
-        , .cpu_mem_wdata(cpu_mem_wdata)
-        , .cpu_mem_rdata(cpu_mem_rdata)
-        , .cpu_mem_read_req_pulse(cpu_mem_read_req_pulse)
-        , .cpu_mem_write_req_pulse(cpu_mem_write_req_pulse)
-        , .cpu_mem_auto_inc(cpu_mem_auto_inc)
-        , .cpu_mem_busy(cpu_mem_busy)
-        , .cpu_mem_err(cpu_mem_err)
-        
-        // Trace buffer interface (register-based access like CPU_MEM)
-        , .cpu_trace_buf_rdata(cpu_trace_buf_rdata)
-        , .cpu_trace_write_ptr(cpu_trace_write_ptr)
-        , .cpu_trace_enable(cpu_trace_enable)
-        , .cpu_trace_clear_pulse(cpu_trace_clear_pulse)
+        .fifo_status(fifo_status),
         
         // RV32I CPU memory debug interface
-        , .rv32i_mem_addr(rv32i_mem_addr)
-        , .rv32i_mem_wdata(rv32i_mem_wdata)
-        , .rv32i_mem_rdata(rv32i_mem_rdata)
-        , .rv32i_mem_we(rv32i_mem_we)
-        , .rv32i_mem_re(rv32i_mem_re)
+        .rv32i_mem_addr(rv32i_mem_addr),
+        .rv32i_mem_wdata(rv32i_mem_wdata),
+        .rv32i_mem_rdata(rv32i_mem_rdata),
+        .rv32i_mem_we(rv32i_mem_we),
+        .rv32i_mem_re(rv32i_mem_re),
+        .rv32i_cpu_run(rv32i_cpu_run),
+        .rv32i_cpu_halt(rv32i_cpu_halt),
+        .rv32i_cpu_halted(rv32i_cpu_halted),
+        .rv32i_cpu_break(rv32i_cpu_break)
     );
-
-    // Derive trace buffer address from Register_Block's internal register
-    assign cpu_trace_buf_addr = register_block_inst.cpu_trace_addr_reg[7:0];
-
-    // RV32I CPU run control - use TD4 CPU run signal for now
-    // (Future: add dedicated RV32I control registers)
-    assign rv32i_cpu_run = cpu_running;
 
     // --------------------------------------------------------------------
     // RV32I CPU Core Instantiation
@@ -286,8 +169,8 @@ module AXIUART_Top #(
         
         // CPU control
         .cpu_run(rv32i_cpu_run),
-        .cpu_halt(1'b0),           // Not implemented yet
-        .cpu_step(1'b0),           // Not implemented yet
+        .cpu_halt(rv32i_cpu_halt),
+        .cpu_step(1'b0),           // Step mode not implemented
         .cpu_halted(rv32i_cpu_halted),
         .cpu_break(rv32i_cpu_break),
         
@@ -301,84 +184,11 @@ module AXIUART_Top #(
         // LED output (memory-mapped I/O)
         .led_out(rv32i_led)
         
-        // Trace outputs not connected yet
+        // Trace outputs not connected
         // .trace_valid(), .trace_pc(), etc.
     );
-
-    // --------------------------------------------------------------------
-    // Minimal TD4CPU core (debug + RAM bring-up)
-    // RAM reduced to 1024 words (2KB) for initial synthesis
-    // Increase after verifying BRAM inference and timing closure
-    td4cpu_core #(
-        .RAM_WORDS(1024)  // Reduced from 4096 to speed up synthesis
-    ) cpu_inst (
-        .clk(clk),
-        .rst(rst),
-
-        .dbg_halt_req_pulse(cpu_halt_req_pulse),
-        .dbg_run_req_pulse(cpu_run_req_pulse),
-        .dbg_step_req_pulse(cpu_step_req_pulse),
-        .dbg_clr_halt_reason_pulse(cpu_clr_halt_reason_pulse),
-        .dbg_halt_on_reset(cpu_halt_on_reset),
-
-        .dbg_bp_global_en(cpu_bp_global_en),
-        .dbg_bp0_en(cpu_bp0_en),
-        .dbg_bp1_en(cpu_bp1_en),
-        .dbg_bp_match_fetch(cpu_bp_match_fetch),
-        .dbg_bp0_pc(cpu_bp0_pc),
-        .dbg_bp1_pc(cpu_bp1_pc),
-
-        .halted(cpu_halted),
-        .running(cpu_running),
-        .break_hit(cpu_break_hit),
-        .brk_hit(cpu_brk_hit),
-        .halt_reason(cpu_halt_reason),
-
-        .pc(cpu_pc),
-        .sp(cpu_sp),
-        .flags(cpu_flags),
-
-        .dbg_wr_pc_pulse(cpu_wr_pc_pulse),
-        .dbg_wr_pc_data(cpu_wr_pc_data),
-        .dbg_wr_sp_pulse(cpu_wr_sp_pulse),
-        .dbg_wr_sp_data(cpu_wr_sp_data),
-        .dbg_wr_flags_pulse(cpu_wr_flags_pulse),
-        .dbg_wr_flags_data(cpu_wr_flags_data),
-
-        .dbg_reg_index(cpu_reg_index),
-        .dbg_reg_rdata(cpu_reg_rdata),
-        .dbg_reg_read_pulse(cpu_reg_read_pulse),   // NEW: Read pulse input
-        .dbg_reg_write_pulse(cpu_reg_write_pulse),
-        .dbg_reg_wdata(cpu_reg_wdata),
-
-        .dbg_mem_addr(cpu_mem_addr),
-        .dbg_mem_wdata(cpu_mem_wdata),
-        .dbg_mem_rdata(cpu_mem_rdata),
-        .dbg_mem_read_req_pulse(cpu_mem_read_req_pulse),
-        .dbg_mem_write_req_pulse(cpu_mem_write_req_pulse),
-        .dbg_mem_busy(cpu_mem_busy),
-        .dbg_mem_err(cpu_mem_err),
-        
-        // Trace outputs
-        .trace_valid(cpu_trace_valid),
-        .trace_insn(cpu_trace_insn),
-        .trace_pc(cpu_trace_pc),
-        .trace_rd_idx(cpu_trace_rd_idx),
-        .trace_rd_value(cpu_trace_rd_value),
-        .trace_rs_idx(cpu_trace_rs_idx),
-        .trace_rs_value(cpu_trace_rs_value),
-        .trace_flags(cpu_trace_flags),
-        
-        // Trace buffer interface
-        .trace_buf_addr(cpu_trace_buf_addr),
-        .trace_buf_rdata(cpu_trace_buf_rdata),
-        .trace_write_ptr_out(cpu_trace_write_ptr),
-        
-        // Memory-Mapped IO: LED output (not connected - using RV32I LED)
-        .led_out()  // Unconnected for now
-    );
     
-    // LED output: Use RV32I CPU LED for now
+    // LED output from RV32I CPU
     assign led = rv32i_led;
     
     // Hardware Flow Control Logic
@@ -395,12 +205,6 @@ module AXIUART_Top #(
             uart_rts_n <= rx_fifo_full || rx_fifo_high;
         end
     end
-    
-    // LED control: Priority RV32I > TD4CPU
-    // For now, use RV32I LED output directly
-    // (Future: add mux control via register)
-    // assign led = rv32i_led;  // RV32I LED only
-    // Note: TD4CPU led_out already connected directly to top-level led port in TD4 instance above
     
     // AXI4-Lite Address Router and Interconnect
     // System status outputs (simulation only)
