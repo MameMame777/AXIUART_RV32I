@@ -39,8 +39,34 @@ module Register_Block #(
     // RV32I CPU control interface
     output logic        rv32i_cpu_run,         // CPU run signal
     output logic        rv32i_cpu_halt,        // CPU halt signal
+    output logic        rv32i_cpu_step,        // CPU single-step signal (W1P)
     input  logic        rv32i_cpu_halted,      // CPU halted status
-    input  logic        rv32i_cpu_break        // EBREAK detected
+    input  logic        rv32i_cpu_break,       // EBREAK detected
+    
+    // RV32I hardware breakpoint interface
+    output logic [3:0]  rv32i_dbg_bp_enable,   // Breakpoint enable mask
+    output logic [31:0] rv32i_dbg_bp_addr[0:3], // Breakpoint addresses
+    input  logic [3:0]  rv32i_dbg_bp_hit,      // Breakpoint hit flags
+    
+    // RV32I performance counter interface
+    input  logic [31:0] rv32i_perf_cycle_count, // Cycle counter
+    input  logic [31:0] rv32i_perf_insn_count,  // Instruction counter
+    input  logic [31:0] rv32i_perf_stall_count, // Stall counter
+    input  logic [31:0] rv32i_perf_flush_count, // Flush counter
+    
+    // RV32I register file snapshot interface
+    output logic [4:0]  rv32i_dbg_rf_addr,     // Register address
+    input  logic [31:0] rv32i_dbg_rf_rdata,    // Register data
+    
+    // RV32I trace buffer interface
+    output logic [5:0]  rv32i_dbg_trace_addr,  // Trace entry index
+    input  logic [127:0] rv32i_dbg_trace_data, // Trace entry data
+    input  logic [5:0]  rv32i_dbg_trace_wptr,  // Write pointer
+    input  logic [5:0]  rv32i_dbg_trace_count, // Entry count
+    
+    // RV32I software reset interface
+    output logic        rv32i_dbg_soft_reset,  // Software reset request (W1P)
+    input  logic        rv32i_dbg_reset_done   // Reset done flag
 );
 
     // Register address map - compute offsets from generated package
@@ -62,9 +88,29 @@ module Register_Block #(
     
     // RV32I CPU Memory Access Registers
     localparam bit [11:0] REG_CPU_MEM_ADDR   = (axiuart_reg_pkg::REG_CPU_MEM_ADDR - BASE_ADDR);   // 0x1228
-    localparam bit [11:0] REG_CPU_MEM_WDATA  = (axiuart_reg_pkg::REG_CPU_MEM_WDATA - BASE_ADDR);  // 0x122C
+    localparam bit [11:0] REG_CPU_MEM_WDATA  = (axiuart_reg_pkg::REG_CPU_MEM_WDATA - BASE_ADDR);  // 0x1228
     localparam bit [11:0] REG_CPU_MEM_RDATA  = (axiuart_reg_pkg::REG_CPU_MEM_RDATA - BASE_ADDR);  // 0x1230
     localparam bit [11:0] REG_CPU_MEM_CTRL   = (axiuart_reg_pkg::REG_CPU_MEM_CTRL - BASE_ADDR);   // 0x1234
+    
+    // RV32I Debug Registers (Hardware Breakpoints, Performance Counters, Trace Buffer, etc.)
+    localparam bit [11:0] REG_DBG_BP0_ADDR    = 12'h240;  // 0x1240 - Breakpoint 0 address
+    localparam bit [11:0] REG_DBG_BP1_ADDR    = 12'h244;  // 0x1244 - Breakpoint 1 address
+    localparam bit [11:0] REG_DBG_BP2_ADDR    = 12'h248;  // 0x1248 - Breakpoint 2 address
+    localparam bit [11:0] REG_DBG_BP3_ADDR    = 12'h24C;  // 0x124C - Breakpoint 3 address
+    localparam bit [11:0] REG_DBG_BP_CTRL     = 12'h250;  // 0x1250 - Breakpoint control [3:0]=enable [7:4]=hit_flags
+    localparam bit [11:0] REG_PERF_CYCLE      = 12'h260;  // 0x1260 - Performance: cycle count
+    localparam bit [11:0] REG_PERF_INSN       = 12'h264;  // 0x1264 - Performance: instruction count
+    localparam bit [11:0] REG_PERF_STALL      = 12'h268;  // 0x1268 - Performance: stall count
+    localparam bit [11:0] REG_PERF_FLUSH      = 12'h26C;  // 0x126C - Performance: flush count
+    localparam bit [11:0] REG_DBG_RF_ADDR     = 12'h270;  // 0x1270 - Register file address [4:0]
+    localparam bit [11:0] REG_DBG_RF_DATA     = 12'h274;  // 0x1274 - Register file data (RO)
+    localparam bit [11:0] REG_TRACE_ADDR      = 12'h280;  // 0x1280 - Trace buffer read address [5:0]
+    localparam bit [11:0] REG_TRACE_DATA_LOW  = 12'h284;  // 0x1284 - Trace data [31:0]
+    localparam bit [11:0] REG_TRACE_DATA_MID  = 12'h288;  // 0x1288 - Trace data [63:32]
+    localparam bit [11:0] REG_TRACE_DATA_HI0  = 12'h28C;  // 0x128C - Trace data [95:64]
+    localparam bit [11:0] REG_TRACE_DATA_HI1  = 12'h290;  // 0x1290 - Trace data [127:96]
+    localparam bit [11:0] REG_TRACE_STATUS    = 12'h294;  // 0x1294 - Trace status [5:0]=wptr [13:8]=count [16]=full
+    localparam bit [11:0] REG_DBG_RESET_CTRL  = 12'h298;  // 0x1298 - Reset control [0]=soft_reset(W1P) [1]=done(RO) [2]=step(W1P)
 
     // Register storage
     logic [31:0] control_reg;      // RW - Control register
@@ -84,6 +130,16 @@ module Register_Block #(
     logic [31:0] cpu_mem_wdata_reg;    // RV32I memory write data
     logic [31:0] cpu_mem_rdata_reg;    // RV32I memory read data
     logic [31:0] cpu_mem_ctrl_reg;     // RV32I memory control
+    
+    // RV32I Debug Registers
+    logic [31:0] dbg_bp0_addr_reg;     // Hardware breakpoint 0 address
+    logic [31:0] dbg_bp1_addr_reg;     // Hardware breakpoint 1 address
+    logic [31:0] dbg_bp2_addr_reg;     // Hardware breakpoint 2 address
+    logic [31:0] dbg_bp3_addr_reg;     // Hardware breakpoint 3 address
+    logic [31:0] dbg_bp_ctrl_reg;      // Breakpoint control (enable + hit flags)
+    logic [31:0] dbg_rf_addr_reg;      // Register file address register
+    logic [31:0] trace_addr_reg;       // Trace buffer read address
+    logic [31:0] dbg_reset_ctrl_reg;   // Debug reset control register
     
     // RV32I memory access state
     logic        rv32i_mem_busy;       // RV32I memory operation in progress
@@ -278,6 +334,23 @@ module Register_Block #(
     // RV32I CPU control outputs
     assign rv32i_cpu_run = cpu_mem_ctrl_reg[7];   // Bit[7]: CPU RUN
     assign rv32i_cpu_halt = cpu_mem_ctrl_reg[8];  // Bit[8]: CPU HALT
+    assign rv32i_cpu_step = dbg_reset_ctrl_reg[2];  // Bit[2] of DBG_RESET_CTRL: SINGLE STEP (W1P)
+    
+    // RV32I hardware breakpoint outputs
+    assign rv32i_dbg_bp_enable = dbg_bp_ctrl_reg[3:0];
+    assign rv32i_dbg_bp_addr[0] = dbg_bp0_addr_reg;
+    assign rv32i_dbg_bp_addr[1] = dbg_bp1_addr_reg;
+    assign rv32i_dbg_bp_addr[2] = dbg_bp2_addr_reg;
+    assign rv32i_dbg_bp_addr[3] = dbg_bp3_addr_reg;
+    
+    // RV32I register file snapshot outputs
+    assign rv32i_dbg_rf_addr = dbg_rf_addr_reg[4:0];
+    
+    // RV32I trace buffer outputs
+    assign rv32i_dbg_trace_addr = trace_addr_reg[5:0];
+    
+    // RV32I software reset output
+    assign rv32i_dbg_soft_reset = dbg_reset_ctrl_reg[0];  // Bit[0]: SOFT RESET (W1P)
     
     // Latched address/data for stable values during BUSY period
     logic [31:0] latched_mem_addr;
@@ -375,6 +448,16 @@ module Register_Block #(
             cpu_mem_ctrl_reg <= 32'h0000_0000;
             latched_mem_addr <= 32'h0000_0000;
             latched_mem_wdata <= 32'h0000_0000;
+            
+            // RV32I Debug registers
+            dbg_bp0_addr_reg <= 32'h0000_0000;
+            dbg_bp1_addr_reg <= 32'h0000_0000;
+            dbg_bp2_addr_reg <= 32'h0000_0000;
+            dbg_bp3_addr_reg <= 32'h0000_0000;
+            dbg_bp_ctrl_reg <= 32'h0000_0000;  // All breakpoints disabled
+            dbg_rf_addr_reg <= 32'h0000_0000;
+            trace_addr_reg <= 32'h0000_0000;
+            dbg_reset_ctrl_reg <= 32'h0000_0000;
             
             // RV32I memory interface
             rv32i_mem_busy <= 1'b0;
@@ -557,6 +640,55 @@ module Register_Block #(
                             end
                         end
 
+                        // ----------------------------------------------------------------
+                        // RV32I Debug Registers
+                        // ----------------------------------------------------------------
+                        REG_DBG_BP0_ADDR: begin
+                            dbg_bp0_addr_reg <= apply_wstrb_mask(dbg_bp0_addr_reg, axi.wdata, axi.wstrb);
+                        end
+                        
+                        REG_DBG_BP1_ADDR: begin
+                            dbg_bp1_addr_reg <= apply_wstrb_mask(dbg_bp1_addr_reg, axi.wdata, axi.wstrb);
+                        end
+                        
+                        REG_DBG_BP2_ADDR: begin
+                            dbg_bp2_addr_reg <= apply_wstrb_mask(dbg_bp2_addr_reg, axi.wdata, axi.wstrb);
+                        end
+                        
+                        REG_DBG_BP3_ADDR: begin
+                            dbg_bp3_addr_reg <= apply_wstrb_mask(dbg_bp3_addr_reg, axi.wdata, axi.wstrb);
+                        end
+                        
+                        REG_DBG_BP_CTRL: begin
+                            // [3:0] = breakpoint enable (RW)
+                            // [7:4] = breakpoint hit flags (RO, cleared by writing 1)
+                            masked_value = apply_wstrb_mask(dbg_bp_ctrl_reg, axi.wdata, axi.wstrb);
+                            dbg_bp_ctrl_reg[3:0] <= masked_value[3:0];  // Enable bits writable
+                            // Hit flags are read-only, updated from CPU in read logic
+                        end
+                        
+                        REG_DBG_RF_ADDR: begin
+                            // Register file address [4:0]
+                            dbg_rf_addr_reg <= apply_wstrb_mask(dbg_rf_addr_reg, axi.wdata, axi.wstrb);
+                        end
+                        
+                        REG_TRACE_ADDR: begin
+                            // Trace buffer read address [5:0]
+                            trace_addr_reg <= apply_wstrb_mask(trace_addr_reg, axi.wdata, axi.wstrb);
+                        end
+                        
+                        REG_DBG_RESET_CTRL: begin
+                            // [0] = soft_reset (W1P)
+                            // [1] = reset_done (RO)
+                            // [2] = single_step (W1P)
+                            // Write-1-pulse bits: set in this cycle, cleared next cycle
+                            // Only writable bits are [0] and [2]
+                            if (axi.wstrb[0]) begin
+                                dbg_reset_ctrl_reg[0] <= axi.wdata[0];  // soft_reset
+                                dbg_reset_ctrl_reg[2] <= axi.wdata[2];  // single_step
+                            end
+                        end
+
                         default: begin
                             // Writes to RO registers succeed but have no effect
                         end
@@ -580,6 +712,11 @@ module Register_Block #(
                 rv32i_mem_re <= 1'b0;
                 rv32i_mem_busy <= 1'b0;
             end
+            
+            // Clear W1P (Write-1-Pulse) bits after one cycle
+            // These bits pulse high for one cycle then auto-clear
+            dbg_reset_ctrl_reg[0] <= 1'b0;  // soft_reset (W1P)
+            dbg_reset_ctrl_reg[2] <= 1'b0;  // single_step (W1P)
             
             // Capture RV32I read data when busy completes and was a read operation
             if (!rv32i_mem_busy && rv32i_mem_busy_q && rv32i_mem_last_was_read) begin
@@ -680,6 +817,94 @@ module Register_Block #(
 
                 REG_CPU_MEM_CTRL: begin
                     read_data = cpu_mem_ctrl_ro;
+                end
+
+                // ----------------------------------------------------------------
+                // RV32I Debug Registers
+                // ----------------------------------------------------------------
+                REG_DBG_BP0_ADDR: begin
+                    read_data = dbg_bp0_addr_reg;
+                end
+                
+                REG_DBG_BP1_ADDR: begin
+                    read_data = dbg_bp1_addr_reg;
+                end
+                
+                REG_DBG_BP2_ADDR: begin
+                    read_data = dbg_bp2_addr_reg;
+                end
+                
+                REG_DBG_BP3_ADDR: begin
+                    read_data = dbg_bp3_addr_reg;
+                end
+                
+                REG_DBG_BP_CTRL: begin
+                    // [3:0] = enable, [7:4] = hit flags from CPU
+                    read_data[3:0] = dbg_bp_ctrl_reg[3:0];
+                    read_data[7:4] = rv32i_dbg_bp_hit;
+                    read_data[31:8] = '0;
+                end
+                
+                REG_PERF_CYCLE: begin
+                    read_data = rv32i_perf_cycle_count;
+                end
+                
+                REG_PERF_INSN: begin
+                    read_data = rv32i_perf_insn_count;
+                end
+                
+                REG_PERF_STALL: begin
+                    read_data = rv32i_perf_stall_count;
+                end
+                
+                REG_PERF_FLUSH: begin
+                    read_data = rv32i_perf_flush_count;
+                end
+                
+                REG_DBG_RF_ADDR: begin
+                    read_data[4:0] = dbg_rf_addr_reg[4:0];
+                    read_data[31:5] = '0;
+                end
+                
+                REG_DBG_RF_DATA: begin
+                    read_data = rv32i_dbg_rf_rdata;
+                end
+                
+                REG_TRACE_ADDR: begin
+                    read_data[5:0] = trace_addr_reg[5:0];
+                    read_data[31:6] = '0;
+                end
+                
+                REG_TRACE_DATA_LOW: begin
+                    read_data = rv32i_dbg_trace_data[31:0];
+                end
+                
+                REG_TRACE_DATA_MID: begin
+                    read_data = rv32i_dbg_trace_data[63:32];
+                end
+                
+                REG_TRACE_DATA_HI0: begin
+                    read_data = rv32i_dbg_trace_data[95:64];
+                end
+                
+                REG_TRACE_DATA_HI1: begin
+                    read_data = rv32i_dbg_trace_data[127:96];
+                end
+                
+                REG_TRACE_STATUS: begin
+                    read_data[5:0] = rv32i_dbg_trace_wptr;
+                    read_data[7:6] = '0;
+                    read_data[13:8] = rv32i_dbg_trace_count;
+                    read_data[15:14] = '0;
+                    read_data[16] = (rv32i_dbg_trace_count == 6'd64);  // Full flag
+                    read_data[31:17] = '0;
+                end
+                
+                REG_DBG_RESET_CTRL: begin
+                    read_data[0] = dbg_reset_ctrl_reg[0];  // soft_reset
+                    read_data[1] = rv32i_dbg_reset_done;   // reset_done
+                    read_data[2] = dbg_reset_ctrl_reg[2];  // single_step
+                    read_data[31:3] = '0;
                 end
 
                 REG_REVISION: begin

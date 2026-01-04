@@ -129,9 +129,9 @@ class rv32i_debug_load_test extends rv32i_base_test;
     // Write Debug Memory (Direct DUT Access)
     //--------------------------------------------------------------------------
     
-    virtual task write_debug_mem(logic [10:0] word_addr, logic [31:0] data);
+    virtual task write_debug_mem(input logic [10:0] addr, input logic [31:0] data);
         `uvm_info("RV32I_DEBUG_LOAD", 
-                  $sformatf("Debug write: addr=0x%03h, data=0x%08h", word_addr, data), 
+                  $sformatf("Debug write: addr=0x%03h, data=0x%08h", addr, data), 
                   UVM_HIGH)
         
         @(posedge vif.clk);
@@ -143,7 +143,7 @@ class rv32i_debug_load_test extends rv32i_base_test;
         //   3. Write 0x3F to CPU_MEM_CTRL (0x1234) - write_req + full word
         //   4. Poll CPU_MEM_CTRL[6] until busy clears
         
-        force rv32i_tb_top.dut.dbg_mem_addr = word_addr;
+        force rv32i_tb_top.dut.dbg_mem_addr = addr;
         force rv32i_tb_top.dut.dbg_mem_wdata = data;
         force rv32i_tb_top.dut.dbg_mem_we = 4'b1111;  // Full word write
         
@@ -172,11 +172,10 @@ class rv32i_debug_load_test extends rv32i_base_test;
     // Wait for Completion
     //--------------------------------------------------------------------------
     
-    virtual task wait_for_completion();
-        int timeout_cycles = 100;
+    virtual task wait_for_completion(int max_cycles = 100);
         int cycle_count = 0;
         
-        `uvm_info("RV32I_DEBUG_LOAD", "Waiting for CPU completion", UVM_MEDIUM)
+        `uvm_info("RV32I_DEBUG_LOAD", $sformatf("Waiting for CPU completion (max %0d cycles)", max_cycles), UVM_MEDIUM)
         
         fork
             begin
@@ -186,9 +185,9 @@ class rv32i_debug_load_test extends rv32i_base_test;
             end
             begin
                 // Timeout watchdog
-                repeat(timeout_cycles) @(posedge vif.clk);
+                repeat(max_cycles) @(posedge vif.clk);
                 `uvm_error("RV32I_DEBUG_LOAD", 
-                          $sformatf("Timeout: CPU did not complete after %0d cycles", timeout_cycles))
+                          $sformatf("Timeout: CPU did not complete after %0d cycles", max_cycles))
             end
         join_any
         disable fork;

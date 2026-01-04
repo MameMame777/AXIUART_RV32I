@@ -16,9 +16,16 @@
 # RTL - Core
 ../../../rtl/cpu/rv32i_core.sv
 
+# RTL - Trace Buffer (required by rv32i_core)
+../../../rtl/cpu/rv32i_trace_buffer.sv
+
 # Assertions
 ../../assertions/rv32i_mem_access_spec.sv
 ../../assertions/bind_rv32i_mem_spec.sv
+
+# Breakpoint assertions
+../../assertions/rv32i_breakpoint_spec.sv
+../../assertions/bind_rv32i_breakpoint_spec.sv
 
 # Testbench Top (includes all UVM components via rv32i_test_pkg.sv)
 rv32i_tb_top.sv

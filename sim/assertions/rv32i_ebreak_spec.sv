@@ -138,6 +138,87 @@ module rv32i_ebreak_spec
     //==========================================================================
     // COVERAGE: Halt/Resume Cycles
     //==========================================================================
+    // ASSERTION 6: Same-Cycle IF Stage Halt
+    //==========================================================================
+    // When ebreak_detected rises, if_valid must deassert same or next cycle
+    
+    property ebreak_halts_if_immediately;
+        @(posedge clk) disable iff (!rst_n)
+        $rose(ebreak_in_mem) |=> !if_valid;
+    endproperty
+    
+    assert_ebreak_halts_if_immediately: assert property (ebreak_halts_if_immediately)
+        else $error("[EBREAK_SPEC] CRITICAL: IF stage remained active after EBREAK @ %0t", $time);
+    
+    //==========================================================================
+    // ASSERTION 7: PC Freeze on EBREAK
+    //==========================================================================
+    // Once EBREAK detected, PC must remain stable until cpu_run
+    
+    logic [31:0] pc_at_ebreak;
+    logic ebreak_seen;
+    
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            ebreak_seen <= 1'b0;
+            pc_at_ebreak <= 32'h0;
+        end else if (ebreak_in_mem && !ebreak_seen) begin
+            ebreak_seen <= 1'b1;
+            pc_at_ebreak <= mem_pc;
+        end else if (cpu_run) begin
+            ebreak_seen <= 1'b0;
+        end
+    end
+    
+    property pc_stable_after_ebreak;
+        @(posedge clk) disable iff (!rst_n)
+        (ebreak_seen && !cpu_run) |-> $stable(if_valid ? 1'b0 : 1'b1);
+    endproperty
+    
+    assert_pc_stable_after_ebreak: assert property (pc_stable_after_ebreak)
+        else $error("[EBREAK_SPEC] PC changed while halted @ %0t", $time);
+    
+    //==========================================================================
+    // ASSERTION 8: Pipeline Entry Count Limit (BUG SIGNATURE)
+    //==========================================================================
+    // After EBREAK enters MEM stage, no more than 1 additional IF/ID should occur
+    // (accounting for pipeline delay). This catches the 8-instruction bug.
+    
+    int unsigned if_count_after_ebreak;
+    
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n || cpu_run) begin
+            if_count_after_ebreak <= 0;
+        end else if (ebreak_in_mem && !ebreak_seen) begin
+            if_count_after_ebreak <= 0;  // Start counting from EBREAK
+        end else if (ebreak_seen && if_valid) begin
+            if_count_after_ebreak <= if_count_after_ebreak + 1;
+        end
+    end
+    
+    property pipeline_entry_limit_after_ebreak;
+        @(posedge clk) disable iff (!rst_n)
+        (ebreak_seen && !cpu_run) |-> (if_count_after_ebreak <= 2);  // Max 2 IF after EBREAK
+    endproperty
+    
+    assert_pipeline_entry_limit: assert property (pipeline_entry_limit_after_ebreak)
+        else $error("[EBREAK_SPEC] CRITICAL BUG: %0d IF stages after EBREAK (max 2) @ %0t", 
+                    if_count_after_ebreak, $time);
+    
+    //==========================================================================
+    // ASSERTION 9: Instruction Fetch Lockout
+    //==========================================================================
+    // Once running flag clears, IF must not re-activate
+    
+    property no_fetch_after_running_clears;
+        @(posedge clk) disable iff (!rst_n)
+        $fell(running) |=> !if_valid throughout (!cpu_run)[*1:$];
+    endproperty
+    
+    assert_no_fetch_after_running_clears: assert property (no_fetch_after_running_clears)
+        else $error("[EBREAK_SPEC] IF stage active after running cleared @ %0t", $time);
+    
+    //==========================================================================
     
     covergroup ebreak_coverage @(posedge clk);
         option.per_instance = 1;

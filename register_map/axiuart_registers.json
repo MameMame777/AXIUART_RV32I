@@ -140,6 +140,150 @@
       "description": "RV32I CPU control and memory access: [3:0]=byte_enables, [4]=read_req(W1P), [5]=write_req(W1P), [6]=busy(RO), [7]=cpu_run, [8]=cpu_halt, [9]=cpu_halted(RO), [10]=cpu_break(RO)"
     },
     {
+      "name": "DBG_BP0_ADDR",
+      "offset": "0x1240",
+      "access": "RW",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Hardware breakpoint 0 address (32-bit PC value, halts CPU when PC matches)"
+    },
+    {
+      "name": "DBG_BP1_ADDR",
+      "offset": "0x1244",
+      "access": "RW",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Hardware breakpoint 1 address (32-bit PC value, halts CPU when PC matches)"
+    },
+    {
+      "name": "DBG_BP2_ADDR",
+      "offset": "0x1248",
+      "access": "RW",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Hardware breakpoint 2 address (32-bit PC value, halts CPU when PC matches)"
+    },
+    {
+      "name": "DBG_BP3_ADDR",
+      "offset": "0x124C",
+      "access": "RW",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Hardware breakpoint 3 address (32-bit PC value, halts CPU when PC matches)"
+    },
+    {
+      "name": "DBG_BP_CTRL",
+      "offset": "0x1250",
+      "access": "RW/RO",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Breakpoint control: [3:0]=bp_enable(RW), [7:4]=bp_hit_flags(RO), cleared on cpu_run"
+    },
+    {
+      "name": "PERF_CYCLE_COUNT",
+      "offset": "0x1260",
+      "access": "RO",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Performance counter: total cycles executed (counts when CPU running)"
+    },
+    {
+      "name": "PERF_INSN_COUNT",
+      "offset": "0x1264",
+      "access": "RO",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Performance counter: total instructions committed (WB stage valid)"
+    },
+    {
+      "name": "PERF_STALL_COUNT",
+      "offset": "0x1268",
+      "access": "RO",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Performance counter: total pipeline stalls (IF or ID stage stalled)"
+    },
+    {
+      "name": "PERF_FLUSH_COUNT",
+      "offset": "0x126C",
+      "access": "RO",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Performance counter: total pipeline flushes (branch/jump taken)"
+    },
+    {
+      "name": "DBG_RF_ADDR",
+      "offset": "0x1270",
+      "access": "RW",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Register file read address: [4:0]=register_address (0-31), read DBG_RF_DATA after setting"
+    },
+    {
+      "name": "DBG_RF_DATA",
+      "offset": "0x1274",
+      "access": "RO",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Register file read data: 32-bit value of register specified by DBG_RF_ADDR (x0 always returns 0)"
+    },
+    {
+      "name": "TRACE_READ_ADDR",
+      "offset": "0x1280",
+      "access": "RW",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Trace buffer read address: [5:0]=entry_index (0-63), read TRACE_DATA_* registers after setting"
+    },
+    {
+      "name": "TRACE_DATA_LOW",
+      "offset": "0x1284",
+      "access": "RO",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Trace entry data [31:0]: lower 32 bits of trace data"
+    },
+    {
+      "name": "TRACE_DATA_MID",
+      "offset": "0x1288",
+      "access": "RO",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Trace entry data [63:32]: middle-low 32 bits (rd_value)"
+    },
+    {
+      "name": "TRACE_DATA_HI0",
+      "offset": "0x128C",
+      "access": "RO",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Trace entry data [95:64]: middle-high 32 bits (instruction opcode)"
+    },
+    {
+      "name": "TRACE_DATA_HI1",
+      "offset": "0x1290",
+      "access": "RO",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Trace entry data [127:96]: upper 32 bits (PC address)"
+    },
+    {
+      "name": "TRACE_STATUS",
+      "offset": "0x1294",
+      "access": "RO",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Trace buffer status: [5:0]=write_ptr, [13:8]=entry_count, [16]=buffer_full_flag"
+    },
+    {
+      "name": "DBG_RESET_CTRL",
+      "offset": "0x1298",
+      "access": "RW/RO",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Debug reset control: [0]=soft_reset(W1P), [1]=reset_done(RO), [2]=cpu_step(W1P)"
+    },
+    {
       "name": "REVISION",
       "offset": "0x123C",
       "access": "RO",

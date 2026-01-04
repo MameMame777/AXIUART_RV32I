@@ -25,6 +25,12 @@ module Rv32i_Trace_Buffer #(
     input  logic [4:0]  rd_addr,         // Destination register address
     input  logic [31:0] rd_value,        // Destination register value after writeback
     
+    // Hardware debug read interface (UART accessible via Register_Block)
+    input  logic [$clog2(DEPTH)-1:0] dbg_read_addr,   // Trace entry index to read
+    output logic [127:0]             dbg_read_data,   // Trace entry data (combinational)
+    output logic [$clog2(DEPTH)-1:0] dbg_write_ptr,   // Current write pointer (registered)
+    output logic [$clog2(DEPTH)-1:0] dbg_entry_count, // Number of valid entries (registered)
+    
     // UVM access interface (direct read, no protocol overhead)
     output logic [DEPTH-1:0][127:0] trace_buffer,  // Packed trace entries (128 bits each)
     output logic [$clog2(DEPTH)-1:0] write_ptr,    // Current write position
@@ -96,6 +102,24 @@ module Rv32i_Trace_Buffer #(
         end
         write_ptr   = wr_ptr;
         entry_count = count;
+    end
+    
+    //==========================================================================
+    // HARDWARE DEBUG READ INTERFACE
+    //==========================================================================
+    // Combinational read for UART access via Register_Block
+    // Registered outputs for status polling
+    
+    assign dbg_read_data = buffer[dbg_read_addr];  // Combinational read
+    
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            dbg_write_ptr   <= '0;
+            dbg_entry_count <= '0;
+        end else begin
+            dbg_write_ptr   <= wr_ptr;
+            dbg_entry_count <= count;
+        end
     end
     
     //==========================================================================
