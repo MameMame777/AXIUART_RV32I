@@ -1,5 +1,6 @@
-# DSIM Configuration File for Simplified AXIUART UVM Testbench
-# UBUS-style simplified environment
+# DSIM Configuration File - NO ASSERTIONS VERSION
+# UBUS-style simplified environment (Assertions Disabled)
+# Created: 2026-01-05 - For performance testing and production simulation
 
 # UVM Defines
 +define+UVM_OBJECT_MUST_HAVE_CONSTRUCTOR
@@ -59,39 +60,11 @@
 ../../../rtl/cpu/rv32i_top.sv
 ../../../rtl/cpu/rv32i_trace_buffer.sv
 
-# RTL Design Files - CPU core (legacy monolithic - commented out)
+# RTL Design Files - CPU core (legacy monolithic - archived 2026-01-05)
 # ../../../rtl/cpu/rv32i_core.sv
 
 # Top Level
 ../../../rtl/AXIUART_Top.sv
-
-# Assertions - Debug Port
-../../assertions/rv32i_debug_port_assertions.sv
-
-# Assertions - RV32I Pipeline Stages
-../../assertions/rv32i_if_timing_spec.sv
-../../assertions/bind_rv32i_if_spec.sv
-
-../../assertions/rv32i_hazard_timing_spec.sv
-../../assertions/bind_rv32i_hazard_spec.sv
-
-../../assertions/rv32i_ex_timing_spec.sv
-../../assertions/bind_rv32i_ex_spec.sv
-
-../../assertions/rv32i_mem_timing_spec.sv
-../../assertions/bind_rv32i_mem_spec.sv
-
-../../assertions/rv32i_wb_timing_spec.sv
-../../assertions/bind_rv32i_wb_spec.sv
-
-../../assertions/rv32i_id_timing_spec.sv
-../../assertions/bind_rv32i_id_spec.sv
-
-../../assertions/bind_rv32i_csr_spec.sv
-
-# Assertions - Register Block CPU Memory Interface
-../../assertions/register_block_cpu_mem_assertions.sv
-../../assertions/bind_register_block_cpu_mem.sv
 
 # Testbench Top Module (includes package and test_lib)
 +incdir+.
