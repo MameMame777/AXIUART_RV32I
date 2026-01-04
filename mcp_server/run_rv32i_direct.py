@@ -16,7 +16,7 @@ def run_rv32i_compile():
     
     workspace = Path(r"E:\Nautilus\workspace\fpgawork\TD4UART")
     tb_dir = workspace / "sim" / "uvm" / "tb"
-    config_file = tb_dir / "rv32i_config.f"
+    config_file = tb_dir / "dsim_config_rv32i.f"
     
     if not config_file.exists():
         print(f"ERROR: Config file not found: {config_file}")
@@ -46,7 +46,7 @@ def run_rv32i_compile():
         "-timescale", "1ns/1ps",
         "-genimage", "rv32i_image",
         "-work", "dsim_work",
-        "-f", "rv32i_config.f",
+        "-f", "dsim_config_rv32i.f",
         "+acc+b",
         "+acc+rw",
     ]

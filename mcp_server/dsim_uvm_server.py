@@ -547,17 +547,9 @@ async def run_uvm_simulation(
         "-l", log_file_relative
     ]
     
-    # Check if assertions are enabled via plusargs
-    enable_assertions = any("+define+ENABLE_ASSERTIONS" in arg for arg in plusargs)
-    if enable_assertions:
-        # Select assertion file based on test type
-        if "rv32i" in test_name.lower():
-            assertion_file = "dsim_assertions_rv32i.f"
-            logger.info("Assertions ENABLED: Including dsim_assertions_rv32i.f for RV32I test")
-        else:
-            assertion_file = "dsim_assertions.f"
-            logger.info("Assertions ENABLED: Including dsim_assertions.f")
-        cmd.extend(["-f", assertion_file])
+    # NOTE: Assertions are now integrated into main config files (dsim_config.f)
+    # Use dsim_config_no_assertions.f if assertions need to be disabled
+    # Legacy assertion file inclusion logic removed (2026-01-05)
     
     # Mode-specific options (do NOT add -uvm again)
     # Note: Not using -genimage/-image to let DSIM use workspace mode (dsim_work/)
