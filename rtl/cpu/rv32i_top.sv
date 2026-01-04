@@ -385,7 +385,19 @@ module rv32i_top
     logic        ex_valid_out;
     
     // Forwarding sources
-    logic [31:0] wb_result;
+    logic [31:0] wb_result;       // Combinational from WB stage
+    logic [31:0] wb_result_fwd;   // Registered for forwarding timing
+    logic [4:0]  wb_rf_waddr;
+    
+    // Register wb_result for forwarding timing
+    // Breaks long combinational path: mem_wb_reg → WB mux → EX mux
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n || soft_reset_active) begin
+            wb_result_fwd <= 32'h0;
+        end else begin
+            wb_result_fwd <= wb_result;
+        end
+    end
     
     rv32i_ex u_ex (
         .pc              (id_ex_reg.pc),
@@ -398,8 +410,8 @@ module rv32i_top
         .ctrl            (id_ex_reg.ctrl),
         .valid           (id_ex_reg.valid),
         .ex_forward_data (ex_mem_reg.alu_result),
-        .mem_forward_data(wb_result),
-        .wb_forward_data (wb_result),
+        .mem_forward_data(wb_result_fwd),  // Use registered value for timing
+        .wb_forward_data (wb_result_fwd),  // Use registered value for timing
         .ex_flush        (ex_flush),
         .alu_result      (ex_alu_result),
         .rs2_forwarded_out(ex_rs2_forwarded),
@@ -514,8 +526,8 @@ module rv32i_top
         .valid           (mem_wb_reg.valid),
         .wb_result       (wb_result),
         .rf_wen          (wb_rf_wen),
-        .rf_waddr        (rf_waddr),
-        .rf_wdata        (rf_wdata),
+        .rf_waddr        (wb_rf_waddr),
+        .rf_wdata        (wb_rf_wdata),
         .csr_wen         (wb_csr_wen),
         .csr_waddr       (wb_csr_waddr),
         .csr_wdata       (wb_csr_wdata)
@@ -523,8 +535,8 @@ module rv32i_top
     
     assign wb_valid = mem_wb_reg.valid;
     assign rf_wen   = wb_rf_wen;
-    assign rf_waddr = rf_waddr;
-    assign rf_wdata = rf_wdata;
+    assign rf_waddr = wb_rf_waddr;
+    assign rf_wdata = wb_rf_wdata;
     
     //==========================================================================
     // CSR MODULE

@@ -788,7 +788,11 @@ module rv32i_top (
     output logic [3:0]  dbg_bp_hit,          // Breakpoint hit flags
     
     // === MMIO LED Output ===
-    output logic [3:0]  led_out              // LED register output
+    output logic [3:0]  led_out,             // LED register output
+    // === RGB LED Outputs used for status indication ===
+    output logic        led5_r,             // RGB LED Red means CPU is halrted
+    output logic        led5_g,             // RGB LED Green     CPU is running
+    output logic        led5_b             // RGB LED Blue       CPU is in debug mode  
 );
 ```
 
