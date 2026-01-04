@@ -160,7 +160,7 @@ package rv32i_isa_pkg;
     
     // System Operations (SYSTEM)
     typedef enum logic [2:0] {
-        F3_PRIV  = 3'b000,  // ECALL, EBREAK, etc.
+        F3_PRIV  = 3'b000,  // ECALL, EBREAK, MRET, etc.
         F3_CSRRW = 3'b001,
         F3_CSRRS = 3'b010,
         F3_CSRRC = 3'b011,
@@ -168,6 +168,16 @@ package rv32i_isa_pkg;
         F3_CSRRSI = 3'b110,
         F3_CSRRCI = 3'b111
     } funct3_system_e;
+    
+    // CSR Operations
+    typedef enum logic [2:0] {
+        CSR_RW  = 3'd0,  // CSRRW:  Atomic Read/Write
+        CSR_RS  = 3'd1,  // CSRRS:  Atomic Read and Set Bits
+        CSR_RC  = 3'd2,  // CSRRC:  Atomic Read and Clear Bits
+        CSR_RWI = 3'd3,  // CSRRWI: Immediate variant of CSRRW
+        CSR_RSI = 3'd4,  // CSRRSI: Immediate variant of CSRRS
+        CSR_RCI = 3'd5   // CSRRCI: Immediate variant of CSRRC
+    } csr_op_e;
     
     //==========================================================================
     // Funct7 Definitions
@@ -177,6 +187,12 @@ package rv32i_isa_pkg;
         F7_NORMAL = 7'b0000000,  // ADD, SRL, SLL, etc.
         F7_ALT    = 7'b0100000   // SUB, SRA
     } funct7_e;
+    
+    //==========================================================================
+    // Special System Instructions
+    //==========================================================================
+    
+    localparam logic [31:0] INSN_MRET = 32'h30200073;  // Machine Return
     
     //==========================================================================
     // Complete Instruction Encodings (for exact matching)
@@ -228,7 +244,8 @@ package rv32i_isa_pkg;
     typedef enum logic [1:0] {
         WB_ALU = 2'd0,   // ALU result
         WB_MEM = 2'd1,   // Memory data
-        WB_PC4 = 2'd2    // PC + 4 (for JAL/JALR)
+        WB_PC4 = 2'd2,   // PC + 4 (for JAL/JALR)
+        WB_CSR = 2'd3    // CSR data (for CSR instructions)
     } wb_src_e;
     
     //==========================================================================
@@ -266,6 +283,13 @@ package rv32i_isa_pkg;
         logic        is_ecall;        // ECALL instruction
         logic        is_ebreak;       // EBREAK instruction (breakpoint)
         logic        is_fence;        // FENCE instruction
+        logic        is_mret;         // MRET instruction (machine return)
+        
+        // CSR
+        logic        is_csr;          // CSR instruction (any variant)
+        csr_op_e     csr_op;          // CSR operation type
+        logic [11:0] csr_addr;        // CSR address (12 bits)
+        logic        csr_imm_mode;    // CSR uses immediate (CSRRWI/CSRRSI/CSRRCI)
         
         // Immediate value (sign-extended)
         logic [31:0] immediate;
@@ -535,9 +559,49 @@ package rv32i_isa_pkg;
                     ctrl.is_ecall = 1'b1;
                 end else if (insn == INSN_EBREAK) begin
                     ctrl.is_ebreak = 1'b1;
+                end else if (insn == INSN_MRET) begin
+                    ctrl.is_mret = 1'b1;
                 end else begin
-                    // CSR instructions not implemented
-                    ctrl.illegal = 1'b1;
+                    // CSR instructions
+                    case (i_insn.funct3)
+                        F3_CSRRW, F3_CSRRS, F3_CSRRC: begin
+                            ctrl.is_csr = 1'b1;
+                            ctrl.rf_wen = 1'b1;  // rd gets old CSR value
+                            ctrl.wb_src = WB_CSR;
+                            ctrl.csr_addr = i_insn.imm[11:0];  // CSR address from immediate field
+                            ctrl.csr_imm_mode = 1'b0;  // Register source (rs1)
+                            
+                            case (i_insn.funct3)
+                                F3_CSRRW: ctrl.csr_op = CSR_RW;
+                                F3_CSRRS: ctrl.csr_op = CSR_RS;
+                                F3_CSRRC: ctrl.csr_op = CSR_RC;
+                                default:  ctrl.csr_op = CSR_RW;
+                            endcase
+                        end
+                        
+                        F3_CSRRWI, F3_CSRRSI, F3_CSRRCI: begin
+                            ctrl.is_csr = 1'b1;
+                            ctrl.rf_wen = 1'b1;  // rd gets old CSR value
+                            ctrl.wb_src = WB_CSR;
+                            ctrl.csr_addr = i_insn.imm[11:0];  // CSR address from immediate field
+                            ctrl.csr_imm_mode = 1'b1;  // Immediate source (rs1 field as 5-bit uimm)
+                            
+                            case (i_insn.funct3)
+                                F3_CSRRWI: ctrl.csr_op = CSR_RWI;
+                                F3_CSRRSI: ctrl.csr_op = CSR_RSI;
+                                F3_CSRRCI: ctrl.csr_op = CSR_RCI;
+                                default:   ctrl.csr_op = CSR_RWI;
+                            endcase
+                            
+                            // For immediate variants, rs1 field contains 5-bit zero-extended immediate
+                            // Store in immediate field for pipeline (zero-extended, not sign-extended)
+                            ctrl.immediate = {27'b0, i_insn.rs1};
+                        end
+                        
+                        default: begin
+                            ctrl.illegal = 1'b1;
+                        end
+                    endcase
                 end
             end
             
