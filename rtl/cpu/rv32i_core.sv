@@ -437,6 +437,9 @@ module rv32i_core
         if (exception_trap) begin
             // Exception trap: Redirect to trap handler (highest priority)
             pc_next = trap_vector;  // Jump to mtvec CSR value
+        end else if (mret_detected) begin
+            // MRET: Return from trap handler (second priority)
+            pc_next = mret_pc;  // Return to mepc CSR value
         end else if (pc_sel_branch) begin
             // Branch or jump taken - use target address
             pc_next = pc_branch_target;
@@ -1206,8 +1209,23 @@ module rv32i_core
         end
     end
     
-    // MRET signals (to be implemented in Step 7)
-    assign mret_req = 1'b0;
+    //==========================================================================
+    // MRET (Machine Return) DETECTION & CONTROL
+    //==========================================================================
+    //
+    // MRET instruction returns from trap handler to interrupted code:
+    // - Detected in MEM stage (parallel to EBREAK/ECALL)
+    // - Reads return address from mepc CSR (via mret_pc signal)
+    // - Redirects PC to mepc value
+    // - Flushes pipeline to prevent speculative execution
+    //
+    //==========================================================================
+    
+    logic mret_detected;
+    assign mret_detected = ex_mem_reg.valid && ex_mem_reg.ctrl.is_mret;
+    
+    // Drive mret_req signal to CSR module
+    assign mret_req = mret_detected;
     
     // Debug CSR interface (optional - not driven yet)
     assign dbg_csr_addr_int = 12'h0;
@@ -1263,11 +1281,12 @@ module rv32i_core
     logic bp_flush;
     assign bp_flush = 1'b0;  // Never flush on breakpoint - preserve pipeline state
     
-    // Pipeline flush control: Flush on branch/jump OR exception trap
-    // Exception flushes all stages to prevent committed side effects
-    assign if_flush = pc_sel_branch || exception_trap;
-    assign id_flush = pc_sel_branch || exception_trap;
-    assign ex_flush = exception_trap;  // Flush EX stage on exception (MEM stage fault)
+    // Pipeline flush control: Flush on branch/jump OR exception trap OR MRET
+    // - Exception flushes all stages to prevent committed side effects
+    // - MRET flushes to start fresh execution at return address
+    assign if_flush = pc_sel_branch || exception_trap || mret_detected;
+    assign id_flush = pc_sel_branch || exception_trap || mret_detected;
+    assign ex_flush = exception_trap || mret_detected;  // Flush EX on exception/MRET
     
     //==========================================================================
     // DEBUG CONTROL
