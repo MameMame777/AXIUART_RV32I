@@ -130,13 +130,5 @@ module rv32i_id
     assign forward_rs2_out  = forward_rs2;
     assign ctrl_out         = decoded_ctrl;
     assign valid_out        = valid_in && !decoded_ctrl.illegal;  // Invalidate on illegal instruction
-    
-    // Debug: Track SW instruction rs2 value
-    always @(posedge clk) begin
-        if (valid_in && decoded_ctrl.mem_write && rs2_addr != 5'b0) begin
-            $display("[%0t] ID: SW insn=0x%08X, rs2=x%0d, rs2_data=0x%08X, forward_rs2=%0d",
-                     $time, insn_in, rs2_addr, rf_rdata2, forward_rs2);
-        end
-    end
 
 endmodule : rv32i_id

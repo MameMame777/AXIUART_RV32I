@@ -70,14 +70,6 @@ module rv32i_ex
     
     assign rs2_forwarded_out = rs2_forwarded;  // Pass to MEM stage for stores
     
-    // Debug: Track rs2 forwarding for SW instruction
-    always @(posedge clk) begin
-        if (valid && ctrl.mem_write) begin
-            $display("[%0t] EX: SW insn=0x%08X, rs2_data=0x%08X, forward_rs2=%0d, rs2_forwarded=0x%08X",
-                     $time, insn, rs2_data, forward_rs2, rs2_forwarded);
-        end
-    end
-    
     //==========================================================================
     // ALU Operand Selection
     //==========================================================================
