@@ -193,6 +193,7 @@ module rv32i_core
         logic [31:0] insn;
         logic [31:0] rs1_data;
         logic [31:0] rs2_data;
+        logic [31:0] csr_rdata;    // CSR read data (from ID stage)
         logic [1:0]  forward_rs1;  // Pre-computed forwarding control (Phase 2B)
         logic [1:0]  forward_rs2;  // Pre-computed forwarding control (Phase 2B)
         decode_ctrl_t ctrl;
@@ -210,6 +211,7 @@ module rv32i_core
         logic [31:0] insn;
         logic [31:0] alu_result;
         logic [31:0] rs2_data;      // For store operations
+        logic [31:0] csr_rdata;     // CSR read data (forwarded from ID stage)
         logic        branch_taken;  // Branch decision (pipelined from EX)
         logic [31:0] branch_target; // Branch target address (pipelined from EX)
         decode_ctrl_t ctrl;
@@ -225,7 +227,8 @@ module rv32i_core
     typedef struct packed {
         logic [31:0] pc;
         logic [31:0] insn;
-        logic [31:0] result;        // ALU result or memory data
+        logic [31:0] result;        // ALU result or memory data or CSR data
+        decode_ctrl_t ctrl;         // Decode control (for CSR write enable)
         logic [4:0]  rd_addr;
         logic        rf_wen;
         logic        valid;
@@ -267,6 +270,34 @@ module rv32i_core
     //==========================================================================
     
     logic [31:0] wb_result;
+    
+    //==========================================================================
+    // CSR (Control and Status Register) Signals
+    //==========================================================================
+    
+    // CSR read interface (ID stage)
+    logic [11:0] csr_raddr;
+    logic [31:0] csr_rdata;
+    
+    // CSR write interface (WB stage)
+    logic [11:0] csr_waddr;
+    logic [31:0] csr_wdata;
+    logic        csr_wen;
+    
+    // Exception trap interface (MEM stage - will be implemented in Step 4)
+    logic        exception_trap;
+    logic [31:0] exception_pc;
+    logic [4:0]  exception_code;
+    logic [31:0] exception_tval;
+    logic [31:0] trap_vector;
+    
+    // MRET interface (MEM stage - will be implemented in Step 7)
+    logic        mret_req;
+    logic [31:0] mret_pc;
+    
+    // Debug CSR interface
+    logic [11:0] dbg_csr_addr_int;
+    logic [31:0] dbg_csr_rdata_int;
     
     //==========================================================================
     // Hazard Detection & Forwarding
@@ -318,6 +349,46 @@ module rv32i_core
             end
         end
     end
+    
+    //==========================================================================
+    // CSR MODULE INSTANTIATION
+    //==========================================================================
+    //
+    // Control and Status Registers for RISC-V Privileged Architecture
+    // - Implements Machine Mode CSRs (mepc, mcause, mtval, mtvec)
+    // - Supports 6 CSR operations (CSRRW/CSRRS/CSRRC + immediate variants)
+    // - Handles exception trap and MRET instruction
+    //
+    //==========================================================================
+    
+    rv32i_csr u_csr (
+        .clk                (clk),
+        .rst_n              (rst_n),
+        
+        // CSR read interface (ID stage)
+        .csr_raddr          (csr_raddr),
+        .csr_rdata          (csr_rdata),
+        
+        // CSR write interface (WB stage)
+        .csr_waddr          (csr_waddr),
+        .csr_wdata          (csr_wdata),
+        .csr_wen            (csr_wen),
+        
+        // Exception trap interface (MEM stage)
+        .exception_trap     (exception_trap),
+        .exception_pc       (exception_pc),
+        .exception_code     (exception_code),
+        .exception_tval     (exception_tval),
+        .trap_vector        (trap_vector),
+        
+        // MRET interface (MEM stage)
+        .mret_req           (mret_req),
+        .mret_pc            (mret_pc),
+        
+        // Debug CSR read interface
+        .dbg_csr_addr       (dbg_csr_addr_int),
+        .dbg_csr_rdata      (dbg_csr_rdata_int)
+    );
     
     //==========================================================================
     // INSTRUCTION MEMORY (Dual-Port Block RAM)
@@ -471,6 +542,9 @@ module rv32i_core
     // ID/EX PIPELINE REGISTER
     //==========================================================================
     
+    // CSR read address from decoded instruction (ID stage)
+    assign csr_raddr = id_ctrl.csr_addr;
+    
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             id_ex_reg <= '0;
@@ -483,6 +557,7 @@ module rv32i_core
             id_ex_reg.insn        <= insn_id;
             id_ex_reg.rs1_data    <= rf_rdata1;
             id_ex_reg.rs2_data    <= rf_rdata2;
+            id_ex_reg.csr_rdata   <= csr_rdata;         // CSR read data
             id_ex_reg.forward_rs1 <= forward_rs1_next;  // Phase 2B: Register forwarding control
             id_ex_reg.forward_rs2 <= forward_rs2_next;  // Phase 2B: Register forwarding control
             id_ex_reg.ctrl        <= id_ctrl;
@@ -705,6 +780,7 @@ module rv32i_core
             ex_mem_reg.insn          <= insn_ex;
             ex_mem_reg.alu_result    <= ex_alu_result;
             ex_mem_reg.rs2_data      <= ex_alu_op2;  // Forwarded rs2 for stores
+            ex_mem_reg.csr_rdata     <= id_ex_reg.csr_rdata;  // CSR data propagation
             ex_mem_reg.branch_taken  <= ex_branch_cond || is_jump;  // Pipeline branch/jump decision
             ex_mem_reg.branch_target <= ex_branch_target;            // Pipeline target address
             ex_mem_reg.ctrl          <= id_ex_reg.ctrl;
@@ -928,11 +1004,13 @@ module rv32i_core
                 WB_ALU:  mem_wb_reg.result <= ex_mem_reg.alu_result;     // ALU result
                 WB_MEM:  mem_wb_reg.result <= mem_load_data;             // Memory load
                 WB_PC4:  mem_wb_reg.result <= pc_mem + 32'd4;            // PC+4 for JAL/JALR
+                WB_CSR:  mem_wb_reg.result <= ex_mem_reg.csr_rdata;      // CSR old value
                 default: mem_wb_reg.result <= ex_mem_reg.alu_result;
             endcase
             
             mem_wb_reg.rd_addr <= ex_mem_reg.ctrl.rd_addr;
             mem_wb_reg.rf_wen  <= ex_mem_reg.ctrl.rf_wen;
+            mem_wb_reg.ctrl    <= ex_mem_reg.ctrl;                       // CSR instruction tracking
             mem_wb_reg.valid   <= mem_valid;
         end
     end
@@ -952,6 +1030,66 @@ module rv32i_core
     assign rf_waddr = mem_wb_reg.rd_addr;
     assign rf_wen   = mem_wb_reg.rf_wen && mem_wb_reg.valid;
     assign rf_wdata = wb_result;
+    
+    //==========================================================================
+    // CSR WRITE LOGIC (WB STAGE)
+    //==========================================================================
+    //
+    // CSR write operation:
+    // - CSRRW:  wdata = rs1_data (or immediate),  rd = old_csr
+    // - CSRRS:  wdata = old_csr | rs1_data,       rd = old_csr (set bits)
+    // - CSRRC:  wdata = old_csr & ~rs1_data,      rd = old_csr (clear bits)
+    //
+    //==========================================================================
+    
+    logic [31:0] csr_operand;
+    logic [31:0] csr_new_value;
+    
+    // Operand selection: immediate mode vs register mode
+    assign csr_operand = mem_wb_reg.ctrl.csr_imm_mode ? 
+                         mem_wb_reg.ctrl.immediate : 
+                         wb_result;
+    
+    // CSR write data computation based on operation
+    always_comb begin
+        case (mem_wb_reg.ctrl.csr_op)
+            CSR_RW, CSR_RWI: begin
+                // CSRRW/CSRRWI: Write operand directly
+                csr_new_value = csr_operand;
+            end
+            
+            CSR_RS, CSR_RSI: begin
+                // CSRRS/CSRRSI: Set bits (old_csr | rs1)
+                csr_new_value = mem_wb_reg.result | csr_operand;
+            end
+            
+            CSR_RC, CSR_RCI: begin
+                // CSRRC/CSRRCI: Clear bits (old_csr & ~rs1)
+                csr_new_value = mem_wb_reg.result & ~csr_operand;
+            end
+            
+            default: begin
+                csr_new_value = 32'h0;
+            end
+        endcase
+    end
+    
+    // CSR write enable: valid CSR instruction in WB stage
+    assign csr_waddr = mem_wb_reg.ctrl.csr_addr;
+    assign csr_wen   = mem_wb_reg.ctrl.is_csr && mem_wb_reg.valid;
+    assign csr_wdata = csr_new_value;
+    
+    // Exception trap signals (to be implemented in Step 4)
+    assign exception_trap = 1'b0;
+    assign exception_pc   = 32'h0;
+    assign exception_code = 5'h0;
+    assign exception_tval = 32'h0;
+    
+    // MRET signals (to be implemented in Step 7)
+    assign mret_req = 1'b0;
+    
+    // Debug CSR interface (optional - not driven yet)
+    assign dbg_csr_addr_int = 12'h0;
     
     //==========================================================================
     // HAZARD DETECTION & FORWARDING
