@@ -143,10 +143,10 @@ module rv32i_tb_top;
     rv32i_tb_if tb_if(clk);
     
     //==========================================================================
-    // DUT INSTANTIATION - RV32I CORE
+    // DUT INSTANTIATION - RV32I TOP (Modular Pipeline Architecture)
     //==========================================================================
     
-    rv32i_core dut (
+    rv32i_top dut (
         .clk(clk),
         .rst_n(tb_if.rst_n),
         
@@ -201,19 +201,41 @@ module rv32i_tb_top;
     );
     
     // Expose internal PC for verification
-    assign tb_if.pc_if = dut.pc_if;
+    assign tb_if.pc_if = dut.if_pc_current;
     
     //==========================================================================
     // UVM CONFIGURATION AND TEST START
     //==========================================================================
     
     initial begin
-        // Load CPU test program from hex file (for simple CPU tests)
-        // For UART-driven tests, this will be skipped and memory loaded via AXI
-        $readmemh("../../tests/rv32i_ram_init.hex", dut.ram);
+        string test_name;
+        string hex_file;
         
         // Set virtual interface in config DB
         uvm_config_db#(virtual rv32i_tb_if)::set(null, "*", "vif", tb_if);
+        
+        // Load CPU test program from hex file ONLY if test doesn't use debug writes
+        // Tests that load code via debug interface (exception handler) skip this
+        if ($value$plusargs("UVM_TESTNAME=%s", test_name)) begin
+            if (test_name != "rv32i_exception_handler_test") begin
+                // Try to load test-specific hex file first
+                hex_file = {"../../tests/", test_name, ".hex"};
+                if ($fopen(hex_file, "r")) begin
+                    $readmemh(hex_file, dut.ram);
+                    $display("[TB] Loaded %s for test: %s", hex_file, test_name);
+                end else begin
+                    // Fall back to default
+                    $readmemh("../../tests/rv32i_ram_init.hex", dut.ram);
+                    $display("[TB] Loaded rv32i_ram_init.hex for test: %s (test-specific hex not found)", test_name);
+                end
+            end else begin
+                $display("[TB] Skipping readmemh - test %s uses debug writes", test_name);
+            end
+        end else begin
+            // Default: load hex file
+            $readmemh("../../tests/rv32i_ram_init.hex", dut.ram);
+            $display("[TB] Loaded rv32i_ram_init.hex (no UVM_TESTNAME)");
+        end
         
         // Enable waveform dumping
         $dumpfile("rv32i_test.mxd");

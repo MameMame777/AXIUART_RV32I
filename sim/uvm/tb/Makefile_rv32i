@@ -6,8 +6,8 @@ DSIM = dsim
 DSIM_FLAGS = -sv -timescale 1ns/1ps
 WORK_DIR = dsim_work
 
-# Source files
-FILELIST = rv32i_config.f
+# Source files (updated to modular architecture 2026-01-05)
+FILELIST = dsim_config_rv32i.f
 
 # Test targets
 .PHONY: all compile run clean waves
