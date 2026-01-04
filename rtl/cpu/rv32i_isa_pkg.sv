@@ -384,6 +384,11 @@ package rv32i_isa_pkg;
             is_ecall: 1'b0,
             is_ebreak: 1'b0,
             is_fence: 1'b0,
+            is_mret: 1'b0,
+            is_csr: 1'b0,
+            csr_op: CSR_RW,
+            csr_addr: 12'b0,
+            csr_imm_mode: 1'b0,
             immediate: 32'b0,
             illegal: 1'b0
         };

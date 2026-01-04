@@ -284,15 +284,16 @@ module rv32i_core
     logic [31:0] csr_wdata;
     logic        csr_wen;
     
-    // Exception trap interface (MEM stage - will be implemented in Step 4)
+    // Exception trap interface (MEM stage)
     logic        exception_trap;
     logic [31:0] exception_pc;
     logic [4:0]  exception_code;
     logic [31:0] exception_tval;
     logic [31:0] trap_vector;
     
-    // MRET interface (MEM stage - will be implemented in Step 7)
+    // MRET interface (MEM stage)
     logic        mret_req;
+    logic        mret_detected;
     logic [31:0] mret_pc;
     
     // Debug CSR interface
@@ -1149,8 +1150,10 @@ module rv32i_core
     //==========================================================================
     
     // Debug mode control: When enabled, EBREAK halts CPU instead of trapping
+    // Set to 0 for exception handling mode (trap to handler)
+    // Set to 1 for debug mode (halt CPU for breakpoint debugging)
     logic debug_mode_enable;
-    assign debug_mode_enable = 1'b1;  // Default: Debug mode enabled for backward compatibility
+    assign debug_mode_enable = 1'b0;  // Exception handling mode: EBREAK traps to handler
     
     always_comb begin
         // Default: no exception
@@ -1221,7 +1224,6 @@ module rv32i_core
     //
     //==========================================================================
     
-    logic mret_detected;
     assign mret_detected = ex_mem_reg.valid && ex_mem_reg.ctrl.is_mret;
     
     // Drive mret_req signal to CSR module
@@ -1358,8 +1360,9 @@ module rv32i_core
                 bp_skip_once <= (bp_hit_reg != 4'h0) ? 1'b1 : 1'b0;
                 bp_just_resumed <= (bp_hit_reg != 4'h0) ? 1'b1 : 1'b0;  // Mark that we're resuming
                 bp_hit_reg <= 4'h0;  // Clear breakpoint hit flags
-            end else if (cpu_halt || ebreak_detected) begin
-                // Halt on external request or EBREAK instruction
+            end else if (cpu_halt || (ebreak_detected && debug_mode_enable)) begin
+                // Halt on external request or EBREAK (only in debug mode)
+                // Note: When debug_mode_enable=0, EBREAK triggers exception instead
                 running <= 1'b0;
                 cpu_halted <= 1'b1;
                 bp_skip_once <= 1'b0;
