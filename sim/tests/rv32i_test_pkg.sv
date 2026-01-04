@@ -23,5 +23,8 @@
 `include "rv32i_base_test.sv"
 `include "rv32i_basic_test.sv"
 `include "rv32i_debug_load_test.sv"
+`include "rv32i_ebreak_simple_test.sv"
+`include "rv32i_breakpoint_test.sv"
+`include "rv32i_perfcount_test.sv"
 
 `endif // RV32I_TEST_PKG_SV

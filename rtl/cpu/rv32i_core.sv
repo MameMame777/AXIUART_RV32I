@@ -28,7 +28,7 @@ module rv32i_core
     // Debug interface (compatible with Register_Block.sv)
     input  logic        cpu_run,        // Start/resume execution
     input  logic        cpu_halt,       // Halt execution
-    input  logic        cpu_step,       // Single-step execution
+    input  logic        cpu_step,       // Single-step execution (W1P)
     output logic        cpu_halted,     // CPU halted status
     output logic        cpu_break,      // Breakpoint hit (EBREAK)
     
@@ -39,10 +39,35 @@ module rv32i_core
     input  logic [3:0]  dbg_mem_we,     // Byte write enables (active when cpu_halted)
     input  logic        dbg_mem_re,     // Read enable
     
+    // Hardware breakpoint interface (4 breakpoints)
+    input  logic [3:0]  dbg_bp_enable,  // Breakpoint enable mask
+    input  logic [31:0] dbg_bp_addr[0:3], // Breakpoint addresses
+    output logic [3:0]  dbg_bp_hit,     // Breakpoint hit flags (latched)
+    
+    // Performance counter interface
+    output logic [31:0] perf_cycle_count,   // Total cycles executed
+    output logic [31:0] perf_insn_count,    // Total instructions committed
+    output logic [31:0] perf_stall_count,   // Total pipeline stalls
+    output logic [31:0] perf_flush_count,   // Total pipeline flushes
+    
+    // Register file snapshot interface (read when halted)
+    input  logic [4:0]  dbg_rf_addr,    // Register address to read
+    output logic [31:0] dbg_rf_rdata,   // Register data output
+    
+    // Trace buffer read interface (UART accessible)
+    input  logic [5:0]  dbg_trace_addr,   // Trace entry index to read
+    output logic [127:0] dbg_trace_data,  // Trace entry data [127:96]=PC [95:64]=insn [63:32]=rd_value [31:27]=rd_addr
+    output logic [5:0]  dbg_trace_wptr,   // Current write pointer
+    output logic [5:0]  dbg_trace_count,  // Number of valid entries
+    
+    // Software reset interface
+    input  logic        dbg_soft_reset,   // Software reset request (W1P)
+    output logic        dbg_reset_done,   // Reset completion flag
+    
     // MMIO interface (LED register)
     output logic [3:0]  led_out,
     
-    // Trace buffer interface
+    // Trace buffer interface (UVM direct access)
     output logic        trace_valid,
     output logic [31:0] trace_pc,
     output logic [31:0] trace_insn,
@@ -69,6 +94,28 @@ module rv32i_core
     logic if_flush;
     logic id_flush;
     logic ex_flush;
+    
+    //==========================================================================
+    // Debug Internal Signals
+    //==========================================================================
+    
+    // Hardware breakpoint signals
+    logic bp_match;
+    logic [3:0] bp_hit_reg;
+    
+    // Performance counters
+    logic [31:0] cycle_counter;
+    logic [31:0] insn_counter;
+    logic [31:0] stall_counter;
+    logic [31:0] flush_counter;
+    
+    // Software reset and single-step control
+    logic soft_reset_active;
+    logic reset_done_reg;
+    logic step_mode;
+    logic step_done;
+    logic bp_skip_once;  // Skip breakpoint check for one instruction after resume
+    logic bp_just_resumed;  // Track that we just resumed from breakpoint
     
     //==========================================================================
     // Program Counter
@@ -294,6 +341,26 @@ module rv32i_core
     // PROGRAM COUNTER MANAGEMENT
     //==========================================================================
     
+    //==========================================================================
+    // HARDWARE BREAKPOINT LOGIC
+    //==========================================================================
+    // Check if current PC matches any enabled breakpoint
+    always_comb begin
+        bp_match = 1'b0;
+        for (int i = 0; i < 4; i++) begin
+            if (dbg_bp_enable[i] && (pc_if == dbg_bp_addr[i]) && running) begin
+                bp_match = 1'b1;
+            end
+        end
+    end
+    
+    // Pure address comparison for bp_skip_once clearing logic (no running check)
+    logic at_any_bp_addr;
+    assign at_any_bp_addr = (dbg_bp_enable[0] && (pc_if == dbg_bp_addr[0])) ||
+                            (dbg_bp_enable[1] && (pc_if == dbg_bp_addr[1])) ||
+                            (dbg_bp_enable[2] && (pc_if == dbg_bp_addr[2])) ||
+                            (dbg_bp_enable[3] && (pc_if == dbg_bp_addr[3]));
+    
     // PC next-value logic
     always_comb begin
         if (pc_sel_branch) begin
@@ -312,10 +379,16 @@ module rv32i_core
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             pc_if <= 32'h00000000;
-        end else if (cpu_run && cpu_halted) begin
-            // Reset PC to 0 when starting from halted state
+        end else if (cpu_run && cpu_halted && pc_if == 32'h00000000) begin
+            // Reset PC to 0 only on initial start (when PC is already 0)
+            // Don't reset when resuming from breakpoint (PC != 0)
             pc_if <= 32'h00000000;
-        end else if (running && !cpu_halt) begin
+        end else if (running && !cpu_halt && (!bp_match || bp_skip_once)) begin
+            // Update PC during normal execution
+            // When resuming from breakpoint:
+            //   - bp_skip_once=1 allows PC update on resume
+            //   - Pipeline preserves instruction from breakpoint address
+            //   - Instruction completes quickly without re-fetching
             pc_if <= pc_next;
         end
     end
@@ -919,10 +992,19 @@ module rv32i_core
     // True Dual-Port BlockRAM: Port A (IF) and Port B (MEM) operate independently
     // No serialization needed - both can access RAM simultaneously
     
-    assign if_valid = running && !cpu_halt;
-    assign if_stall = hazard_load_use;
+    assign if_valid = running && !cpu_halt && (!bp_match || bp_skip_once);
+    // IF stage stall on breakpoint or hazards
+    // Stall on breakpoint match to prevent new instruction fetch while preserving pipeline
+    assign if_stall = hazard_load_use || (bp_match && running && !bp_skip_once);
     assign id_stall = hazard_load_use;
-    assign if_flush = pc_sel_branch;  // Flush on branch/jump
+    
+    // Breakpoint handling: Don't flush pipeline on breakpoint
+    // Instead, stall IF stage to preserve instruction in pipeline
+    // When resumed, instruction continues from where it was
+    logic bp_flush;
+    assign bp_flush = 1'b0;  // Never flush on breakpoint - preserve pipeline state
+    
+    assign if_flush = pc_sel_branch;  // Only flush on branch/jump, not breakpoint
     assign id_flush = pc_sel_branch;
     assign ex_flush = 1'b0;
     
@@ -937,24 +1019,68 @@ module rv32i_core
     assign ebreak_detected = ex_mem_reg.valid && ex_mem_reg.ctrl.is_ebreak;
     assign ecall_detected  = ex_mem_reg.valid && ex_mem_reg.ctrl.is_ecall;
     
-    // Debug state machine
+    // Debug state machine with hardware breakpoint, single-step, and soft reset support
     logic cpu_break_reg;  // Latched breakpoint signal
     
     always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
+        if (!rst_n || soft_reset_active) begin
             running <= 1'b0;
             cpu_halted <= 1'b1;
             cpu_break_reg <= 1'b0;
+            step_mode <= 1'b0;
+            step_done <= 1'b0;
+            bp_hit_reg <= 4'h0;
+            bp_skip_once <= 1'b0;
+            bp_just_resumed <= 1'b0;
         end else begin
-            if (cpu_run) begin
-                // Start/resume execution - clear break
+            // Clear skip flag one cycle after resuming (when bp_just_resumed is set)
+            if (bp_just_resumed && running) begin
+                bp_skip_once <= 1'b0;
+                bp_just_resumed <= 1'b0;
+            end
+            
+            // Hardware breakpoint detection - halt on PC match (unless skipping)
+            if (bp_match && running && !step_mode && !bp_skip_once) begin
+                running <= 1'b0;
+                cpu_halted <= 1'b1;
+                cpu_break_reg <= 1'b1;  // Set break signal for hardware breakpoint
+                // Record which breakpoint(s) hit
+                for (int i = 0; i < 4; i++) begin
+                    if (dbg_bp_enable[i] && (pc_if == dbg_bp_addr[i])) begin
+                        bp_hit_reg[i] <= 1'b1;
+                    end
+                end
+            end
+            // Single-step mode - execute one instruction then halt
+            else if (cpu_step && cpu_halted) begin
+                step_mode <= 1'b1;
+                step_done <= 1'b0;
+                running <= 1'b1;
+                cpu_halted <= 1'b0;
+                bp_skip_once <= 1'b0;  // Don't skip breakpoints in single-step mode
+            end else if (step_mode && wb_valid) begin
+                // One instruction committed in WB stage - halt
+                step_mode <= 1'b0;
+                step_done <= 1'b1;
+                running <= 1'b0;
+                cpu_halted <= 1'b1;
+            end
+            // Normal run/halt control
+            else if (cpu_run) begin
+                // Start/resume execution - set skip flag if resuming from breakpoint
                 running <= 1'b1;
                 cpu_halted <= 1'b0;
                 cpu_break_reg <= 1'b0;
+                step_done <= 1'b0;
+                // If resuming from breakpoint (bp_hit_reg != 0), skip breakpoint check for one instruction
+                bp_skip_once <= (bp_hit_reg != 4'h0) ? 1'b1 : 1'b0;
+                bp_just_resumed <= (bp_hit_reg != 4'h0) ? 1'b1 : 1'b0;  // Mark that we're resuming
+                bp_hit_reg <= 4'h0;  // Clear breakpoint hit flags
             end else if (cpu_halt || ebreak_detected) begin
                 // Halt on external request or EBREAK instruction
                 running <= 1'b0;
                 cpu_halted <= 1'b1;
+                bp_skip_once <= 1'b0;
                 if (ebreak_detected) begin
                     cpu_break_reg <= 1'b1;  // Latch break signal
                 end
@@ -966,8 +1092,84 @@ module rv32i_core
         end
     end
     
-    // Breakpoint signal: Persists until cleared by cpu_run
+    // Breakpoint signals: Persist until cleared by cpu_run
     assign cpu_break = cpu_break_reg;
+    assign dbg_bp_hit = bp_hit_reg;
+    
+    //==========================================================================
+    // PERFORMANCE COUNTERS
+    //==========================================================================
+    
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n || soft_reset_active) begin
+            cycle_counter <= 32'h0;
+            insn_counter  <= 32'h0;
+            stall_counter <= 32'h0;
+            flush_counter <= 32'h0;
+        end else if (running) begin
+            // Count cycles when CPU is running
+            cycle_counter <= cycle_counter + 32'd1;
+            
+            // Count committed instructions (WB stage)
+            if (wb_valid) begin
+                insn_counter <= insn_counter + 32'd1;
+            end
+            
+            // Count pipeline stalls (IF or ID stall)
+            if (if_stall || id_stall) begin
+                stall_counter <= stall_counter + 32'd1;
+            end
+            
+            // Count pipeline flushes (branch/jump taken)
+            if (if_flush || id_flush || ex_flush) begin
+                flush_counter <= flush_counter + 32'd1;
+            end
+        end
+    end
+    
+    assign perf_cycle_count = cycle_counter;
+    assign perf_insn_count  = insn_counter;
+    assign perf_stall_count = stall_counter;
+    assign perf_flush_count = flush_counter;
+    
+    //==========================================================================
+    // REGISTER FILE SNAPSHOT (Debug Read)
+    //==========================================================================
+    // Combinational read of any register when CPU is halted
+    
+    always_comb begin
+        if (dbg_rf_addr == 5'b0) begin
+            dbg_rf_rdata = 32'h0;  // x0 always reads as zero
+        end else begin
+            dbg_rf_rdata = regfile[dbg_rf_addr];
+        end
+    end
+    
+    //==========================================================================
+    // SOFTWARE RESET CONTROL
+    //==========================================================================
+    
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            soft_reset_active <= 1'b0;
+            reset_done_reg <= 1'b0;
+        end else begin
+            if (dbg_soft_reset && !soft_reset_active) begin
+                // Trigger soft reset for one cycle
+                soft_reset_active <= 1'b1;
+                reset_done_reg <= 1'b0;
+            end else if (soft_reset_active) begin
+                // Deassert soft reset, set done flag
+                soft_reset_active <= 1'b0;
+                reset_done_reg <= 1'b1;
+            end else if (!dbg_soft_reset) begin
+                // Clear done flag when reset request is deasserted
+                reset_done_reg <= 1'b0;
+            end
+        end
+    end
+    
+    assign dbg_reset_done = reset_done_reg;
     
     //==========================================================================
     // MMIO - LED REGISTER
@@ -991,6 +1193,36 @@ module rv32i_core
     assign trace_insn    = insn_wb;
     assign trace_rd_addr = mem_wb_reg.rd_addr;
     assign trace_rd_data = wb_result;
+    
+    //==========================================================================
+    // TRACE BUFFER INSTANTIATION
+    //==========================================================================
+    // 64-entry trace buffer with UVM and UART hardware access interfaces
+    
+    Rv32i_Trace_Buffer #(
+        .DEPTH(64)
+    ) u_trace_buffer (
+        .clk           (clk),
+        .rst_n         (rst_n && !soft_reset_active),  // Reset on hardware or software reset
+        
+        // CPU trace inputs (WB stage)
+        .insn_valid    (trace_valid),
+        .insn          (trace_insn),
+        .pc            (trace_pc),
+        .rd_addr       (trace_rd_addr),
+        .rd_value      (trace_rd_data),
+        
+        // Hardware debug read interface (UART accessible via Register_Block)
+        .dbg_read_addr (dbg_trace_addr),
+        .dbg_read_data (dbg_trace_data),
+        .dbg_write_ptr (dbg_trace_wptr),
+        .dbg_entry_count(dbg_trace_count),
+        
+        // UVM direct access interface (simulation only)
+        .trace_buffer  (),  // Not connected - UVM uses hierarchical access
+        .write_ptr     (),  // Not connected
+        .entry_count   ()   // Not connected
+    );
     
     //==========================================================================
     // RAM INITIALIZATION
