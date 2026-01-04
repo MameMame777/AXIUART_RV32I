@@ -204,6 +204,20 @@ package rv32i_isa_pkg;
     localparam logic [31:0] INSN_NOP    = 32'h00000013;  // ADDI x0, x0, 0
     
     //==========================================================================
+    // Exception Cause Codes (mcause[4:0] - RISC-V Privileged Spec Table 3.6)
+    //==========================================================================
+    
+    localparam logic [4:0] CAUSE_INSN_MISALIGN      = 5'd0;  // Instruction address misaligned
+    localparam logic [4:0] CAUSE_INSN_ACCESS_FAULT  = 5'd1;  // Instruction access fault
+    localparam logic [4:0] CAUSE_ILLEGAL_INSN       = 5'd2;  // Illegal instruction
+    localparam logic [4:0] CAUSE_BREAKPOINT         = 5'd3;  // Breakpoint (EBREAK)
+    localparam logic [4:0] CAUSE_LOAD_MISALIGN      = 5'd4;  // Load address misaligned
+    localparam logic [4:0] CAUSE_LOAD_ACCESS_FAULT  = 5'd5;  // Load access fault
+    localparam logic [4:0] CAUSE_STORE_MISALIGN     = 5'd6;  // Store/AMO address misaligned
+    localparam logic [4:0] CAUSE_STORE_ACCESS_FAULT = 5'd7;  // Store/AMO access fault
+    localparam logic [4:0] CAUSE_ECALL_M_MODE       = 5'd11; // Environment call from M-mode
+    
+    //==========================================================================
     // Control Signal Types
     //==========================================================================
     
