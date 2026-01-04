@@ -434,7 +434,10 @@ module rv32i_core
     
     // PC next-value logic
     always_comb begin
-        if (pc_sel_branch) begin
+        if (exception_trap) begin
+            // Exception trap: Redirect to trap handler (highest priority)
+            pc_next = trap_vector;  // Jump to mtvec CSR value
+        end else if (pc_sel_branch) begin
             // Branch or jump taken - use target address
             pc_next = pc_branch_target;
         end else if (!if_stall) begin
@@ -1079,11 +1082,129 @@ module rv32i_core
     assign csr_wen   = mem_wb_reg.ctrl.is_csr && mem_wb_reg.valid;
     assign csr_wdata = csr_new_value;
     
-    // Exception trap signals (to be implemented in Step 4)
-    assign exception_trap = 1'b0;
-    assign exception_pc   = 32'h0;
-    assign exception_code = 5'h0;
-    assign exception_tval = 32'h0;
+    //==========================================================================
+    // EXCEPTION DETECTION LOGIC (MEM STAGE)
+    //==========================================================================
+    //
+    // Synchronous exceptions detected in MEM stage:
+    // - EBREAK: Breakpoint (CAUSE_BREAKPOINT = 3)
+    // - ECALL: Environment call (CAUSE_ECALL_M_MODE = 11)
+    // - Illegal instruction: Invalid opcode/encoding (CAUSE_ILLEGAL_INSN = 2)
+    // - Instruction misalignment: PC[1:0] != 00 (CAUSE_INSN_MISALIGN = 0)
+    // - Load misalignment: LH/LW unaligned (CAUSE_LOAD_MISALIGN = 4)
+    // - Store misalignment: SH/SW unaligned (CAUSE_STORE_MISALIGN = 6)
+    //
+    //==========================================================================
+    
+    logic exception_ebreak;
+    logic exception_ecall;
+    logic exception_illegal_insn;
+    logic exception_insn_misalign;
+    logic exception_load_misalign;
+    logic exception_store_misalign;
+    
+    // EBREAK detection (MEM stage)
+    assign exception_ebreak = ex_mem_reg.valid && ex_mem_reg.ctrl.is_ebreak;
+    
+    // ECALL detection (MEM stage)
+    assign exception_ecall = ex_mem_reg.valid && ex_mem_reg.ctrl.is_ecall;
+    
+    // Illegal instruction detection (MEM stage)
+    assign exception_illegal_insn = ex_mem_reg.valid && ex_mem_reg.ctrl.illegal;
+    
+    // Instruction misalignment detection (IF stage - checked during fetch)
+    assign exception_insn_misalign = if_valid && (pc_if[1:0] != 2'b00);
+    
+    // Load misalignment detection (MEM stage)
+    assign exception_load_misalign = ex_mem_reg.valid && ex_mem_reg.ctrl.mem_read &&
+        ((ex_mem_reg.ctrl.mem_width == MEM_HALF && mem_addr[0] != 1'b0) ||
+         (ex_mem_reg.ctrl.mem_width == MEM_WORD && mem_addr[1:0] != 2'b00));
+    
+    // Store misalignment detection (MEM stage)
+    assign exception_store_misalign = ex_mem_reg.valid && ex_mem_reg.ctrl.mem_write &&
+        ((ex_mem_reg.ctrl.mem_width == MEM_HALF && mem_addr[0] != 1'b0) ||
+         (ex_mem_reg.ctrl.mem_width == MEM_WORD && mem_addr[1:0] != 2'b00));
+    
+    //==========================================================================
+    // EXCEPTION PRIORITY ENCODER (RISC-V Spec Table 3.7)
+    //==========================================================================
+    //
+    // Priority order (highest to lowest):
+    // 1. Instruction misalignment (during fetch)
+    // 2. Illegal instruction (during decode/execute)
+    // 3. Breakpoint (EBREAK)
+    // 4. Load address misaligned
+    // 5. Store address misaligned
+    // 6. Environment call (ECALL)
+    //
+    // Exception trap outputs:
+    // - exception_trap: 1-cycle pulse when exception occurs
+    // - exception_pc: PC of faulting instruction (saved to mepc)
+    // - exception_code: Cause code (saved to mcause[4:0])
+    // - exception_tval: Trap value - faulting address or instruction (saved to mtval)
+    //
+    //==========================================================================
+    
+    // Debug mode control: When enabled, EBREAK halts CPU instead of trapping
+    logic debug_mode_enable;
+    assign debug_mode_enable = 1'b1;  // Default: Debug mode enabled for backward compatibility
+    
+    always_comb begin
+        // Default: no exception
+        exception_trap = 1'b0;
+        exception_code = 5'h0;
+        exception_pc   = 32'h0;
+        exception_tval = 32'h0;
+        
+        // Priority 1: Instruction misalignment (highest priority for fetch exceptions)
+        if (exception_insn_misalign) begin
+            exception_trap = 1'b1;
+            exception_code = CAUSE_INSN_MISALIGN;  // 0
+            exception_pc   = pc_if;
+            exception_tval = pc_if;  // Faulting PC address
+        end
+        
+        // Priority 2: Illegal instruction
+        else if (exception_illegal_insn) begin
+            exception_trap = 1'b1;
+            exception_code = CAUSE_ILLEGAL_INSN;  // 2
+            exception_pc   = pc_mem;
+            exception_tval = insn_mem;  // Faulting instruction encoding
+        end
+        
+        // Priority 3: Breakpoint (EBREAK)
+        // Only trap if debug mode is disabled; otherwise handled by debug state machine
+        else if (exception_ebreak && !debug_mode_enable) begin
+            exception_trap = 1'b1;
+            exception_code = CAUSE_BREAKPOINT;  // 3
+            exception_pc   = pc_mem;
+            exception_tval = 32'h0;
+        end
+        
+        // Priority 4: Load misalignment
+        else if (exception_load_misalign) begin
+            exception_trap = 1'b1;
+            exception_code = CAUSE_LOAD_MISALIGN;  // 4
+            exception_pc   = pc_mem;
+            exception_tval = mem_addr;  // Faulting memory address
+        end
+        
+        // Priority 5: Store misalignment
+        else if (exception_store_misalign) begin
+            exception_trap = 1'b1;
+            exception_code = CAUSE_STORE_MISALIGN;  // 6
+            exception_pc   = pc_mem;
+            exception_tval = mem_addr;  // Faulting memory address
+        end
+        
+        // Priority 6: Environment call (ECALL)
+        else if (exception_ecall) begin
+            exception_trap = 1'b1;
+            exception_code = CAUSE_ECALL_M_MODE;  // 11
+            exception_pc   = pc_mem;
+            exception_tval = 32'h0;
+        end
+    end
     
     // MRET signals (to be implemented in Step 7)
     assign mret_req = 1'b0;
@@ -1142,15 +1263,19 @@ module rv32i_core
     logic bp_flush;
     assign bp_flush = 1'b0;  // Never flush on breakpoint - preserve pipeline state
     
-    assign if_flush = pc_sel_branch;  // Only flush on branch/jump, not breakpoint
-    assign id_flush = pc_sel_branch;
-    assign ex_flush = 1'b0;
+    // Pipeline flush control: Flush on branch/jump OR exception trap
+    // Exception flushes all stages to prevent committed side effects
+    assign if_flush = pc_sel_branch || exception_trap;
+    assign id_flush = pc_sel_branch || exception_trap;
+    assign ex_flush = exception_trap;  // Flush EX stage on exception (MEM stage fault)
     
     //==========================================================================
     // DEBUG CONTROL
     //==========================================================================
     
-    // EBREAK detection: Check if MEM stage is executing EBREAK instruction
+    // EBREAK/ECALL detection: Check if MEM stage is executing these instructions
+    // Note: ebreak_detected is used for debug halt (when debug_mode_enable=1)
+    //       Exception trap path is separate (controlled by exception_ebreak signal)
     logic ebreak_detected;
     logic ecall_detected;
     
