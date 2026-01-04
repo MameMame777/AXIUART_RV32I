@@ -212,16 +212,16 @@ module AXIUART_Top #(
     );
 
     // --------------------------------------------------------------------
-    // RV32I CPU Core Instantiation
+    // RV32I CPU Core Instantiation (Modular Pipeline Architecture)
     // --------------------------------------------------------------------
-    rv32i_core rv32i_inst (
+    rv32i_top rv32i_inst (
         .clk(clk),
         .rst_n(~rst),  // Active-low reset
         
         // CPU control
         .cpu_run(rv32i_cpu_run),
         .cpu_halt(rv32i_cpu_halt),
-        .cpu_step(1'b0),           // Step mode not implemented
+        .cpu_step(1'b0),           // Step mode not implemented yet
         .cpu_halted(rv32i_cpu_halted),
         .cpu_break(rv32i_cpu_break),
         
@@ -232,11 +232,44 @@ module AXIUART_Top #(
         .dbg_mem_we(rv32i_mem_we),
         .dbg_mem_re(rv32i_mem_re),
         
-        // LED output (memory-mapped I/O)
-        .led_out(rv32i_led)
+        // Hardware breakpoint interface (4 breakpoints)
+        .dbg_bp_enable(4'b0000),   // Breakpoints disabled via top level
+        .dbg_bp_addr('{default: 32'h0}),
+        .dbg_bp_hit(),             // Not connected
         
-        // Trace outputs not connected
-        // .trace_valid(), .trace_pc(), etc.
+        // Performance counters
+        .perf_cycle_count(),       // Not connected
+        .perf_insn_count(),
+        .perf_stall_count(),
+        .perf_flush_count(),
+        
+        // Register file snapshot
+        .dbg_rf_addr(5'b0),
+        .dbg_rf_rdata(),
+        
+        // Trace buffer interface
+        .dbg_trace_addr(6'b0),
+        .dbg_trace_data(),
+        .dbg_trace_wptr(),
+        .dbg_trace_count(),
+        
+        // Software reset
+        .dbg_soft_reset(1'b0),
+        .dbg_reset_done(),
+        
+        // LED output (memory-mapped I/O at 0x407C)
+        .led_out(rv32i_led),
+        
+        // Trace outputs (UVM direct access)
+        .trace_valid(),
+        .trace_pc(),
+        .trace_insn(),
+        .trace_rd_addr(),
+        .trace_rd_data(),
+        
+        // CSR debug interface
+        .dbg_csr_addr(12'h0),
+        .dbg_csr_rdata()
     );
     
     // LED output from RV32I CPU

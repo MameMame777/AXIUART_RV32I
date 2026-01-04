@@ -166,8 +166,15 @@ module rv32i_mem
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             led_reg <= 4'h0;
-        end else if (valid && ctrl.mem_write && is_mmio_led) begin
-            led_reg <= rs2_data[3:0];
+        end else begin
+            if (valid && ctrl.mem_write && is_mmio_led) begin
+                led_reg <= rs2_data[3:0];
+                $display("[%0t] LED WRITE: addr=0x%08X, data=0x%X, valid=%b, mem_write=%b, is_mmio_led=%b",
+                         $time, mem_addr, rs2_data[3:0], valid, ctrl.mem_write, is_mmio_led);
+            end else if (valid && ctrl.mem_write) begin
+                $display("[%0t] MEM WRITE (not LED): addr=0x%08X, data=0x%08X, is_mmio_led=%b, is_ram=%b",
+                         $time, mem_addr, rs2_data, is_mmio_led, is_ram_access);
+            end
         end
     end
     

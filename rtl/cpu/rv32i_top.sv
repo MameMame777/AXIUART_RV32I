@@ -207,6 +207,7 @@ module rv32i_top
     
     rv32i_if u_if (
         .pc_current      (if_pc_current),
+        .if_valid        (if_valid),
         .if_stall        (if_stall),
         .if_flush        (if_flush),
         .branch_taken    (ex_mem_reg.branch_taken),
@@ -215,18 +216,21 @@ module rv32i_top
         .trap_vector     (trap_vector),
         .mret_req        (mret_req),
         .mret_pc         (mret_pc),
-        .insn_in         (ram_rdata_if),
+        .insn_ram_addr   (ram_addr_if),
+        .insn_ram_rdata  (ram_rdata_if),
         .dbg_bp_enable   (dbg_bp_enable),
         .dbg_bp_addr     (dbg_bp_addr),
-        .bp_skip_once    (bp_skip_once),
+        .dbg_bp_hit      (if_bp_hit),
+        .cpu_break       (if_bp_match),
         .running         (running),
+        .cpu_run         (cpu_run),
+        .cpu_halted      (cpu_halted),
+        .bp_skip_once    (bp_skip_once),
+        .bp_match        (if_bp_match),
         .pc_next         (if_pc_next),
         .pc_out          (if_pc_out),
         .insn_out        (if_insn_out),
-        .valid_out       (if_valid_out),
-        .dbg_bp_hit      (if_bp_hit),
-        .cpu_break       (if_bp_match),
-        .insn_ram_addr   (ram_addr_if)
+        .valid_out       (if_valid_out)
     );
     
     // PC register
@@ -276,8 +280,8 @@ module rv32i_top
     logic [31:0] csr_rdata;
     
     // Forwarding control from hazard unit
-    logic [1:0]  forward_rs1_next;
-    logic [1:0]  forward_rs2_next;
+    logic [1:0]  forward_rs1_sel;
+    logic [1:0]  forward_rs2_sel;
     
     // Register file write from WB stage
     logic        rf_wen;
@@ -294,8 +298,8 @@ module rv32i_top
         .rf_waddr        (rf_waddr),
         .rf_wdata        (rf_wdata),
         .csr_rdata       (csr_rdata),
-        .forward_rs1     (forward_rs1_next),
-        .forward_rs2     (forward_rs2_next),
+        .forward_rs1     (forward_rs1_sel),
+        .forward_rs2     (forward_rs2_sel),
         .pc_out          (id_pc_out),
         .insn_out        (id_insn_out),
         .rs1_data_out    (id_rs1_data),
@@ -323,9 +327,8 @@ module rv32i_top
     rv32i_hazard u_hazard (
         .id_rs1_addr     (id_ctrl.rs1_addr),
         .id_rs2_addr     (id_ctrl.rs2_addr),
-        .id_rs1_used     (id_ctrl.alu_src1_pc ? 1'b0 : 1'b1),  // RS1 not used if ALU src is PC
-        .id_rs2_used     (id_ctrl.alu_src2_imm ? 1'b0 : 1'b1), // RS2 not used if ALU src is immediate
         .id_valid        (id_valid),
+        .id_ctrl         (id_ctrl),
         .ex_rd_addr      (id_ex_reg.ctrl.rd_addr),
         .ex_rf_wen       (id_ex_reg.ctrl.rf_wen),
         .ex_is_load      (id_ex_reg.ctrl.mem_read),
@@ -333,20 +336,19 @@ module rv32i_top
         .mem_rd_addr     (ex_mem_reg.ctrl.rd_addr),
         .mem_rf_wen      (ex_mem_reg.ctrl.rf_wen),
         .mem_valid       (ex_mem_reg.valid),
-        .wb_rd_addr      (mem_wb_reg.rd_addr),
-        .wb_rf_wen       (mem_wb_reg.rf_wen),
+        .wb_rd_addr      (mem_wb_reg.ctrl.rd_addr),
+        .wb_rf_wen       (mem_wb_reg.ctrl.rf_wen),
         .wb_valid        (mem_wb_reg.valid),
         .branch_taken    (ex_mem_reg.branch_taken),
         .exception_trap  (exception_trap),
         .mret_req        (mret_req),
-        .forward_rs1     (forward_rs1_next),
-        .forward_rs2     (forward_rs2_next),
+        .forward_rs1_sel (forward_rs1_sel),
+        .forward_rs2_sel (forward_rs2_sel),
         .if_stall        (if_stall),
         .id_stall        (id_stall),
         .if_flush        (if_flush),
         .id_flush        (id_flush),
-        .ex_flush        (ex_flush),
-        .load_use_stall  (load_use_stall)
+        .ex_flush        (ex_flush)
     );
     
     //==========================================================================
@@ -376,41 +378,33 @@ module rv32i_top
     // EX STAGE WIRING
     //==========================================================================
     
-    logic [31:0] ex_pc_out;
-    logic [31:0] ex_insn_out;
     logic [31:0] ex_alu_result;
     logic [31:0] ex_rs2_forwarded;
-    logic [31:0] ex_csr_rdata_out;
     logic        ex_branch_taken;
     logic [31:0] ex_branch_target;
-    decode_ctrl_t ex_ctrl_out;
     logic        ex_valid_out;
     
     // Forwarding sources
     logic [31:0] wb_result;
     
     rv32i_ex u_ex (
-        .pc_in           (id_ex_reg.pc),
-        .insn_in         (id_ex_reg.insn),
-        .rs1_data_in     (id_ex_reg.rs1_data),
-        .rs2_data_in     (id_ex_reg.rs2_data),
-        .imm_in          (id_ex_reg.imm),
-        .csr_rdata_in    (id_ex_reg.csr_rdata),
+        .pc              (id_ex_reg.pc),
+        .insn            (id_ex_reg.insn),
+        .rs1_data        (id_ex_reg.rs1_data),
+        .rs2_data        (id_ex_reg.rs2_data),
+        .imm             (id_ex_reg.imm),
         .forward_rs1     (id_ex_reg.forward_rs1),
         .forward_rs2     (id_ex_reg.forward_rs2),
-        .ctrl_in         (id_ex_reg.ctrl),
-        .valid_in        (id_ex_reg.valid),
+        .ctrl            (id_ex_reg.ctrl),
+        .valid           (id_ex_reg.valid),
         .ex_forward_data (ex_mem_reg.alu_result),
         .mem_forward_data(wb_result),
         .wb_forward_data (wb_result),
-        .pc_out          (ex_pc_out),
-        .insn_out        (ex_insn_out),
+        .ex_flush        (ex_flush),
         .alu_result      (ex_alu_result),
         .rs2_forwarded_out(ex_rs2_forwarded),
-        .csr_rdata_out   (ex_csr_rdata_out),
         .branch_taken    (ex_branch_taken),
         .branch_target   (ex_branch_target),
-        .ctrl_out        (ex_ctrl_out),
         .valid_out       (ex_valid_out)
     );
     
@@ -426,14 +420,14 @@ module rv32i_top
         end else if (ex_flush) begin
             ex_mem_reg <= ex_mem_bubble();
         end else begin
-            ex_mem_reg.pc            <= ex_pc_out;
-            ex_mem_reg.insn          <= ex_insn_out;
+            ex_mem_reg.pc            <= id_ex_reg.pc;
+            ex_mem_reg.insn          <= id_ex_reg.insn;
             ex_mem_reg.alu_result    <= ex_alu_result;
             ex_mem_reg.rs2_data      <= ex_rs2_forwarded;
-            ex_mem_reg.csr_rdata     <= ex_csr_rdata_out;
+            ex_mem_reg.csr_rdata     <= id_ex_reg.csr_rdata;
             ex_mem_reg.branch_taken  <= ex_branch_taken;
             ex_mem_reg.branch_target <= ex_branch_target;
-            ex_mem_reg.ctrl          <= ex_ctrl_out;
+            ex_mem_reg.ctrl          <= id_ex_reg.ctrl;
             ex_mem_reg.valid         <= ex_valid;
         end
     end
@@ -442,36 +436,24 @@ module rv32i_top
     // MEM STAGE WIRING
     //==========================================================================
     
-    logic [31:0] mem_pc_out;
-    logic [31:0] mem_insn_out;
-    logic [31:0] mem_alu_result_out;
-    logic [31:0] mem_mem_data;
-    logic [31:0] mem_csr_rdata_out;
-    decode_ctrl_t mem_ctrl_out;
+    logic [31:0] mem_mem_data_out;
     logic        mem_valid_out;
     logic [3:0]  mem_led_out;
     logic [31:0] mem_exception_pc;
-    logic [4:0]  mem_exception_code;
+    logic [3:0]  mem_exception_code;
     logic [31:0] mem_exception_tval;
     
     rv32i_mem u_mem (
         .clk             (clk),
         .rst_n           (rst_n && !soft_reset_active),
-        .pc_in           (ex_mem_reg.pc),
-        .insn_in         (ex_mem_reg.insn),
-        .alu_result_in   (ex_mem_reg.alu_result),
-        .rs2_data_in     (ex_mem_reg.rs2_data),
-        .csr_rdata_in    (ex_mem_reg.csr_rdata),
-        .ctrl_in         (ex_mem_reg.ctrl),
-        .valid_in        (ex_mem_reg.valid),
+        .pc              (ex_mem_reg.pc),
+        .insn            (ex_mem_reg.insn),
+        .alu_result      (ex_mem_reg.alu_result),
+        .rs2_data        (ex_mem_reg.rs2_data),
+        .csr_rdata       (ex_mem_reg.csr_rdata),
+        .ctrl            (ex_mem_reg.ctrl),
+        .valid           (ex_mem_reg.valid),
         .data_ram_rdata  (ram_rdata_mem),
-        .pc_out          (mem_pc_out),
-        .insn_out        (mem_insn_out),
-        .alu_result_out  (mem_alu_result_out),
-        .mem_data        (mem_mem_data),
-        .csr_rdata_out   (mem_csr_rdata_out),
-        .ctrl_out        (mem_ctrl_out),
-        .valid_out       (mem_valid_out),
         .data_ram_addr   (ram_addr_mem),
         .data_ram_wdata  (ram_wdata_mem),
         .data_ram_we     (ram_we_byte),
@@ -479,7 +461,9 @@ module rv32i_top
         .exception_trap  (exception_trap),
         .exception_pc    (mem_exception_pc),
         .exception_code  (mem_exception_code),
-        .exception_tval  (mem_exception_tval)
+        .exception_tval  (mem_exception_tval),
+        .mem_data_out    (mem_mem_data_out),
+        .valid_out       (mem_valid_out)
     );
     
     assign mem_valid = mem_valid_out;
@@ -500,15 +484,13 @@ module rv32i_top
         if (!rst_n || soft_reset_active) begin
             mem_wb_reg <= mem_wb_bubble();
         end else begin
-            mem_wb_reg.pc          <= mem_pc_out;
-            mem_wb_reg.insn        <= mem_insn_out;
-            mem_wb_reg.mem_data    <= mem_mem_data;
-            mem_wb_reg.alu_result  <= mem_alu_result_out;
-            mem_wb_reg.csr_rdata   <= mem_csr_rdata_out;
-            mem_wb_reg.ctrl        <= mem_ctrl_out;
+            mem_wb_reg.pc          <= ex_mem_reg.pc;
+            mem_wb_reg.insn        <= ex_mem_reg.insn;
+            mem_wb_reg.mem_data    <= mem_mem_data_out;
+            mem_wb_reg.alu_result  <= ex_mem_reg.alu_result;
+            mem_wb_reg.csr_rdata   <= ex_mem_reg.csr_rdata;
+            mem_wb_reg.ctrl        <= ex_mem_reg.ctrl;
             mem_wb_reg.valid       <= mem_valid;
-            mem_wb_reg.rd_addr     <= mem_ctrl_out.rd_addr;
-            mem_wb_reg.rf_wen      <= mem_ctrl_out.rf_wen;
         end
     end
     
@@ -523,25 +505,26 @@ module rv32i_top
     logic        wb_csr_wen;
     
     rv32i_wb u_wb (
-        .pc_in           (mem_wb_reg.pc),
-        .insn_in         (mem_wb_reg.insn),
-        .mem_data_in     (mem_wb_reg.mem_data),
-        .alu_result_in   (mem_wb_reg.alu_result),
-        .csr_rdata_in    (mem_wb_reg.csr_rdata),
-        .ctrl_in         (mem_wb_reg.ctrl),
-        .valid_in        (mem_wb_reg.valid),
-        .rd_addr_in      (mem_wb_reg.rd_addr),
+        .pc              (mem_wb_reg.pc),
+        .insn            (mem_wb_reg.insn),
+        .mem_data        (mem_wb_reg.mem_data),
+        .alu_result      (mem_wb_reg.alu_result),
+        .csr_rdata       (mem_wb_reg.csr_rdata),
+        .ctrl            (mem_wb_reg.ctrl),
+        .valid           (mem_wb_reg.valid),
         .wb_result       (wb_result),
         .rf_wen          (wb_rf_wen),
+        .rf_waddr        (rf_waddr),
+        .rf_wdata        (rf_wdata),
+        .csr_wen         (wb_csr_wen),
         .csr_waddr       (wb_csr_waddr),
-        .csr_wdata       (wb_csr_wdata),
-        .csr_wen         (wb_csr_wen)
+        .csr_wdata       (wb_csr_wdata)
     );
     
     assign wb_valid = mem_wb_reg.valid;
     assign rf_wen   = wb_rf_wen;
-    assign rf_waddr = mem_wb_reg.rd_addr;
-    assign rf_wdata = wb_result;
+    assign rf_waddr = rf_waddr;
+    assign rf_wdata = rf_wdata;
     
     //==========================================================================
     // CSR MODULE
@@ -557,7 +540,7 @@ module rv32i_top
         .csr_wen         (wb_csr_wen),
         .exception_trap  (exception_trap),
         .exception_pc    (mem_exception_pc),
-        .exception_code  ({27'b0, mem_exception_code}),  // Extend to 32-bit
+        .exception_code  ({1'b0, mem_exception_code}),  // Extend 4-bit to 5-bit
         .exception_tval  (mem_exception_tval),
         .trap_vector     (trap_vector),
         .mret_req        (mret_req),
@@ -688,7 +671,7 @@ module rv32i_top
     assign trace_valid   = wb_valid;
     assign trace_pc      = mem_wb_reg.pc;
     assign trace_insn    = mem_wb_reg.insn;
-    assign trace_rd_addr = mem_wb_reg.rd_addr;
+    assign trace_rd_addr = mem_wb_reg.ctrl.rd_addr;
     assign trace_rd_data = wb_result;
     
     Rv32i_Trace_Buffer #(
