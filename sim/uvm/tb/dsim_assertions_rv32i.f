@@ -5,5 +5,7 @@
 # RV32I Debug assertion modules
 ../../../sim/assertions/rv32i_mmio_led_spec.sv
 ../../../sim/assertions/rv32i_ebreak_spec.sv
+../../../sim/assertions/rv32i_ebreak_debug_spec.sv
 ../../../sim/assertions/rv32i_data_hazard_spec.sv
 ../../../sim/assertions/bind_rv32i_debug_spec.sv
+../../../sim/assertions/bind_rv32i_ebreak_debug_spec.sv

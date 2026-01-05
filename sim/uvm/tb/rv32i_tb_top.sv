@@ -78,8 +78,9 @@ interface rv32i_tb_if (input logic clk);
     // Internal PC signal (for verification)
     logic [31:0] pc_if;
     
-    // Clocking block
+    // Clocking block with explicit timing to avoid X-value propagation
     clocking cb @(posedge clk);
+        default input #1step output #0;
         output rst_n;
         output cpu_run;
         output cpu_halt;
@@ -114,6 +115,27 @@ interface rv32i_tb_if (input logic clk);
         input  dbg_mem_rdata;
         input  pc_if;
     endclocking
+    
+    // Initial block to prevent X-value propagation
+    // All output signals must have defined values before first clock edge
+    initial begin
+        rst_n = 0;
+        cpu_run = 0;
+        cpu_halt = 0;
+        cpu_step = 0;
+        dbg_bp_enable = 4'b0000;
+        dbg_bp_addr[0] = 32'h0;
+        dbg_bp_addr[1] = 32'h0;
+        dbg_bp_addr[2] = 32'h0;
+        dbg_bp_addr[3] = 32'h0;
+        dbg_rf_addr = 5'h0;
+        dbg_trace_addr = 6'h0;
+        dbg_soft_reset = 1'b0;
+        dbg_mem_addr = 11'h0;
+        dbg_mem_wdata = 32'h0;
+        dbg_mem_we = 4'b0;
+        dbg_mem_re = 1'b0;
+    end
     
 endinterface
 
