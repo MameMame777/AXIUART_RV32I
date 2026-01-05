@@ -22,6 +22,9 @@ module rv32i_wb
     input  decode_ctrl_t  ctrl,
     input  logic          valid,
     
+    // Pre-calculated PC+4 for timing optimization
+    input  logic [31:0]   pc_plus4_precalc,
+    
     // Register file write interface
     output logic          rf_wen,
     output logic [4:0]    rf_waddr,
@@ -44,10 +47,10 @@ module rv32i_wb
     
     always_comb begin
         case (ctrl.wb_src)
-            WB_ALU:  wb_result = alu_result;     // ALU operations, LUI, AUIPC
-            WB_MEM:  wb_result = mem_data;       // Load instructions
-            WB_PC4:  wb_result = pc + 32'd4;     // JAL, JALR (return address)
-            WB_CSR:  wb_result = csr_rdata;      // CSR instructions
+            WB_ALU:  wb_result = alu_result;       // ALU operations, LUI, AUIPC
+            WB_MEM:  wb_result = mem_data;         // Load instructions
+            WB_PC4:  wb_result = pc_plus4_precalc; // JAL, JALR (pre-calculated, breaks CARRY4 chain)
+            WB_CSR:  wb_result = csr_rdata;        // CSR instructions
             default: wb_result = alu_result;
         endcase
     end

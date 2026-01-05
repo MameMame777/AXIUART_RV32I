@@ -390,15 +390,19 @@ module rv32i_top
     // Forwarding sources
     logic [31:0] wb_result;       // Combinational from WB stage
     logic [31:0] wb_result_fwd;   // Registered for forwarding timing
+    logic [31:0] wb_pc_plus4_reg; // Pre-calculated PC+4 for timing (breaks CARRY4 chain)
     logic [4:0]  wb_rf_waddr;
     
     // Register wb_result for forwarding timing
     // Breaks long combinational path: mem_wb_reg → WB mux → EX mux
+    // Pre-calculate PC+4 to break CARRY4 chain in critical timing path
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n || soft_reset_active) begin
-            wb_result_fwd <= 32'h0;
+            wb_result_fwd  <= 32'h0;
+            wb_pc_plus4_reg <= 32'h0;
         end else begin
-            wb_result_fwd <= wb_result;
+            wb_result_fwd  <= wb_result;
+            wb_pc_plus4_reg <= mem_wb_reg.pc + 32'd4;  // Pre-calculate for WB stage
         end
     end
     
@@ -528,6 +532,7 @@ module rv32i_top
         .csr_rdata       (mem_wb_reg.csr_rdata),
         .ctrl            (mem_wb_reg.ctrl),
         .valid           (mem_wb_reg.valid),
+        .pc_plus4_precalc(wb_pc_plus4_reg),  // Pre-calculated PC+4 for timing
         .wb_result       (wb_result),
         .rf_wen          (wb_rf_wen),
         .rf_waddr        (wb_rf_waddr),

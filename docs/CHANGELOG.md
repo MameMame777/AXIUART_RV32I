@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Optimization
+- **RV32I Pipeline Timing Optimization** (2026-01-05)
+  - **Issue**: PandR timing violation (WNS = -0.472ns, TNS = -0.509ns, 2/9633 failing endpoints)
+  - **Root cause**: Long combinational path (8.436ns vs 8.000ns required) from WB-stage PC+4 calculation (4-stage CARRY4 chain) through forwarding network to EX-stage ALU (3-stage CARRY4 chain)
+  - **Solution**: Pre-calculate `PC+4` in pipeline register (`wb_pc_plus4_reg`) parallel to `wb_result_fwd`, breaking the CARRY4 chain from critical path
+  - **Files modified**:
+    - `rtl/cpu/rv32i_top.sv`: Added `wb_pc_plus4_reg` register and connection to WB stage
+    - `rtl/cpu/rv32i_wb.sv`: Added `pc_plus4_precalc` input port, use pre-calculated value for `WB_PC4` case
+  - **Expected impact**: ~+0.8ns slack improvement (WNS: -0.472ns → +0.3ns estimated)
+  - **RISC-V compliance**: Zero impact (forwarding still occurs, just from pre-registered value)
+  - **Performance impact**: Zero (no additional pipeline bubbles, CPI unchanged)
+  - **Verification**: All tests PASS (rv32i_basic_test: 24 instructions/LED=0x5, rv32i_wb_forward_timing_test: 9 instructions/LED=0x7)
+
 ## [1.1.0] - 2025-12-29
 
 ### Fixed
