@@ -7,7 +7,7 @@
 // verification during simulation.
 //==============================================================================
 
-bind rv32i_core rv32i_mmio_led_spec u_led_spec (
+bind rv32i_top rv32i_mmio_led_spec u_led_spec (
     .clk              (clk),
     .rst_n            (rst_n),
     
@@ -25,7 +25,7 @@ bind rv32i_core rv32i_mmio_led_spec u_led_spec (
     .mem_ctrl         (ex_mem_reg.ctrl)
 );
 
-bind rv32i_core rv32i_ebreak_spec u_ebreak_spec (
+bind rv32i_top rv32i_ebreak_spec u_ebreak_spec (
     .clk              (clk),
     .rst_n            (rst_n),
     

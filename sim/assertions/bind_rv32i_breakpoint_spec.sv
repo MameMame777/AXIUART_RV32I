@@ -1,7 +1,7 @@
 // Bind file for RV32I Hardware Breakpoint Specification
 // Connects assertion module to rv32i_core DUT
 
-bind rv32i_core rv32i_breakpoint_spec u_bp_spec (
+bind rv32i_top rv32i_breakpoint_spec u_bp_spec (
     .clk(clk),
     .rst_n(rst_n),
     
@@ -22,6 +22,7 @@ bind rv32i_core rv32i_breakpoint_spec u_bp_spec (
     .bp_skip_once(bp_skip_once),
     .bp_just_resumed(bp_just_resumed),
     .if_valid(if_valid),
+    .id_valid(id_valid),
     .at_any_bp_addr(at_any_bp_addr),
     
     // Pipeline state
