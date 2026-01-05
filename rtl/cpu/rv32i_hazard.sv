@@ -14,6 +14,10 @@ module rv32i_hazard
     import rv32i_isa_pkg::*;
     import rv32i_pipeline_pkg::*;
 (
+    // Clock and reset (added for WB metadata delay register)
+    input  logic        clk,
+    input  logic        rst_n,
+    
     // ID stage inputs (for forwarding pre-computation)
     input  logic [4:0]  id_rs1_addr,
     input  logic [4:0]  id_rs2_addr,
@@ -54,6 +58,36 @@ module rv32i_hazard
 );
 
     //==========================================================================
+    // WB Stage Metadata Delay Register (Fix for Race Condition)
+    //==========================================================================
+    // The WB forwarding race condition occurs because when an instruction is
+    // in ID stage, the MEM/WB pipeline register has already advanced to the
+    // next instruction. To detect WB hazards correctly, we need to hold the
+    // previous WB stage metadata for one additional cycle.
+    //
+    // Example: ADDI x27 -> LUI x15 -> SW x27
+    // - Cycle N:   ADDI in WB, SW in ID
+    // - At posedge: MEM/WB updates ADDI->LUI
+    // - Hazard check: sees wb_rd_addr=15 (LUI), not 27 (ADDI)
+    // - Fix: Use delayed metadata showing previous WB instruction (ADDI)
+    
+    logic [4:0]  wb_rd_addr_delayed;
+    logic        wb_rf_wen_delayed;
+    logic        wb_valid_delayed;
+    
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            wb_rd_addr_delayed <= 5'b0;
+            wb_rf_wen_delayed  <= 1'b0;
+            wb_valid_delayed   <= 1'b0;
+        end else begin
+            wb_rd_addr_delayed <= wb_rd_addr;
+            wb_rf_wen_delayed  <= wb_rf_wen;
+            wb_valid_delayed   <= wb_valid;
+        end
+    end
+    
+    //==========================================================================
     // RAW Hazard Detection
     //==========================================================================
     // Detect Read-After-Write hazards for RS1 and RS2
@@ -66,17 +100,20 @@ module rv32i_hazard
     // Write detection (stage produces valid register write)
     assign ex_writes_rd  = ex_rf_wen && (ex_rd_addr != 5'b0) && ex_valid;
     assign mem_writes_rd = mem_rf_wen && (mem_rd_addr != 5'b0) && mem_valid;
-    assign wb_writes_rd  = wb_rf_wen && (wb_rd_addr != 5'b0) && wb_valid;
+    // Use delayed WB metadata to catch previous WB instruction
+    assign wb_writes_rd  = wb_rf_wen_delayed && (wb_rd_addr_delayed != 5'b0) && wb_valid_delayed;
     
     // RS1 hazard detection
     assign id_rs1_match_ex  = (id_rs1_addr != 5'b0) && ex_writes_rd  && (ex_rd_addr == id_rs1_addr);
     assign id_rs1_match_mem = (id_rs1_addr != 5'b0) && mem_writes_rd && (mem_rd_addr == id_rs1_addr);
-    assign id_rs1_match_wb  = (id_rs1_addr != 5'b0) && wb_writes_rd  && (wb_rd_addr == id_rs1_addr);
+    // Use delayed WB metadata to match against previous WB instruction
+    assign id_rs1_match_wb  = (id_rs1_addr != 5'b0) && wb_writes_rd  && (wb_rd_addr_delayed == id_rs1_addr);
     
     // RS2 hazard detection
     assign id_rs2_match_ex  = (id_rs2_addr != 5'b0) && ex_writes_rd  && (ex_rd_addr == id_rs2_addr);
     assign id_rs2_match_mem = (id_rs2_addr != 5'b0) && mem_writes_rd && (mem_rd_addr == id_rs2_addr);
-    assign id_rs2_match_wb  = (id_rs2_addr != 5'b0) && wb_writes_rd  && (wb_rd_addr == id_rs2_addr);
+    // Use delayed WB metadata to match against previous WB instruction
+    assign id_rs2_match_wb  = (id_rs2_addr != 5'b0) && wb_writes_rd  && (wb_rd_addr_delayed == id_rs2_addr);
     
     //==========================================================================
     // Forwarding Control (Pre-computed for ID/EX Register)
