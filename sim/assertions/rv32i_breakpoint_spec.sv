@@ -35,6 +35,7 @@ module rv32i_breakpoint_spec (
     input logic bp_skip_once,
     input logic bp_just_resumed,
     input logic if_valid,
+    input logic id_valid,
     input logic at_any_bp_addr,
     
     // Pipeline state
@@ -292,7 +293,7 @@ module rv32i_breakpoint_spec (
                 $display("[BP_SPEC] @%0t: [RESUME CYCLE %0d]", $time, resume_cycle_count);
                 $display("[BP_SPEC] @%0t:   PC: 0x%08h", $time, pc_if);
                 $display("[BP_SPEC] @%0t:   Pipeline Valid: IF=%b, ID=%b, EX=%b, MEM=%b, WB=%b",
-                         $time, if_valid, id_ex_reg_valid, ex_mem_reg_valid, mem_wb_reg_valid);
+                         $time, if_valid, id_valid, id_ex_reg_valid, ex_mem_reg_valid, mem_wb_reg_valid);
                 $display("[BP_SPEC] @%0t:   Flush Signals: IF=%b, ID=%b, EX=%b, BP=%b",
                          $time, if_flush, id_flush, ex_flush, bp_flush);
                 $display("[BP_SPEC] @%0t:   BP Control: bp_skip_once=%b, bp_just_resumed=%b, bp_match=%b",
