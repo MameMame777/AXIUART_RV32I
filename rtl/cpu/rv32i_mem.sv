@@ -22,6 +22,9 @@ module rv32i_mem
     input  decode_ctrl_t  ctrl,
     input  logic          valid,
     
+    // Debug mode control
+    input  logic          debug_mode_enable,
+    
     // Data RAM interface (Port B)
     output logic [10:0]   data_ram_addr,
     output logic [31:0]   data_ram_wdata,
@@ -221,8 +224,12 @@ module rv32i_mem
         
         if (valid) begin
             if (ctrl.is_ebreak) begin
-                exception_trap = 1'b1;
-                exception_code = 4'h3;  // Breakpoint
+                // In debug mode, EBREAK stops CPU instead of generating exception
+                // In normal mode, EBREAK generates exception trap (RISC-V standard)
+                if (!debug_mode_enable) begin
+                    exception_trap = 1'b1;
+                    exception_code = 4'h3;  // Breakpoint
+                end
             end else if (ctrl.is_ecall) begin
                 exception_trap = 1'b1;
                 exception_code = 4'hB;  // Environment call (M-mode)
