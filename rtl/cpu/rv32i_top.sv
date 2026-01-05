@@ -193,7 +193,8 @@ module rv32i_top
     logic [31:0] if_insn_out;
     logic        if_valid_out;
     logic [3:0]  if_bp_hit;
-    logic        if_bp_match;
+    logic        if_bp_match;      // Raw breakpoint match signal
+    logic        if_cpu_break;     // Processed cpu_break signal (match && !skip)
     
     // Exception/MRET signals from MEM stage
     logic        exception_trap;
@@ -221,12 +222,12 @@ module rv32i_top
         .dbg_bp_enable   (dbg_bp_enable),
         .dbg_bp_addr     (dbg_bp_addr),
         .dbg_bp_hit      (if_bp_hit),
-        .cpu_break       (if_bp_match),
+        .cpu_break       (if_cpu_break),      // FIXED: Use separate signal for cpu_break output
         .running         (running),
         .cpu_run         (cpu_run),
         .cpu_halted      (cpu_halted),
         .bp_skip_once    (bp_skip_once),
-        .bp_match        (if_bp_match),
+        .bp_match        (if_bp_match),       // Keep bp_match as raw match signal
         .pc_next         (if_pc_next),
         .pc_out          (if_pc_out),
         .insn_out        (if_insn_out),
@@ -325,6 +326,8 @@ module rv32i_top
     logic load_use_stall;
     
     rv32i_hazard u_hazard (
+        .clk             (clk),
+        .rst_n           (rst_n),
         .id_rs1_addr     (id_ctrl.rs1_addr),
         .id_rs2_addr     (id_ctrl.rs2_addr),
         .id_valid        (id_valid),
@@ -410,8 +413,8 @@ module rv32i_top
         .ctrl            (id_ex_reg.ctrl),
         .valid           (id_ex_reg.valid),
         .ex_forward_data (ex_mem_reg.alu_result),
-        .mem_forward_data(wb_result_fwd),  // Use registered value for timing
-        .wb_forward_data (wb_result_fwd),  // Use registered value for timing
+        .mem_forward_data(wb_result),      // MEM forward: current WB stage result (combinational)
+        .wb_forward_data (wb_result_fwd),  // WB forward: delayed WB result (registered, matches delayed metadata)
         .ex_flush        (ex_flush),
         .alu_result      (ex_alu_result),
         .rs2_forwarded_out(ex_rs2_forwarded),
@@ -465,6 +468,7 @@ module rv32i_top
         .csr_rdata       (ex_mem_reg.csr_rdata),
         .ctrl            (ex_mem_reg.ctrl),
         .valid           (ex_mem_reg.valid),
+        .debug_mode_enable (debug_mode_enable),
         .data_ram_rdata  (ram_rdata_mem),
         .data_ram_addr   (ram_addr_mem),
         .data_ram_wdata  (ram_wdata_mem),
@@ -577,13 +581,16 @@ module rv32i_top
             bp_just_resumed <= 1'b0;
         end else begin
             // Clear skip flag one cycle after resuming
-            if (bp_just_resumed && running) begin
+            // CRITICAL: Only clear bp_skip_once when bp_just_resumed is NOT set this cycle
+            // This ensures the skip flag persists for one full instruction fetch
+            if (bp_just_resumed && !if_bp_match) begin
                 bp_skip_once    <= 1'b0;
                 bp_just_resumed <= 1'b0;
             end
             
             // Hardware breakpoint detection
-            if (if_bp_match && running && !step_mode && !bp_skip_once) begin
+            // Use if_cpu_break which already combines bp_match && !bp_skip_once
+            if (if_cpu_break && running && !step_mode) begin
                 running       <= 1'b0;
                 cpu_halted    <= 1'b1;
                 cpu_break_reg <= 1'b1;
