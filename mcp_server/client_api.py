@@ -87,7 +87,21 @@ def parse_result_json(result: Any) -> Optional[Dict[str, Any]]:
     if not payload:
         return None
     try:
-        return json.loads(payload)
+        parsed = json.loads(payload)
+        
+        # FastMCP wraps results in {"status": "success", "output": "..."}
+        # If output is a JSON string, parse it and return the inner content
+        if isinstance(parsed, dict) and 'output' in parsed:
+            output_str = parsed['output']
+            if isinstance(output_str, str):
+                try:
+                    inner_json = json.loads(output_str)
+                    return inner_json
+                except json.JSONDecodeError:
+                    # output is not JSON, return as-is
+                    return parsed
+        
+        return parsed
     except json.JSONDecodeError:
         return None
 

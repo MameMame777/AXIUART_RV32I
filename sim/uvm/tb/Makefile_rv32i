@@ -1,0 +1,41 @@
+# RV32I Core Test Runner
+# Simple makefile for DSIM simulation
+
+# DSIM configuration
+DSIM = dsim
+DSIM_FLAGS = -sv -timescale 1ns/1ps
+WORK_DIR = dsim_work
+
+# Source files (updated to modular architecture 2026-01-05)
+FILELIST = dsim_config_rv32i.f
+
+# Test targets
+.PHONY: all compile run clean waves
+
+all: compile run
+
+compile:
+	@echo "=== Compiling RV32I Core ==="
+	$(DSIM) $(DSIM_FLAGS) -genimage image -work $(WORK_DIR) -f $(FILELIST)
+
+run:
+	@echo "=== Running RV32I Test ==="
+	$(DSIM) -image image -work $(WORK_DIR) -waves waves.mxd +WAVES
+
+waves:
+	@echo "=== Opening Waveform Viewer ==="
+	mwaves waves.mxd &
+
+clean:
+	@echo "=== Cleaning build artifacts ==="
+	rm -rf $(WORK_DIR) image *.log *.mxd *.vcd tr_db.log
+
+help:
+	@echo "RV32I Core Test Makefile"
+	@echo ""
+	@echo "Targets:"
+	@echo "  make compile  - Compile RTL and testbench"
+	@echo "  make run      - Run simulation with waveforms"
+	@echo "  make all      - Compile and run (default)"
+	@echo "  make waves    - Open waveform viewer"
+	@echo "  make clean    - Remove build artifacts"

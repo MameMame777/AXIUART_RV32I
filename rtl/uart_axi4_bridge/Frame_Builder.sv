@@ -58,6 +58,7 @@ module Frame_Builder (
     logic [6:0] debug_data_count;     // Response data count
     
     // State machine
+    (* fsm_encoding = "one_hot" *)
     typedef enum logic [3:0] {
         IDLE,
         SOF,

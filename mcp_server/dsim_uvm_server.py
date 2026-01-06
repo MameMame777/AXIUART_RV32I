@@ -260,10 +260,11 @@ def parse_dsim_error(stderr_output: str, exit_code: int) -> DSIMError:
             exit_code
         )
 
-def _run_subprocess_sync(cmd: List[str], timeout: int, cwd: Path) -> subprocess.CompletedProcess[bytes]:
+def _run_subprocess_sync(cmd: List[str], timeout: Optional[int], cwd: Path) -> subprocess.CompletedProcess[bytes]:
     """Run subprocess and drain its pipes to avoid deadlocks on large DSIM output.
     
     CRITICAL: Windows DLL resolution requires explicit PATH in environment.
+    CRITICAL: timeout is always None to prevent license issues (Exit code 105).
     """
     
     # Ensure DSIM environment is fully configured
@@ -334,7 +335,7 @@ async def execute_dsim_command(cmd: List[str], timeout: Optional[int] = None, cw
             completed = await asyncio.to_thread(
                 _run_subprocess_sync,
                 cmd,
-                timeout,
+                None,  # CRITICAL: Always None - never use timeout (causes license issues)
                 uvm_work_dir
             )
             stdout: bytes = completed.stdout
@@ -352,13 +353,8 @@ async def execute_dsim_command(cmd: List[str], timeout: Optional[int] = None, cw
                 stderr=asyncio.subprocess.PIPE,
                 cwd=uvm_work_dir
             )
-            if timeout is None:
-                stdout, stderr = await process.communicate()
-            else:
-                stdout, stderr = await asyncio.wait_for(
-                    process.communicate(), 
-                    timeout=timeout
-                )
+            # CRITICAL: Always None - never use timeout (causes license issues)
+            stdout, stderr = await process.communicate()
             return_code = process.returncode
             
             # CRITICAL: Wait for DSIM to flush log file buffers (non-Windows)
@@ -505,14 +501,22 @@ async def run_uvm_simulation(
         
     # Use simplified environment (only environment available)
     uvm_dir = workspace_root / "sim" / "uvm" / "tb"
-    config_file = uvm_dir / "dsim_config.f"
-    top_module = "axiuart_tb_top"
+    
+    # Detect RV32I tests and use appropriate config
+    if test_name and "rv32i" in test_name.lower():
+        config_file = uvm_dir / "dsim_config_rv32i.f"
+        top_module = "rv32i_tb_top"
+        config_relative = "dsim_config_rv32i.f"
+    else:
+        config_file = uvm_dir / "dsim_config.f"
+        top_module = "axiuart_tb_top"
+        config_relative = "dsim_config.f"
 
     if not config_file.exists():
         raise DSIMError(
             f"DSIM configuration file not found: {config_file}",
             "configuration",
-            f"Ensure dsim_config.f exists in {uvm_dir}"
+            f"Ensure {config_file.name} exists in {uvm_dir}"
         )
     
     # Create timestamped log directory and prune older entries to limit clutter
@@ -531,30 +535,33 @@ async def run_uvm_simulation(
     # Build command with enhanced options
     # Use relative config file path since we're executing from sim/uvm directory
     # Note: -uvm must be specified BEFORE mode-specific options (DSIM requirement)
-    if use_simplified:
-        config_relative = "dsim_config.f"  # Already in tb/ directory
-    else:
-        config_relative = "config/dsim_config.f"  # In config/ subdirectory
-    
     cmd = [
         str(dsim_exe),
         "-uvm", "1.2",  # CRITICAL: UVM library version (DSIM official requirement)
         "-timescale", "1ns/1ps",  # Global timescale to fix 1000x slowdown issue
-        "-f", config_relative,
-        "-top", top_module,  # Top-level module specification
+        "-f", config_relative,  # Config file determined above (axiuart or rv32i)
+        "-top", top_module,  # Top module determined above
         f"+UVM_TESTNAME={test_name}",
         f"+UVM_VERBOSITY={verbosity}",
         "-sv_seed", str(seed),
         "-l", log_file_relative
     ]
     
+    # NOTE: Assertions are now integrated into main config files (dsim_config.f)
+    # Use dsim_config_no_assertions.f if assertions need to be disabled
+    # Legacy assertion file inclusion logic removed (2026-01-05)
+    
     # Mode-specific options (do NOT add -uvm again)
+    # Note: Not using -genimage/-image to let DSIM use workspace mode (dsim_work/)
+    # This ensures compile and run modes are consistent
     if mode == "compile":
-        cmd.extend(["-genimage", "compiled_image"])
+        # Compile mode: Just compile, workspace automatically managed
+        pass  # DSIM will use workspace mode
     elif mode == "elaborate": 
         cmd.extend(["-elaborate"])
     else:  # run mode
-        cmd.extend(["-image", "compiled_image"])
+        # Run mode: Execute from workspace
+        pass  # DSIM will use workspace mode
     
     # Enhanced feature options
     waves_file: Optional[Path] = None
@@ -677,6 +684,7 @@ async def run_uvm_simulation(
             "wave_format": wave_format if enable_waves else None,
             "coverage_requested": coverage,
             "plusargs_requested": plusargs_applied,
+            "uvm_error_count": summary_report.get("error_count", 0),  # Add error count for regression framework
             "analysis": {
                 **analysis,
                 "warnings": (analysis.get("warnings", [])[:10] if analysis else []),

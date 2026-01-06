@@ -25,8 +25,8 @@
 # Generated Register Package (from register_map/axiuart_registers.json)
 ../../../rtl/register_block/axiuart_reg_pkg.sv
 
-# Generated ISA package (from isa/td4cpu_isa.json)
-../../../rtl/cpu/td4cpu_isa_pkg.sv
+# Generated ISA package (from isa/)
+../../../rtl/cpu/rv32i_isa_pkg.sv
 
 # RTL Interface Definitions
 ../../../rtl/interfaces/uart_if.sv
@@ -46,12 +46,53 @@
 # RTL Design Files - Register Block (project-specific)
 ../../../rtl/register_block/Register_Block.sv
 
-# RTL Design Files - CPU core (project-specific)
-../../../rtl/cpu/td4cpu_core.sv
+# RTL Design Files - CPU core (modular pipeline architecture)
+../../../rtl/cpu/rv32i_isa_pkg.sv
+../../../rtl/cpu/rv32i_pipeline_pkg.sv
+../../../rtl/cpu/rv32i_if.sv
+../../../rtl/cpu/rv32i_id.sv
+../../../rtl/cpu/rv32i_hazard.sv
+../../../rtl/cpu/rv32i_ex.sv
+../../../rtl/cpu/rv32i_mem.sv
+../../../rtl/cpu/rv32i_wb.sv
+../../../rtl/cpu/rv32i_csr.sv
+../../../rtl/cpu/rv32i_top.sv
+../../../rtl/cpu/rv32i_trace_buffer.sv
+
+# RTL Design Files - CPU core (legacy monolithic - commented out)
+# ../../../rtl/cpu/rv32i_core.sv
 
 # Top Level
 ../../../rtl/AXIUART_Top.sv
 
+# Assertions - Debug Port
+../../assertions/rv32i_debug_port_assertions.sv
+
+# Assertions - RV32I Pipeline Stages
+../../assertions/rv32i_if_timing_spec.sv
+../../assertions/bind_rv32i_if_spec.sv
+
+../../assertions/rv32i_hazard_timing_spec.sv
+../../assertions/bind_rv32i_hazard_spec.sv
+
+../../assertions/rv32i_ex_timing_spec.sv
+../../assertions/bind_rv32i_ex_spec.sv
+
+../../assertions/rv32i_mem_timing_spec.sv
+../../assertions/bind_rv32i_mem_spec.sv
+
+../../assertions/rv32i_wb_timing_spec.sv
+../../assertions/bind_rv32i_wb_spec.sv
+
+../../assertions/rv32i_id_timing_spec.sv
+../../assertions/bind_rv32i_id_spec.sv
+
+../../assertions/bind_rv32i_csr_spec.sv
+
+# Assertions - Register Block CPU Memory Interface
+../../assertions/register_block_cpu_mem_assertions.sv
+../../assertions/bind_register_block_cpu_mem.sv
+
 # Testbench Top Module (includes package and test_lib)
 +incdir+.
-./axiuart_tb_top.sv
+./rv32i_tb_top.sv
