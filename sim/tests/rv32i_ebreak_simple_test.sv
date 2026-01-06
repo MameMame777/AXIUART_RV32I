@@ -40,7 +40,7 @@ class rv32i_ebreak_simple_test extends rv32i_base_test;
         uvm_config_db#(int)::set(this, "env.scoreboard", "expected_insn_min", 4);
         uvm_config_db#(int)::set(this, "env.scoreboard", "expected_insn_max", 4);
         uvm_config_db#(int)::set(this, "env.scoreboard", "expected_ebreak_count", 1);
-        uvm_config_db#(bit [31:0])::set(this, "env.scoreboard", "expected_led_value", 32'h00000003);
+        uvm_config_db#(int)::set(this, "env.scoreboard", "expected_led_value", 32'h00000003);
     endfunction
     
     virtual task run_phase(uvm_phase phase);

@@ -8,6 +8,8 @@
 //
 // Author: GitHub Copilot
 // Date: 2026-01-02
+// Fixed: 2026-01-05 - All signal assignments converted to clocking block
+//                     (vif.cb with non-blocking <=) to resolve rst_n X-value bug
 //------------------------------------------------------------------------------
 
 class rv32i_base_test extends uvm_test;
@@ -61,28 +63,29 @@ class rv32i_base_test extends uvm_test;
     virtual task reset_sequence();
         `uvm_info("RV32I_BASE_TEST", "Applying reset sequence", UVM_MEDIUM)
         
-        vif.rst_n = 0;
-        vif.cpu_run = 0;
-        vif.cpu_halt = 0;
-        vif.cpu_step = 0;
+        @(posedge vif.clk);
+        vif.cb.rst_n <= 0;
+        vif.cb.cpu_run <= 0;
+        vif.cb.cpu_halt <= 0;
+        vif.cb.cpu_step <= 0;
         
         // Initialize debug signals
-        vif.dbg_bp_enable = 4'b0000;
-        vif.dbg_bp_addr[0] = 32'h0;
-        vif.dbg_bp_addr[1] = 32'h0;
-        vif.dbg_bp_addr[2] = 32'h0;
-        vif.dbg_bp_addr[3] = 32'h0;
-        vif.dbg_rf_addr = 5'h0;
-        vif.dbg_trace_addr = 6'h0;
-        vif.dbg_soft_reset = 1'b0;
-        vif.dbg_mem_addr = 11'h0;
-        vif.dbg_mem_wdata = 32'h0;
-        vif.dbg_mem_we = 4'b0;
-        vif.dbg_mem_re = 1'b0;
+        vif.cb.dbg_bp_enable <= 4'b0000;
+        vif.cb.dbg_bp_addr[0] <= 32'h0;
+        vif.cb.dbg_bp_addr[1] <= 32'h0;
+        vif.cb.dbg_bp_addr[2] <= 32'h0;
+        vif.cb.dbg_bp_addr[3] <= 32'h0;
+        vif.cb.dbg_rf_addr <= 5'h0;
+        vif.cb.dbg_trace_addr <= 6'h0;
+        vif.cb.dbg_soft_reset <= 1'b0;
+        vif.cb.dbg_mem_addr <= 11'h0;
+        vif.cb.dbg_mem_wdata <= 32'h0;
+        vif.cb.dbg_mem_we <= 4'b0;
+        vif.cb.dbg_mem_re <= 1'b0;
         
         repeat(5) @(posedge vif.clk);
         
-        vif.rst_n = 1;
+        vif.cb.rst_n <= 1;
         
         repeat(2) @(posedge vif.clk);
         
@@ -97,10 +100,15 @@ class rv32i_base_test extends uvm_test;
         `uvm_info("RV32I_BASE_TEST", "Starting CPU execution", UVM_MEDIUM)
         
         @(posedge vif.clk);
-        vif.cpu_run = 1;
+        vif.cb.cpu_halt <= 0;  // Release halt BEFORE pulsing cpu_run
+        vif.cb.cpu_run <= 1;   // Pulse run to start execution
         
         @(posedge vif.clk);
-        vif.cpu_run = 0;
+        vif.cb.cpu_run <= 0;
+        
+        // Wait for CPU to start running
+        wait (vif.cpu_halted == 0);
+        @(posedge vif.clk);
         
         `uvm_info("RV32I_BASE_TEST", "CPU started", UVM_MEDIUM)
     endtask
@@ -113,10 +121,11 @@ class rv32i_base_test extends uvm_test;
         `uvm_info("RV32I_BASE_TEST", "Halting CPU execution", UVM_MEDIUM)
         
         @(posedge vif.clk);
-        vif.cpu_halt = 1;
+        vif.cb.cpu_halt <= 1;  // Assert and HOLD halt signal
         
+        // Wait for CPU to acknowledge halt
+        wait (vif.cpu_halted == 1);
         @(posedge vif.clk);
-        vif.cpu_halt = 0;
         
         `uvm_info("RV32I_BASE_TEST", "CPU halted", UVM_MEDIUM)
     endtask
@@ -143,12 +152,12 @@ class rv32i_base_test extends uvm_test;
     
     virtual task write_debug_mem(input logic [10:0] addr, input logic [31:0] data);
         @(posedge vif.clk);
-        vif.dbg_mem_addr = addr;
-        vif.dbg_mem_wdata = data;
-        vif.dbg_mem_we = 4'b1111;
+        vif.cb.dbg_mem_addr <= addr;
+        vif.cb.dbg_mem_wdata <= data;
+        vif.cb.dbg_mem_we <= 4'b1111;
         
         @(posedge vif.clk);
-        vif.dbg_mem_we = 4'b0000;
+        vif.cb.dbg_mem_we <= 4'b0000;
         
         `uvm_info("RV32I_BASE_TEST", $sformatf("Wrote 0x%08h to memory address 0x%03h", data, addr), UVM_HIGH)
     endtask
@@ -165,7 +174,7 @@ class rv32i_base_test extends uvm_test;
         logic [127:0] trace_data;
         
         @(posedge vif.clk);
-        vif.dbg_trace_addr = entry_addr;
+        vif.cb.dbg_trace_addr <= entry_addr;
         
         @(posedge vif.clk);
         trace_data = vif.dbg_trace_data;
@@ -226,14 +235,14 @@ class rv32i_base_test extends uvm_test;
         
         // Set breakpoint address
         case (bp_num)
-            0: vif.dbg_bp_addr[0] = addr;
-            1: vif.dbg_bp_addr[1] = addr;
-            2: vif.dbg_bp_addr[2] = addr;
-            3: vif.dbg_bp_addr[3] = addr;
+            0: vif.cb.dbg_bp_addr[0] <= addr;
+            1: vif.cb.dbg_bp_addr[1] <= addr;
+            2: vif.cb.dbg_bp_addr[2] <= addr;
+            3: vif.cb.dbg_bp_addr[3] <= addr;
         endcase
         
         // Enable breakpoint
-        vif.dbg_bp_enable[bp_num] = 1'b1;
+        vif.cb.dbg_bp_enable[bp_num] <= 1'b1;
         
         @(posedge vif.clk);
         
@@ -248,7 +257,7 @@ class rv32i_base_test extends uvm_test;
         `uvm_info("RV32I_BASE_TEST", $sformatf("Clearing breakpoint %0d", bp_num), UVM_MEDIUM)
         
         @(posedge vif.clk);
-        vif.dbg_bp_enable[bp_num] = 1'b0;
+        vif.cb.dbg_bp_enable[bp_num] <= 1'b0;
         @(posedge vif.clk);
         
         `uvm_info("RV32I_BASE_TEST", $sformatf("Breakpoint %0d disabled", bp_num), UVM_MEDIUM)
@@ -275,6 +284,16 @@ class rv32i_base_test extends uvm_test;
         end
         
         `uvm_error("RV32I_BASE_TEST", $sformatf("Timeout waiting for CPU break (waited %0d cycles)", timeout_cycles))
+    endtask
+    
+    //--------------------------------------------------------------------------
+    // Read Register Value
+    //--------------------------------------------------------------------------
+    // Read a register from the CPU's register file via hierarchical reference
+    // Note: Uses $root to access TB top level, then navigates to DUT ID stage
+    virtual task read_register(input int reg_num, output logic [31:0] value);
+        value = $root.rv32i_tb_top.dut.u_id.regfile[reg_num];
+        `uvm_info("RV32I_BASE_TEST", $sformatf("Read x%0d = 0x%08X", reg_num, value), UVM_HIGH)
     endtask
     
     virtual function void final_phase(uvm_phase phase);

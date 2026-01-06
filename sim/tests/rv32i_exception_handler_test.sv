@@ -134,12 +134,24 @@ class rv32i_exception_handler_test extends rv32i_base_test;
         // 0x0004: CSRRW x0, mtvec, x15 (0x305FBF73) - mtvec = 0x0100, discard old value
         // 0x0008: JAL x0, 0x10       (0x010000EF) - Jump to main code at 0x0018
         
-        // Simpler approach: Directly load handler address and write CSR
-        write_debug_mem(11'h000, 32'h10000FB7); // LUI x31, 0x100 (x31 = 0x0000_0100)
-        write_debug_mem(11'h001, 32'h305F9073); // CSRW mtvec, x31 (mtvec = 0x0100)
-        write_debug_mem(11'h002, 32'h01C000EF); // JAL x0, +28 -> PC=0x001E (skip to main)
+        // Bootstrap: Set mtvec to 0x0100 (trap handler base address)
+        // NOTE: CPU starts at PC=0x0004 (not 0x0000), so first instruction is at RAM[1]
+        // 0x0000: (unused, PC never reaches here)
+        // 0x0004: ADDI x31, x0, 1    -> x31 = 1
+        // 0x0008: SLLI x31, x31, 8   -> x31 = 0x100
+        // 0x000C-0x0014: NOPs (allow SLLI to reach WB before CSRW reads x31)
+        // 0x0018: CSRW mtvec, x31    -> mtvec = 0x100
+        // 0x001C: JAL x0, +0         -> PC = 0x001C (infinite loop to halt)
         
-        `uvm_info("EXCEPTION_HANDLER", "Bootstrap code loaded (sets mtvec)", UVM_MEDIUM)
+        write_debug_mem(11'h001, 32'h00100F93); // RAM[1] @ PC=0x0004: ADDI x31, x0, 1
+        write_debug_mem(11'h002, 32'h008F9F93); // RAM[2] @ PC=0x0008: SLLI x31, x31, 8
+        write_debug_mem(11'h003, 32'h00000013); // RAM[3] @ PC=0x000C: NOP (avoid read-after-write hazard)
+        write_debug_mem(11'h004, 32'h00000013); // RAM[4] @ PC=0x0010: NOP
+        write_debug_mem(11'h005, 32'h00000013); // RAM[5] @ PC=0x0014: NOP
+        write_debug_mem(11'h006, 32'h305F9073); // RAM[6] @ PC=0x0018: CSRW mtvec, x31
+        write_debug_mem(11'h007, 32'h0000006F); // RAM[7] @ PC=0x001C: JAL x0, +0 (infinite loop)
+        
+        `uvm_info("EXCEPTION_HANDLER", "Bootstrap code loaded (sets mtvec to 0x0100)", UVM_MEDIUM)
     endtask
     
     //--------------------------------------------------------------------------
@@ -149,34 +161,28 @@ class rv32i_exception_handler_test extends rv32i_base_test;
     virtual task load_exception_handler_program();
         `uvm_info("EXCEPTION_HANDLER", "Loading exception handler program", UVM_MEDIUM)
         
-        // Main code starts at 0x001E (word address 0x007) after bootstrap
-        // But for simplicity, let's reorganize:
+        // Layout:
+        // 0x0004-0x001C: Bootstrap (sets mtvec) + NOPs
+        // 0x0020-0x002C: Main code
+        // 0x0100-0x0110: Trap handler
         
-        // Simpler layout:
-        // 0x0000-0x000C: Bootstrap + main code
-        // 0x0100-0x0114: Trap handler
-        
-        // === Main Code (0x0000) ===
-        // Use simpler bootstrap that just sets mtvec
-        write_debug_mem(11'h000, 32'h10000537); // LUI x10, 0x100 (x10 = 0x0000_0100)
-        write_debug_mem(11'h001, 32'h30551073); // CSRW mtvec, x10
-        
-        // Main code continues
-        write_debug_mem(11'h002, 32'h00100093); // ADDI x1, x0, 1 (x1=1)
-        write_debug_mem(11'h003, 32'h00100073); // EBREAK (trap to 0x0100)
-        write_debug_mem(11'h004, 32'h06300113); // ADDI x2, x0, 99 (should skip initially)
-        write_debug_mem(11'h005, 32'h00300193); // ADDI x3, x0, 3 (will execute after handler return)
+        // === Main Code (0x0020 = word address 0x008) ===
+        write_debug_mem(11'h008, 32'h00100093); // RAM[8] @ PC=0x0020: ADDI x1, x0, 1 (x1=1)
+        write_debug_mem(11'h009, 32'h00100073); // RAM[9] @ PC=0x0024: EBREAK (trap to 0x0100)
+        write_debug_mem(11'h00A, 32'h06300113); // RAM[10] @ PC=0x0028: ADDI x2, x0, 99 (should not execute)
+        write_debug_mem(11'h00B, 32'h00300193); // RAM[11] @ PC=0x002C: ADDI x3, x0, 3 (will execute after handler return)
         
         // === Trap Handler (0x0100 = word address 0x040) ===
-        write_debug_mem(11'h040, 32'h34102573); // CSRR x10, mepc (read exception PC)
-        write_debug_mem(11'h041, 32'h342025F3); // CSRR x11, mcause (read exception cause)
-        write_debug_mem(11'h042, 32'h34302673); // CSRR x12, mtval (read trap value)
-        write_debug_mem(11'h043, 32'h02A00693); // ADDI x13, x0, 42 (x13=42, handler work)
-        write_debug_mem(11'h044, 32'h30200073); // MRET (return to mepc)
+        write_debug_mem(11'h040, 32'h34102573); // RAM[64] @ PC=0x0100: CSRR x10, mepc (read exception PC)
+        write_debug_mem(11'h041, 32'h342025F3); // RAM[65] @ PC=0x0104: CSRR x11, mcause (read exception cause)
+        write_debug_mem(11'h042, 32'h34302673); // RAM[66] @ PC=0x0108: CSRR x12, mtval (read trap value)
+        write_debug_mem(11'h043, 32'h02A00693); // RAM[67] @ PC=0x010C: ADDI x13, x0, 42 (x13=42, handler work)
+        write_debug_mem(11'h044, 32'h30200073); // RAM[68] @ PC=0x0110: MRET (return to mepc)
         
         `uvm_info("EXCEPTION_HANDLER", "Program loaded:", UVM_MEDIUM)
-        `uvm_info("EXCEPTION_HANDLER", "  Main: 0x0000-0x0014", UVM_MEDIUM)
-        `uvm_info("EXCEPTION_HANDLER", "  Handler: 0x0100-0x0110", UVM_MEDIUM)
+        `uvm_info("EXCEPTION_HANDLER", "  Bootstrap: RAM[1-7] @ PC=0x0004-0x001C", UVM_MEDIUM)
+        `uvm_info("EXCEPTION_HANDLER", "  Main: RAM[8-11] @ PC=0x0020-0x002C", UVM_MEDIUM)
+        `uvm_info("EXCEPTION_HANDLER", "  Handler: RAM[64-68] @ PC=0x0100-0x0110", UVM_MEDIUM)
     endtask
     
     //--------------------------------------------------------------------------
@@ -234,7 +240,7 @@ class rv32i_exception_handler_test extends rv32i_base_test;
         
         // Read x10 (should contain mepc value)
         read_register(5'd10, mepc_value);
-        `uvm_info("EXCEPTION_HANDLER", $sformatf("x10 (mepc) = 0x%08X (expected 0x0000000C)", mepc_value), UVM_MEDIUM)
+        `uvm_info("EXCEPTION_HANDLER", $sformatf("x10 (mepc) = 0x%08X (expected 0x00000024)", mepc_value), UVM_MEDIUM)
         
         // Read x11 (should contain mcause value)
         read_register(5'd11, mcause_value);
@@ -245,8 +251,8 @@ class rv32i_exception_handler_test extends rv32i_base_test;
         `uvm_info("EXCEPTION_HANDLER", $sformatf("x12 (mtval) = 0x%08X (expected 0x00000000)", mtval_value), UVM_MEDIUM)
         
         // Verify values
-        if (mepc_value != 32'h0000_000C) begin
-            `uvm_error("EXCEPTION_HANDLER", $sformatf("mepc mismatch: expected 0x0000000C, got 0x%08X", mepc_value))
+        if (mepc_value != 32'h0000_0024) begin
+            `uvm_error("EXCEPTION_HANDLER", $sformatf("mepc mismatch: expected 0x00000024, got 0x%08X", mepc_value))
         end else begin
             `uvm_info("EXCEPTION_HANDLER", "PASS: mepc correct (EBREAK PC)", UVM_LOW)
         end

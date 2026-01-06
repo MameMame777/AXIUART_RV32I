@@ -50,5 +50,9 @@
 # ../../assertions/rv32i_debug_state_spec.sv
 # ../../assertions/bind_rv32i_exception_spec.sv
 
+# Branch debug assertions (for branch instruction debugging)
+../../assertions/rv32i_branch_debug_assertions.sv
+../../assertions/rv32i_branch_debug_bind.sv
+
 # Testbench Top (includes all UVM components via rv32i_test_pkg.sv)
 rv32i_tb_top.sv
