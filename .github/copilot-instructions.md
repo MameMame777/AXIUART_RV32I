@@ -45,7 +45,7 @@ You must prioritize correctness, completeness, and unambiguous temporal behavior
 - Never undo user changes or existing diffs unless explicitly instructed.
 
 # Tooling Workflow (FastMCP First)
-- Primary workflow: use FastMCP + VS Code MCP integration already configured in `.vscode/mcp.json`.
+- Primary workflow: use FastMCP + VS Code MCP integration already configured in `.vscode/mcp.json`.　do not violate this rule. 
 - Standard sequence for any UVM test:
   1. `python mcp_server/mcp_client.py --workspace e:\\Nautilus\\workspace\\fpgawork\\AXIUART_ --tool check_dsim_environment`
   2. `python mcp_server/mcp_client.py --workspace e:\\Nautilus\\workspace\\fpgawork\\AXIUART_ --tool list_available_tests`
