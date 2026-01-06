@@ -166,7 +166,5 @@ reference/SyIEEyuIzFWdpNCM.pdf
 PandR/cpu/cpu.xpr
 sim/exec/logs/batch_test_results.json
 sim/exec/reports/
-PandR/axi4_uart_td4/axi4_uart_td4.xpr
-PandR/axi4_rv32i/axi4_rv32i.xpr
+PandR/axi4_rv32i/*.xpr
 sim/regression_tests.json
-PandR/axi4_rv32i/axi4_rv32i.xpr
