@@ -41,6 +41,7 @@ module Uart_Rx #(
     logic [3:0] bit_counter;
     
     // State machine
+    (* fsm_encoding = "one_hot" *)
     typedef enum logic [1:0] {
         IDLE,
         START_BIT,

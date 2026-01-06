@@ -161,6 +161,30 @@
       },
       "status": "validated",
       "validation_date": "2024-12-21"
+    },
+    "rv32i_wb_forward_timing_test": {
+      "timeout": null,
+      "operations": 5,
+      "measured_time_ms": 30,
+      "recommended_verbosity": "UVM_MEDIUM",
+      "description": "WB forwarding timing fix verification (wb_result_fwd registered signal)",
+      "category": "fast",
+      "waves_recommended": true,
+      "notes": "Critical: Verifies 2026-01-05 timing fix documented in docs/cpu/06_wb_stage.md",
+      "status": "new",
+      "validation_date": "2026-01-05"
+    },
+    "rv32i_load_use_stall_test": {
+      "timeout": null,
+      "operations": 8,
+      "measured_time_ms": 40,
+      "recommended_verbosity": "UVM_MEDIUM",
+      "description": "Load-use hazard detection and 1-cycle pipeline stall",
+      "category": "fast",
+      "waves_recommended": true,
+      "notes": "Verifies pipeline stall insertion and MEM-to-EX forwarding after stall",
+      "status": "new",
+      "validation_date": "2026-01-05"
     }
   },
   "categories": {

@@ -3,7 +3,7 @@
 **AUTO-GENERATED FILE - DO NOT EDIT MANUALLY**
 
 - **Source:** `register_map/axiuart_registers.json`
-- **Generated:** 2025-12-28 04:52:08
+- **Generated:** 2026-01-03 09:07:18
 - **Base Address:** `0x1000`
 - **Stride:** 4 bytes
 
@@ -24,30 +24,11 @@
 | TEST_2 | `0x1028` | `0x028` | RW | `0x00000000` | Test register 2 - increment test |
 | TEST_3 | `0x102C` | `0x02C` | RW | `0x00000000` | Test register 3 - mirror test |
 | TEST_4 | `0x1040` | `0x040` | RW | `0x00000000` | Test register 4 - gap test |
-| TEST_LED | `0x1044` | `0x044` | RW | `0x00000000` | 4-bit LED control register |
-| TEST_5 | `0x1050` | `0x050` | RW | `0x00000000` | Test register 5 - larger gap test |
-| TEST_6 | `0x1080` | `0x080` | RW | `0x00000000` | Test register 6 - even larger gap test |
-| TEST_7 | `0x1100` | `0x100` | RW | `0x00000000` | Test register 7 - different range test |
-| CPU_DBG_CTRL | `0x1200` | `0x200` | RW | `0x00000000` | CPU debug control: halt/run/step requests, halt_on_reset, breakpoint global enable |
-| CPU_DBG_STATUS | `0x1204` | `0x204` | RO | `0x00000001` | CPU debug status: halted/running, break/brk hit, halt reason |
-| CPU_PC | `0x1208` | `0x208` | RW | `0x00000000` | CPU program counter (word address). Write allowed only when halted |
-| CPU_SP | `0x120C` | `0x20C` | RW | `0x0000FFFE` | CPU stack pointer (word address). Write allowed only when halted |
-| CPU_FLAGS | `0x1210` | `0x210` | RW | `0x00000000` | CPU flags (Z/N/C in low bits). Write allowed only when halted |
-| CPU_REG_INDEX | `0x1214` | `0x214` | RW | `0x00000000` | CPU register index selector (0..7) |
-| CPU_REG_DATA | `0x1218` | `0x218` | RW | `0x00000000` | CPU selected register data (16-bit). Write allowed only when halted |
-| CPU_BP0_PC | `0x121C` | `0x21C` | RW | `0x00000000` | Breakpoint 0 PC match value (word address) |
-| CPU_BP1_PC | `0x1220` | `0x220` | RW | `0x00000000` | Breakpoint 1 PC match value (word address) |
-| CPU_BP_CTRL | `0x1224` | `0x224` | RW | `0x00000004` | Breakpoint control (BP0_EN/BP1_EN/BP_MATCH_FETCH) |
-| CPU_MEM_ADDR | `0x1228` | `0x228` | RW | `0x00000000` | Debug memory address (word address) |
-| CPU_MEM_WDATA | `0x122C` | `0x22C` | RW | `0x00000000` | Debug memory write data (16-bit in low bits) |
-| CPU_MEM_RDATA | `0x1230` | `0x230` | RO | `0x00000000` | Debug memory read data (16-bit in low bits) |
-| CPU_MEM_CTRL | `0x1234` | `0x234` | RW | `0x00000000` | Debug memory control: read/write request, auto-inc, busy/err |
-| CPU_TRACE_ADDR | `0x1238` | `0x238` | RW | `0x00000000` | Trace buffer read address (entry index 0-255) |
-| CPU_TRACE_RDATA | `0x123C` | `0x23C` | RO | `0x00000000` | Trace buffer read data (32-bit: [31:16]=insn, [15:0]=result) |
-| CPU_TRACE_CTRL | `0x1240` | `0x240` | RW | `0x00000001` | Trace control: [0]=enable (default 1), [1]=clear_pulse |
-| CPU_TRACE_PTR | `0x1244` | `0x244` | RO | `0x00000000` | Trace buffer write pointer (0-255, increments on each execution) |
-| CPU_ID | `0x1248` | `0x248` | RO | `0x54443331` | CPU identification/version (ASCII 'TD31' placeholder) |
-| REVISION | `0x124C` | `0x24C` | RO | `0x20251228` | Hardware revision (date-based: 0xYYYYMMDD) |
+| CPU_MEM_ADDR | `0x2228` | `0x1228` | RW | `0x00000000` | RV32I CPU memory address (32-bit byte address, converted to word address [12:2] internally for 8KB RAM) |
+| CPU_MEM_WDATA | `0x222C` | `0x122C` | RW | `0x00000000` | RV32I CPU memory write data (full 32-bit data) |
+| CPU_MEM_RDATA | `0x2230` | `0x1230` | RO | `0x00000000` | RV32I CPU memory read data (full 32-bit data, captured after read operation) |
+| CPU_MEM_CTRL | `0x2234` | `0x1234` | RW | `0x00000000` | RV32I CPU control and memory access: [3:0]=byte_enables, [4]=read_req(W1P), [5]=write_req(W1P), [6]=busy(RO), [7]=cpu_run, [8]=cpu_halt, [9]=cpu_halted(RO), [10]=cpu_break(RO) |
+| REVISION | `0x223C` | `0x123C` | RO | `0x20260103` | Hardware revision (RV32I-only design, date: 2026-01-03) |
 
 ## Regeneration Instructions
 

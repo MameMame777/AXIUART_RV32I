@@ -52,6 +52,45 @@ python mcp_server\mcp_client.py --workspace . --tool run_uvm_simulation --test-n
 
 # Waveform generation (MXD)
 python mcp_server\mcp_client.py --workspace . --tool generate_waveforms --test-name uart_axi4_basic_test --timeout 300
+
+# Debug mode with assertions enabled (for deep debugging)
+python mcp_server\mcp_client.py --workspace . --tool run_uvm_simulation --test-name uart_axi4_basic_test --mode compile --verbosity UVM_LOW --plusarg +define+ENABLE_ASSERTIONS
+```
+
+### Assertion Control (New Feature)
+
+Assertions are **disabled by default** for optimal performance. Enable them only when debugging:
+
+**Standard Mode (Fast - Default):**
+- No `--plusarg` needed
+- Compiles 22 modules
+- Optimal speed for development
+
+**Debug Mode (Full Checking):**
+- Add `--plusarg +define+ENABLE_ASSERTIONS`
+- Compiles 28 modules (+6 assertion modules)
+- Enables comprehensive RTL verification checks
+- Detects timing violations, race conditions, protocol errors
+
+**When to enable assertions:**
+- Investigating test failures
+- Root cause analysis of timing bugs
+- Verifying complex state machine behavior
+- Before committing critical RTL changes
+
+**Performance Impact:**
+- Compilation: +19% time (6 additional modules)
+- Runtime: Extensive checking (33 assertions, millions of evaluations)
+- Use sparingly - only when debugging specific issues
+
+**Python API:**
+```python
+# Enable assertions programmatically
+result = await run_uvm_simulation(
+    test_name="my_test",
+    mode="compile",
+    enable_assertions=True  # Adds +define+ENABLE_ASSERTIONS automatically
+)
 ```
 
 Outputs are returned as structured JSON; `mcp_client.py` prints a prettified view if content is JSON-serialisable.

@@ -4,7 +4,7 @@
 //
 // AUTO-GENERATED FILE - DO NOT EDIT MANUALLY
 // Generated from: register_map/axiuart_registers.json
-// Generation time: 2025-12-28T04:52:08.465847
+// Generation time: 2026-01-03T09:07:18.657612
 //
 // To regenerate:
 //     python software/axiuart_driver/tools/gen_registers.py --in register_map/axiuart_registers.json
@@ -28,32 +28,13 @@ package axiuart_reg_pkg;
     parameter int REG_TEST_2       = 32'h00001028;  // RW - Test register 2 - increment test
     parameter int REG_TEST_3       = 32'h0000102C;  // RW - Test register 3 - mirror test
     parameter int REG_TEST_4       = 32'h00001040;  // RW - Test register 4 - gap test
-    parameter int REG_TEST_LED     = 32'h00001044;  // RW - 4-bit LED control register
-    parameter int REG_TEST_5       = 32'h00001050;  // RW - Test register 5 - larger gap test
-    parameter int REG_TEST_6       = 32'h00001080;  // RW - Test register 6 - even larger gap test
-    parameter int REG_TEST_7       = 32'h00001100;  // RW - Test register 7 - different range test
-    parameter int REG_CPU_DBG_CTRL = 32'h00001200;  // RW - CPU debug control: halt/run/step requests, halt_on_reset, breakpoint global enable
-    parameter int REG_CPU_DBG_STATUS = 32'h00001204;  // RO - CPU debug status: halted/running, break/brk hit, halt reason
-    parameter int REG_CPU_PC       = 32'h00001208;  // RW - CPU program counter (word address). Write allowed only when halted
-    parameter int REG_CPU_SP       = 32'h0000120C;  // RW - CPU stack pointer (word address). Write allowed only when halted
-    parameter int REG_CPU_FLAGS    = 32'h00001210;  // RW - CPU flags (Z/N/C in low bits). Write allowed only when halted
-    parameter int REG_CPU_REG_INDEX = 32'h00001214;  // RW - CPU register index selector (0..7)
-    parameter int REG_CPU_REG_DATA = 32'h00001218;  // RW - CPU selected register data (16-bit). Write allowed only when halted
-    parameter int REG_CPU_BP0_PC   = 32'h0000121C;  // RW - Breakpoint 0 PC match value (word address)
-    parameter int REG_CPU_BP1_PC   = 32'h00001220;  // RW - Breakpoint 1 PC match value (word address)
-    parameter int REG_CPU_BP_CTRL  = 32'h00001224;  // RW - Breakpoint control (BP0_EN/BP1_EN/BP_MATCH_FETCH)
-    parameter int REG_CPU_MEM_ADDR = 32'h00001228;  // RW - Debug memory address (word address)
-    parameter int REG_CPU_MEM_WDATA = 32'h0000122C;  // RW - Debug memory write data (16-bit in low bits)
-    parameter int REG_CPU_MEM_RDATA = 32'h00001230;  // RO - Debug memory read data (16-bit in low bits)
-    parameter int REG_CPU_MEM_CTRL = 32'h00001234;  // RW - Debug memory control: read/write request, auto-inc, busy/err
-    parameter int REG_CPU_TRACE_ADDR = 32'h00001238;  // RW - Trace buffer read address (entry index 0-255)
-    parameter int REG_CPU_TRACE_RDATA = 32'h0000123C;  // RO - Trace buffer read data (32-bit: [31:16]=insn, [15:0]=result)
-    parameter int REG_CPU_TRACE_CTRL = 32'h00001240;  // RW - Trace control: [0]=enable (default 1), [1]=clear_pulse
-    parameter int REG_CPU_TRACE_PTR = 32'h00001244;  // RO - Trace buffer write pointer (0-255, increments on each execution)
-    parameter int REG_CPU_ID       = 32'h00001248;  // RO - CPU identification/version (ASCII 'TD31' placeholder)
-    parameter int REG_REVISION     = 32'h0000124C;  // RO - Hardware revision (date-based: 0xYYYYMMDD)
+    parameter int REG_CPU_MEM_ADDR = 32'h00002228;  // RW - RV32I CPU memory address (32-bit byte address, converted to word address [12:2] internally for 8KB RAM)
+    parameter int REG_CPU_MEM_WDATA = 32'h0000222C;  // RW - RV32I CPU memory write data (full 32-bit data)
+    parameter int REG_CPU_MEM_RDATA = 32'h00002230;  // RO - RV32I CPU memory read data (full 32-bit data, captured after read operation)
+    parameter int REG_CPU_MEM_CTRL = 32'h00002234;  // RW - RV32I CPU control and memory access: [3:0]=byte_enables, [4]=read_req(W1P), [5]=write_req(W1P), [6]=busy(RO), [7]=cpu_run, [8]=cpu_halt, [9]=cpu_halted(RO), [10]=cpu_break(RO)
+    parameter int REG_REVISION     = 32'h0000223C;  // RO - Hardware revision (RV32I-only design, date: 2026-01-03)
 
     // Register count
-    parameter int REGISTER_COUNT = 37;
+    parameter int REGISTER_COUNT = 18;
 
 endpackage : axiuart_reg_pkg

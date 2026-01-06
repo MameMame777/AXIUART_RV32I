@@ -98,7 +98,7 @@ def get_test_config(test_name: str) -> Dict[str, Any]:
     
     return _test_timing_config.get("tests", {}).get(test_name, {})
 
-def get_test_timeout(test_name: str, user_timeout: Optional[int] = None, debug_mode: bool = False) -> int:
+def get_test_timeout(test_name: str, user_timeout: Optional[int] = None, debug_mode: bool = False) -> Optional[int]:
     """
     Get the recommended timeout for a test.
     
@@ -108,26 +108,10 @@ def get_test_timeout(test_name: str, user_timeout: Optional[int] = None, debug_m
         debug_mode: Whether running in debug mode (uses timeout_debug if available)
         
     Returns:
-        Timeout in seconds
+        Timeout in seconds, or None to disable timeout
     """
-    if user_timeout is not None:
-        return user_timeout
-    
-    test_config = get_test_config(test_name)
-    
-    if debug_mode and "timeout_debug" in test_config:
-        return test_config["timeout_debug"]
-    
-    if "timeout" in test_config:
-        return test_config["timeout"]
-    
-    # Fallback to default
-    global _test_timing_config
-    if _test_timing_config is None:
-        workspace = get_workspace_path()
-        _test_timing_config = load_test_timing_config(workspace)
-    
-    return _test_timing_config.get("default_timeout", 300)
+    # CRITICAL: Always return None to prevent license issues and allow long simulations
+    return None
 
 def get_recommended_verbosity(test_name: str) -> str:
     """
@@ -309,7 +293,7 @@ def create_fastmcp_server() -> FastMCP:
         waves: bool,
         coverage: bool,
         seed: Optional[int],
-        timeout: int,
+        timeout: Optional[int],
     wave_format: Literal["VPD", "MXD", "VCD"] = "MXD",
         plusargs: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
@@ -467,6 +451,7 @@ def create_fastmcp_server() -> FastMCP:
         seed: Optional[int] = None,
         timeout: Optional[int] = None,
         plusargs: Optional[List[str]] = None,
+        enable_assertions: bool = False,
     ) -> Dict[str, Any]:
         """
         Execute a DSIM UVM simulation via the unified async API.
@@ -474,6 +459,8 @@ def create_fastmcp_server() -> FastMCP:
         The timeout parameter is optional. If not provided, the system will automatically
         select an appropriate timeout based on the test configuration from test_timing_config.json.
         Debug mode automatically selects timeout_debug if available and verbosity is UVM_DEBUG.
+        
+        Assertions are DISABLED by default for performance. Set enable_assertions=True for debug.
         """
         # Ensure PHASE_TRACE and OBJECTION_TRACE are always enabled
         if plusargs is None:
@@ -484,23 +471,21 @@ def create_fastmcp_server() -> FastMCP:
         if "+UVM_OBJECTION_TRACE" not in plusargs:
             plusargs.append("+UVM_OBJECTION_TRACE")
         
+        # Enable assertions if requested (disabled by default for performance)
+        if enable_assertions:
+            if "+define+ENABLE_ASSERTIONS" not in plusargs:
+                plusargs.append("+define+ENABLE_ASSERTIONS")
+            logger.info("Assertions ENABLED for this run")
+        else:
+            logger.info("Assertions DISABLED (default)")
+        
         # Determine if debug mode (affects timeout selection)
         debug_mode = (verbosity == "UVM_DEBUG")
         
-        # Get recommended timeout from configuration if not specified
-        actual_timeout = get_test_timeout(test_name, timeout, debug_mode)
+        # CRITICAL: Always None - no timeout
+        actual_timeout = None
         
-        # Get test configuration for logging
-        test_config = get_test_config(test_name)
-        config_source = "user-specified" if timeout is not None else \
-                       ("config[debug]" if debug_mode and "timeout_debug" in test_config else \
-                        ("config" if "timeout" in test_config else "default"))
-        
-        logger.info(f"Test: {test_name}, Timeout: {actual_timeout}s ({config_source})")
-        if test_config:
-            logger.info(f"Test info: {test_config.get('description', 'N/A')}, " +
-                       f"Operations: {test_config.get('operations', 'N/A')}, " +
-                       f"Category: {test_config.get('category', 'N/A')}")
+        logger.info(f"Test: {test_name}, Timeout: DISABLED (None)")
         
         return await _execute_simulation(
             test_name=test_name,

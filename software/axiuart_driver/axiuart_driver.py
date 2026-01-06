@@ -57,10 +57,14 @@ class AXIUARTDriver:
     REG_TEST_2 = registers.REG_TEST_2
     REG_TEST_3 = registers.REG_TEST_3
     REG_TEST_4 = registers.REG_TEST_4
-    REG_TEST_LED = registers.REG_TEST_LED
-    REG_TEST_5 = registers.REG_TEST_5
-    REG_TEST_6 = registers.REG_TEST_6
-    REG_TEST_7 = registers.REG_TEST_7
+    # REG_TEST_LED removed - LED now accessible only via CPU MMIO at 0x407C
+    
+    # CPU memory access registers (RV32I simplified interface)
+    REG_CPU_MEM_ADDR = registers.REG_CPU_MEM_ADDR   # CPU memory address
+    REG_CPU_MEM_WDATA = registers.REG_CPU_MEM_WDATA # CPU memory write data
+    REG_CPU_MEM_RDATA = registers.REG_CPU_MEM_RDATA # CPU memory read data  
+    REG_CPU_MEM_CTRL = registers.REG_CPU_MEM_CTRL   # CPU control (run, halt, mem access)
+    REG_REVISION = registers.REG_REVISION           # Hardware revision
     
     def __init__(self, port: str, baudrate: int = DEFAULT_BAUD, 
                  timeout: float = DEFAULT_TIMEOUT, debug: bool = False):

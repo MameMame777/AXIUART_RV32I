@@ -1,0 +1,97 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+## [Unreleased]
+
+### Optimization
+- **RV32I Pipeline Timing Optimization** (2026-01-05)
+  - **Issue**: PandR timing violation (WNS = -0.472ns, TNS = -0.509ns, 2/9633 failing endpoints)
+  - **Root cause**: Long combinational path (8.436ns vs 8.000ns required) from WB-stage PC+4 calculation (4-stage CARRY4 chain) through forwarding network to EX-stage ALU (3-stage CARRY4 chain)
+  - **Solution**: Pre-calculate `PC+4` in pipeline register (`wb_pc_plus4_reg`) parallel to `wb_result_fwd`, breaking the CARRY4 chain from critical path
+  - **Files modified**:
+    - `rtl/cpu/rv32i_top.sv`: Added `wb_pc_plus4_reg` register and connection to WB stage
+    - `rtl/cpu/rv32i_wb.sv`: Added `pc_plus4_precalc` input port, use pre-calculated value for `WB_PC4` case
+  - **Expected impact**: ~+0.8ns slack improvement (WNS: -0.472ns → +0.3ns estimated)
+  - **RISC-V compliance**: Zero impact (forwarding still occurs, just from pre-registered value)
+  - **Performance impact**: Zero (no additional pipeline bubbles, CPI unchanged)
+  - **Verification**: All tests PASS (rv32i_basic_test: 24 instructions/LED=0x5, rv32i_wb_forward_timing_test: 9 instructions/LED=0x7)
+
+## [1.1.0] - 2025-12-29
+
+### Fixed
+
+#### Bug #6: Register Read/Write Pulse Confusion
+- **Critical bug**: R0 register corruption (0x0A → 0x00) before ST instruction
+- **Root cause**: Single pulse signal for both read-latch and write operations
+- **Solution**: Separated `cpu_reg_read_pulse_set` (read-latch) from `cpu_reg_write_pulse` (actual write)
+- **Files modified**: 
+  - `rtl/register_block/Register_Block.sv` (lines 139, 472-473, 550-551, 628-647, 742)
+  - `rtl/cpu/td4cpu_core.sv` (lines 243-260, 599)
+- **Impact**: Tests 1-2 now passing (ST/LD to LED MMIO)
+
+#### Bug #7: Test Address Calculation Errors
+- **Critical bug**: Tests 3-5 wrote to RAM 0x0044 instead of LED MMIO 0x1044
+- **Root cause**: Missing ADDI sequences for 16-bit address construction (TD4 has 9-bit immediate limitation)
+- **Solution**: Added ADDI loops (LDI R1,#0x100 + 15×ADDI + ADDI #0x44 = 0x1044)
+- **Files modified**: `sim/tests/axiuart_cpu_mmio_led_test.sv` (Tests 3-5)
+- **Impact**: Tests 3-5 now passing (LED Binary Counter, Negative Offset, RAM/MMIO Boundary)
+
+#### Bug #8: Scoreboard UVM_ERROR from Read-Only Registers
+- **Issue**: 87 UVM_ERROR messages despite tests passing
+- **Root cause**: Scoreboard verified read-only status registers (REG_CPU_DBG_STATUS at 0x1204) against write shadow
+- **Solution**: Excluded 10 read-only registers from scoreboard verification
+- **Files modified**: `sim/uvm/sv/axiuart_scoreboard.sv` (lines 140-179)
+- **Impact**: UVM_ERROR count: 87 → 0
+
+### Added
+- **CPU MMIO LED Test Suite** (`axiuart_cpu_mmio_led_test`)
+  - Test 1: ST to LED MMIO (write 0xA)
+  - Test 2: LD from LED MMIO (read-back 0xA)
+  - Test 3: LED Binary Counter Pattern (4 patterns: 0x1→0x2→0x4→0x8)
+  - Test 4: Negative Offset Addressing (LED=0xFF)
+  - Test 5: RAM/MMIO Boundary Test (RAM[0xFF]=0x0F, LED[0x1044]=0x03)
+- **Regression Test Framework**
+  - MCP-based regression runner (`mcp_server/run_regression.py`)
+  - HTML report generation
+  - Smoke suite (2 tests, ~68s runtime)
+  - Full suite support
+- **Documentation**
+  - Bug fix documentation (`docs/bug_fixes_20251229.md`)
+  - Changelog (this file)
+  - Updated README with project status
+
+### Changed
+- **Scoreboard Verification Logic**
+  - Now excludes read-only registers: REG_CPU_DBG_STATUS, REG_VERSION, REG_TX_COUNT, REG_RX_COUNT, REG_FIFO_STAT, REG_CPU_REG_DATA, REG_CPU_TRACE_RDATA, REG_CPU_TRACE_PTR, REG_CPU_ID, REG_REVISION
+  - Improved logging for status register reads
+- **Register Block Control Signals**
+  - Separated read-pulse and write-pulse for CPU debug interface
+  - Added `cpu_reg_read_pulse_set` signal
+  - Updated pulse clearing logic
+- **Test Infrastructure**
+  - Improved address construction for MMIO tests
+  - Enhanced test logging and validation
+
+## [1.0.0] - 2025-12-28
+
+### Added
+- Initial UART-AXI4 Bridge implementation
+- TD4 CPU integration with MMIO support
+- UVM testbench infrastructure
+- Python driver software
+- Register map generation framework
+- Basic test suite (reset, basic, reg_rw)
+- MCP server for test automation
+- Documentation framework
+
+---
+
+## Version History
+
+- **1.1.0** (2025-12-29): Bug fixes, CPU MMIO LED tests, regression framework
+- **1.0.0** (2025-12-28): Initial release with TD4 CPU integration
+
+---
+
+*For detailed bug analysis, see: [docs/bug_fixes_20251229.md](bug_fixes_20251229.md)*

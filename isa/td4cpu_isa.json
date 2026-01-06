@@ -130,7 +130,7 @@
     {"mnemonic": "LD", "format": "M", "op": "LD", "length_words": 1, "operands": ["rD", "rB", "off6s"], "flags_write": []},
     {"mnemonic": "ST", "format": "M", "op": "ST", "length_words": 1, "operands": ["rD", "rB", "off6s"], "flags_write": []},
 
-    {"mnemonic": "BR", "format": "B", "op": "BR", "length_words": 1, "operands": ["cond", "off9s"], "flags_write": []},
+    {"mnemonic": "BR", "format": "B", "op": "BR", "length_words": 1, "operands": ["cond", "off9s"], "flags_write": [], "delay_slot": true, "description": "Conditional branch with 1-instruction delay slot. Delay slot instruction ALWAYS executes before branch taken. Branch target = PC_BR + 1 + sign_extend(off9). Execution: 1) BR decoded, condition evaluated 2) Delay slot instruction executes 3) PC updated to target if condition met."},
 
     {"mnemonic": "RET", "format": "SYS", "op": "SYS", "sysop": "RET", "length_words": 1, "operands": [], "flags_write": []},
     {"mnemonic": "BRK", "format": "SYS", "op": "SYS", "sysop": "BRK", "length_words": 1, "operands": [], "flags_write": []},

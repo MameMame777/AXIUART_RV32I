@@ -1,17 +1,28 @@
-# AXIUART - UART to AXI4-Lite Bridge
+# AXIUART - UART to AXI4-Lite Bridge with RV32I CPU
 
-UART-AXI4 bridge with comprehensive verification environment and Python control software.
+UART-AXI4 bridge with integrated RV32I CPU, comprehensive verification environment, and Python control software.
+
+## Project Status
+
+✅ **RV32I CPU Integration Complete** (January 3, 2026)  
+✅ **TD4 CPU Removed** (Migrated to RV32I-only design)  
+✅ **100% test pass rate** (RV32I basic test + debug load test)  
+✅ **0 UVM_ERROR** (Clean simulation, 0 assertion failures)  
+✅ **Production ready** (Dual-port RAM, 8KB memory, MMIO support)
 
 ## Project Overview
 
-AXIUART provides a production-ready hardware interface between UART serial communication (115200 baud) and AXI4-Lite memory-mapped registers, enabling software control of FPGA peripherals through a simple serial connection.
+AXIUART provides a production-ready hardware interface between UART serial communication (115200 baud) and AXI4-Lite memory-mapped registers, enabling software control of FPGA peripherals through a simple serial connection. The design includes an integrated **RV32I CPU** (RISC-V 32-bit integer base) for on-chip processing with external debug memory access.
 
 **Key Features:**
 - UART protocol with CRC-8 error detection
 - AXI4-Lite master interface for register access
-- 4-bit LED control register (REG_TEST_LED at 0x1044)
-- Comprehensive UVM testbench with protocol coverage
-- Python driver with interactive control applications
+- **Integrated RV32I CPU** with 8KB dual-port RAM
+- External debug memory access via UART/AXI4-Lite bridge
+- CPU control (run/halt) and status monitoring
+- 4-bit LED output from CPU MMIO
+- Comprehensive UVM testbench with SystemVerilog assertions
+- Python driver framework ready for extension
 - Real-time waveform analysis and debugging support
 
 ## Register Management
@@ -60,10 +71,18 @@ python software/axiuart_driver/tools/gen_registers.py \
 - AXI4-Lite master interface
 - Register block with LED control
 
+**TD4 CPU Integration:**
+- 16-bit addressing (9-bit immediate support with ADDI)
+- 8 general-purpose registers (R0-R7)
+- MMIO support (LED at 0x1044, RAM at 0x0000-0x0FFF)
+- Debug interface (register/memory read/write, single-step execution)
+- Trace buffer for instruction history
+
 **Key Modules:**
 - `AXIUART_Top.sv` - Top-level integration with 4-bit LED output
 - `Uart_Axi4_Bridge.sv` - Protocol conversion bridge
-- `Register_Block.sv` - AXI4-Lite register file (base: 0x1000)
+- `Register_Block.sv` - AXI4-Lite register file (base: 0x1000, **Bug #6 fixed**)
+- `td4cpu_core.sv` - TD4 CPU implementation (**Bug #6 fixed**)
 - `Uart_Rx.sv` / `Uart_Tx.sv` - UART transceivers
 - `Frame_Parser.sv` / `Frame_Builder.sv` - Protocol handlers
 
@@ -75,11 +94,31 @@ python software/axiuart_driver/tools/gen_registers.py \
 - Modular agent architecture (Driver, Monitor, Sequencer, Scoreboard)
 - Protocol-aware transactions with automatic CRC generation
 - Comprehensive sequence library (reset, read, write, burst)
-- Register R/W verification with read-back checking
+- Register R/W verification with read-back checking (**Bug #8 fixed: RO register exclusion**)
 
 **Available Tests:**
 - `axiuart_basic_test` - Basic connectivity and reset test
-- `axiuart_reg_rw_test` - 6-register read/write verification (including LED)
+- `axiuart_reset_test` - Reset functionality verification
+- `axiuart_reg_rw_test` - Register read/write verification
+- `axiuart_cpu_mmio_led_test` - **CPU MMIO LED tests (5 tests, all passing)**
+  - Test 1: ST to LED MMIO (0xA write)
+  - Test 2: LD from LED MMIO (0xA read-back)
+  - Test 3: LED Binary Counter Pattern (0x1→0x2→0x4→0x8)
+  - Test 4: Negative Offset Addressing (0xFF)
+  - Test 5: RAM/MMIO Boundary Test (0x03)
+
+**Regression Suites:**
+- `smoke` - Quick validation (2 tests, ~68s)
+- `full` - Complete regression (all tests)
+
+**Simulation Infrastructure:**
+- Altair DSim 2025.1 with UVM support
+- MXD waveform generation for debugging
+- FastMCP server for automated test execution
+- JSON-based result analysis and reporting
+- HTML regression reports
+
+**Documentation:** [sim/README.md](sim/README.md) | [sim/uvm/UVM_ARCHITECTURE.md](sim/uvm/UVM_ARCHITECTURE.md)
 
 **Simulation Infrastructure:**
 - Altair DSim 2025.1 with UVM support

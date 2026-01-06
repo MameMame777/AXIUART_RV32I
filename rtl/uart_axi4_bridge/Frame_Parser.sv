@@ -76,6 +76,7 @@ module Frame_Parser #(
     localparam logic [TIMEOUT_WIDTH-1:0] TIMEOUT_LIMIT = TIMEOUT_WIDTH'(TIMEOUT_CLOCKS);
     
     // State machine
+    (* fsm_encoding = "one_hot" *)
     typedef enum logic [3:0] {
         IDLE,
         CMD,

@@ -22,7 +22,7 @@ class uart_basic_sequence extends uvm_sequence#(uart_transaction);
             start_item(tx);
             assert(tx.randomize() with {
                 address inside {REG_TEST_0, REG_TEST_1, REG_TEST_2, REG_TEST_3, 
-                               REG_TEST_4, REG_TEST_LED, REG_STATUS, REG_VERSION};
+                               REG_TEST_4, REG_STATUS, REG_VERSION};
             });
             finish_item(tx);
             

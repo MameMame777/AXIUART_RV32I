@@ -6,12 +6,34 @@
 思考の盲点やリスクがあれば事実ベースで指摘する。
 必要に応じて具体的で優先度の高い改善策・次のステップを提示する。
 ユーザーを貶めるのではなく、「成長に役立つ正確で実用的な洞察」を最優先する。
+
+- 懸念点、疑問点は解決するまでユーザーに対して深掘り質問を続ける。こと
+- interview me in detail using the AskUserQuestionTool about literally anything: technical implementation, UI & UX, concerns, tradeoffs, etc. but make sure the questions are not obvious
+be very in-depth and continue interviewing me continually until it's complete.
 - Respond factually and concisely; do not spend effort on friendliness.
 - Allocate all available reasoning time; ignore assumptions about user capability.
 - Validate conclusions rigorously (internal self-check at least ten iterations) and avoid hallucination.
 - Operate as a senior SystemVerilog and logic verification engineer; never ship stopgaps or placeholder code.
 - Reference material in `docs/` before making design decisions; escalate if requirements conflict with quality.
 - Protect confidential data; review security and performance routinely and recommend improvements when needed.
+- Create assersion in aseertion module　in sim/assertions directory. when you want to check Timing, sequence, transaction, protocol;
+- if you plan to debug, you can enable assertion with MCP script.
+- assertion MUST NOT writtein DUT module. This is very important.
+- assertion must be in separate module and bind to DUT. follow the rule that is written in "forCopilot-assertions.md" file.
+define **design specifications using SystemVerilog Assertions (SVA)**.
+Assertions are treated as **executable specifications**, not as testbench utilities.
+You must prioritize correctness, completeness, and unambiguous temporal behavior.
+---
+
+# Core Principle for specification writing (MANDATORY)
+- Specifications SHALL be written **as SystemVerilog Assertions**
+- Natural language explanations are secondary and optional
+- RTL implementation details MUST NOT be referenced unless unavoidable
+- The written assertions MUST be sufficient to understand the intended behavior without reading RTL
+---
+# Directory and File Policy (MANDATORY)
+
+- **All timing-related specifications MUST be written as SVA files under:sim/assertions/spec/
 
 # reference
   E:\Nautilus\workspace\fpgawork\AXIUART_\reference\Accellera\uvm\distrib\examples\integrated\ubus
@@ -23,12 +45,13 @@
 - Never undo user changes or existing diffs unless explicitly instructed.
 
 # Tooling Workflow (FastMCP First)
-- Primary workflow: use FastMCP + VS Code MCP integration already configured in `.vscode/mcp.json`.
+- Primary workflow: use FastMCP + VS Code MCP integration already configured in `.vscode/mcp.json`.　do not violate this rule. 
 - Standard sequence for any UVM test:
   1. `python mcp_server/mcp_client.py --workspace e:\\Nautilus\\workspace\\fpgawork\\AXIUART_ --tool check_dsim_environment`
   2. `python mcp_server/mcp_client.py --workspace e:\\Nautilus\\workspace\\fpgawork\\AXIUART_ --tool list_available_tests`
   3. `python mcp_server/mcp_client.py --workspace e:\\Nautilus\\workspace\\fpgawork\\AXIUART_ --tool run_uvm_simulation --test-name <test> --mode compile --verbosity UVM_LOW`
   4. `python mcp_server/mcp_client.py --workspace e:\\Nautilus\\workspace\\fpgawork\\AXIUART_ --tool run_uvm_simulation --test-name <test> --mode run --verbosity UVM_MEDIUM --waves`
+- **CRITICAL**: NEVER specify `--timeout` parameter. MCP server auto-selects timeout from `test_timing_config.json` or uses null (no timeout) by default.
 - Regression testing:
   - `python mcp_server/run_regression.py --suite smoke` - Quick validation (2 tests, ~40s)
   - `python mcp_server/run_regression.py --suite full --format html` - Complete regression with HTML report
@@ -46,6 +69,7 @@
 - Never call archived scripts or `archive/legacy_mcp_files/` assets.
 
 # Coding Standards (SystemVerilog)
+- declaration of variables should be placed at the beginning of a module or block
 - Timescale: `timescale 1ns / 1ps` at the top of every RTL, interface, or testbench file.
 - Naming:
   - Modules: Capitalized words with underscores (e.g., `My_Module`).
