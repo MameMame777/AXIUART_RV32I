@@ -237,9 +237,11 @@ module rv32i_tb_top;
         uvm_config_db#(virtual rv32i_tb_if)::set(null, "*", "vif", tb_if);
         
         // Load CPU test program from hex file ONLY if test doesn't use debug writes
-        // Tests that load code via debug interface (exception handler) skip this
+        // Tests that load code via debug interface (exception handler, minimal tests) skip this
         if ($value$plusargs("UVM_TESTNAME=%s", test_name)) begin
-            if (test_name != "rv32i_exception_handler_test") begin
+            if (test_name != "rv32i_exception_handler_test" && 
+                test_name != "rv32i_minimal_led_test" &&
+                test_name != "rv32i_bne_loop_test") begin
                 // Try to load test-specific hex file first
                 hex_file = {"../../tests/", test_name, ".hex"};
                 if ($fopen(hex_file, "r")) begin
