@@ -25,7 +25,7 @@ module rv32i_top
     import rv32i_pipeline_pkg::*;
 (
     input  logic        clk,
-    input  logic        rst_n,
+    input  logic        rst,
     
     // Debug interface (compatible with Register_Block.sv)
     input  logic        cpu_run,        // Start/resume execution
@@ -235,8 +235,8 @@ module rv32i_top
     );
     
     // PC register
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n || soft_reset_active) begin
+    always_ff @(posedge clk) begin
+        if (rst || soft_reset_active) begin
             if_pc_current <= 32'h00000000;
         end else if (cpu_run && cpu_halted && if_pc_current == 32'h00000000) begin
             if_pc_current <= 32'h00000000;  // Reset PC to 0 on initial start
@@ -251,8 +251,8 @@ module rv32i_top
     // IF/ID PIPELINE REGISTER
     //==========================================================================
     
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n || soft_reset_active) begin
+    always_ff @(posedge clk) begin
+        if (rst || soft_reset_active) begin
             if_id_reg <= if_id_bubble();
         end else if (if_flush) begin
             if_id_reg <= if_id_bubble();
@@ -291,7 +291,7 @@ module rv32i_top
     
     rv32i_id u_id (
         .clk             (clk),
-        .rst_n           (rst_n && !soft_reset_active),
+        .rst             (rst || soft_reset_active),
         .pc_in           (if_id_reg.pc),
         .insn_in         (if_id_reg.insn),
         .valid_in        (if_id_reg.valid),
@@ -327,7 +327,7 @@ module rv32i_top
     
     rv32i_hazard u_hazard (
         .clk             (clk),
-        .rst_n           (rst_n),
+        .rst             (rst),
         .id_rs1_addr     (id_ctrl.rs1_addr),
         .id_rs2_addr     (id_ctrl.rs2_addr),
         .id_valid        (id_valid),
@@ -358,8 +358,8 @@ module rv32i_top
     // ID/EX PIPELINE REGISTER
     //==========================================================================
     
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n || soft_reset_active) begin
+    always_ff @(posedge clk) begin
+        if (rst || soft_reset_active) begin
             id_ex_reg <= id_ex_bubble();
         end else if (id_flush) begin
             id_ex_reg <= id_ex_bubble();
@@ -396,8 +396,8 @@ module rv32i_top
     // Register wb_result for forwarding timing
     // Breaks long combinational path: mem_wb_reg → WB mux → EX mux
     // Pre-calculate PC+4 to break CARRY4 chain in critical timing path
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n || soft_reset_active) begin
+    always_ff @(posedge clk) begin
+        if (rst || soft_reset_active) begin
             wb_result_fwd  <= 32'h0;
             wb_pc_plus4_reg <= 32'h0;
         end else begin
@@ -433,8 +433,8 @@ module rv32i_top
     // EX/MEM PIPELINE REGISTER
     //==========================================================================
     
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n || soft_reset_active) begin
+    always_ff @(posedge clk) begin
+        if (rst || soft_reset_active) begin
             ex_mem_reg <= ex_mem_bubble();
         end else if (ex_flush) begin
             ex_mem_reg <= ex_mem_bubble();
@@ -464,7 +464,7 @@ module rv32i_top
     
     rv32i_mem u_mem (
         .clk             (clk),
-        .rst_n           (rst_n && !soft_reset_active),
+        .rst             (rst || soft_reset_active),
         .pc              (ex_mem_reg.pc),
         .insn            (ex_mem_reg.insn),
         .alu_result      (ex_mem_reg.alu_result),
@@ -500,8 +500,8 @@ module rv32i_top
     // MEM/WB PIPELINE REGISTER
     //==========================================================================
     
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n || soft_reset_active) begin
+    always_ff @(posedge clk) begin
+        if (rst || soft_reset_active) begin
             mem_wb_reg <= mem_wb_bubble();
         end else begin
             mem_wb_reg.pc          <= ex_mem_reg.pc;
@@ -553,7 +553,7 @@ module rv32i_top
     
     rv32i_csr u_csr (
         .clk             (clk),
-        .rst_n           (rst_n && !soft_reset_active),
+        .rst             (rst || soft_reset_active),
         .csr_raddr       (csr_raddr),
         .csr_rdata       (csr_rdata),
         .csr_waddr       (wb_csr_waddr),
@@ -574,8 +574,8 @@ module rv32i_top
     // CPU CONTROL STATE MACHINE
     //==========================================================================
     
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n || soft_reset_active) begin
+    always_ff @(posedge clk) begin
+        if (rst || soft_reset_active) begin
             running         <= 1'b0;
             cpu_halted      <= 1'b1;
             cpu_break_reg   <= 1'b0;
@@ -646,8 +646,8 @@ module rv32i_top
     logic [31:0] stall_counter;
     logic [31:0] flush_counter;
     
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n || soft_reset_active) begin
+    always_ff @(posedge clk) begin
+        if (rst || soft_reset_active) begin
             cycle_counter <= 32'h0;
             insn_counter  <= 32'h0;
             stall_counter <= 32'h0;
@@ -669,8 +669,8 @@ module rv32i_top
     // SOFTWARE RESET CONTROL
     //==========================================================================
     
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
+    always_ff @(posedge clk) begin
+        if (rst) begin
             soft_reset_active <= 1'b0;
             reset_done_reg    <= 1'b0;
         end else begin
@@ -702,7 +702,7 @@ module rv32i_top
         .DEPTH(64)
     ) u_trace_buffer (
         .clk             (clk),
-        .rst_n           (rst_n && !soft_reset_active),
+        .rst             (rst || soft_reset_active),
         .insn_valid      (trace_valid),
         .insn            (trace_insn),
         .pc              (trace_pc),

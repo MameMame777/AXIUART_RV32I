@@ -16,7 +16,7 @@ module rv32i_hazard
 (
     // Clock and reset (added for WB metadata delay register)
     input  logic        clk,
-    input  logic        rst_n,
+    input  logic        rst,
     
     // ID stage inputs (for forwarding pre-computation)
     input  logic [4:0]  id_rs1_addr,
@@ -75,8 +75,8 @@ module rv32i_hazard
     logic        wb_rf_wen_delayed;
     logic        wb_valid_delayed;
     
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
+    always_ff @(posedge clk) begin
+        if (rst) begin
             wb_rd_addr_delayed <= 5'b0;
             wb_rf_wen_delayed  <= 1'b0;
             wb_valid_delayed   <= 1'b0;

@@ -12,7 +12,7 @@ module rv32i_id
 (
     // Clock and reset (for sequential register file only)
     input  logic        clk,
-    input  logic        rst_n,
+    input  logic        rst,
     
     // Pipeline input from IF/ID register
     input  logic [31:0] pc_in,
@@ -100,8 +100,8 @@ module rv32i_id
     // x0 protection: writes to x0 are legal but ignored
     //==========================================================================
     
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
+    always_ff @(posedge clk) begin
+        if (rst) begin
             // Reset all registers to 0
             for (int i = 0; i < 32; i++) begin
                 regfile[i] <= 32'h0;

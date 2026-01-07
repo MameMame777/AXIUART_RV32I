@@ -16,7 +16,7 @@ module Rv32i_Trace_Buffer #(
     parameter DEPTH = 64  // Store last 64 instructions
 )(
     input  logic        clk,
-    input  logic        rst_n,
+    input  logic        rst,
     
     // CPU signals to trace (32-bit RV32I)
     input  logic        insn_valid,      // Instruction executed (WB stage)
@@ -69,8 +69,8 @@ module Rv32i_Trace_Buffer #(
     //==========================================================================
     // Capture trace on valid instruction execution (WB stage)
     
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
+    always_ff @(posedge clk) begin
+        if (rst) begin
             wr_ptr <= '0;
             count  <= '0;
             for (int i = 0; i < DEPTH; i++) begin
@@ -112,8 +112,8 @@ module Rv32i_Trace_Buffer #(
     
     assign dbg_read_data = buffer[dbg_read_addr];  // Combinational read
     
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
+    always_ff @(posedge clk) begin
+        if (rst) begin
             dbg_write_ptr   <= '0;
             dbg_entry_count <= '0;
         end else begin
@@ -128,21 +128,21 @@ module Rv32i_Trace_Buffer #(
     
     // Check write pointer wraparound
     property p_write_ptr_range;
-        @(posedge clk) disable iff (!rst_n)
+        @(posedge clk) disable iff (rst)
         wr_ptr < DEPTH;
     endproperty
     assert property (p_write_ptr_range) else $error("Write pointer out of range");
     
     // Check entry count saturation
     property p_entry_count_saturate;
-        @(posedge clk) disable iff (!rst_n)
+        @(posedge clk) disable iff (rst)
         count <= DEPTH;
     endproperty
     assert property (p_entry_count_saturate) else $error("Entry count overflow");
     
     // Check trace capture on valid instruction
     property p_trace_capture;
-        @(posedge clk) disable iff (!rst_n)
+        @(posedge clk) disable iff (rst)
         insn_valid |=> (wr_ptr == $past(wr_ptr) + 1) || (wr_ptr == 0 && $past(wr_ptr) == DEPTH-1);
     endproperty
     assert property (p_trace_capture) else $warning("Trace capture pointer did not advance");

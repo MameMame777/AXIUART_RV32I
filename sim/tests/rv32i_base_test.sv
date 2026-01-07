@@ -9,7 +9,7 @@
 // Author: GitHub Copilot
 // Date: 2026-01-02
 // Fixed: 2026-01-05 - All signal assignments converted to clocking block
-//                     (vif.cb with non-blocking <=) to resolve rst_n X-value bug
+//                     (vif.cb with non-blocking <=) to resolve rst X-value bug
 //------------------------------------------------------------------------------
 
 class rv32i_base_test extends uvm_test;
@@ -64,7 +64,7 @@ class rv32i_base_test extends uvm_test;
         `uvm_info("RV32I_BASE_TEST", "Applying reset sequence", UVM_MEDIUM)
         
         @(posedge vif.clk);
-        vif.cb.rst_n <= 0;
+        vif.cb.rst <= 1;
         vif.cb.cpu_run <= 0;
         vif.cb.cpu_halt <= 0;
         vif.cb.cpu_step <= 0;
@@ -85,7 +85,7 @@ class rv32i_base_test extends uvm_test;
         
         repeat(5) @(posedge vif.clk);
         
-        vif.cb.rst_n <= 1;
+        vif.cb.rst <= 0;
         
         repeat(2) @(posedge vif.clk);
         

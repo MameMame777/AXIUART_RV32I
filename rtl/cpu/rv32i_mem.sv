@@ -34,7 +34,7 @@ module rv32i_mem
     // MMIO LED register
     output logic [3:0]    led_out,
     input  logic          clk,
-    input  logic          rst_n,
+    input  logic          rst,
     
     // Exception interface
     output logic          exception_trap,
@@ -166,8 +166,8 @@ module rv32i_mem
     //==========================================================================
     logic [3:0] led_reg;
     
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
+    always_ff @(posedge clk) begin
+        if (rst) begin
             led_reg <= 4'h0;
         end else begin
             if (valid && ctrl.mem_write && is_mmio_led) begin
