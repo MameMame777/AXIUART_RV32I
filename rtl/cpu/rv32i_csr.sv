@@ -28,7 +28,7 @@
 
 module rv32i_csr (
     input  logic        clk,
-    input  logic        rst_n,
+    input  logic        rst,
     
     //==========================================================================
     // CSR Instruction Interface (from CPU pipeline)
@@ -90,8 +90,8 @@ module rv32i_csr (
     // Exception trap writes are synchronous with trap event
     // CSR instruction writes commit in WB stage
     
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
+    always_ff @(posedge clk) begin
+        if (rst) begin
             mepc_reg   <= 32'h0000_0000;
             mcause_reg <= 32'h0000_0000;
             mtval_reg  <= 32'h0000_0000;
@@ -161,21 +161,21 @@ module rv32i_csr (
     `ifdef FORMAL_VERIFICATION
     // Property: Exception trap updates mepc with correct PC
     property exception_updates_mepc;
-        @(posedge clk) disable iff (!rst_n)
+        @(posedge clk) disable iff (rst)
         exception_trap |=> (mepc_reg == $past(exception_pc));
     endproperty
     assert_exception_mepc: assert property (exception_updates_mepc);
     
     // Property: Exception trap updates mcause with correct code
     property exception_updates_mcause;
-        @(posedge clk) disable iff (!rst_n)
+        @(posedge clk) disable iff (rst)
         exception_trap |=> (mcause_reg[4:0] == $past(exception_code));
     endproperty
     assert_exception_mcause: assert property (exception_updates_mcause);
     
     // Property: CSR writes do not occur during exception trap
     property csr_write_blocked_during_trap;
-        @(posedge clk) disable iff (!rst_n)
+        @(posedge clk) disable iff (rst)
         exception_trap |-> !csr_wen;
     endproperty
     assert_no_csr_write_on_trap: assert property (csr_write_blocked_during_trap);

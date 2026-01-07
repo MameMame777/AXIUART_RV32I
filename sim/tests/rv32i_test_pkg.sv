@@ -22,10 +22,10 @@
 // Test classes (base first, then derived)
 `include "rv32i_base_test.sv"
 `include "rv32i_basic_test.sv"
-`include "rv32i_hazard_test.sv"
-`include "rv32i_load_store_test.sv"
-`include "rv32i_branch_test.sv"
-`include "rv32i_jump_test.sv"
+// `include "rv32i_hazard_test.sv"          // File not present
+// `include "rv32i_load_store_test.sv"      // File not present
+// `include "rv32i_branch_test.sv"          // File not present
+// `include "rv32i_jump_test.sv"            // File not present
 `include "rv32i_debug_load_test.sv"
 `include "rv32i_ebreak_simple_test.sv"
 `include "rv32i_breakpoint_test.sv"
@@ -44,7 +44,7 @@
 `include "rv32i_minimal_led_test.sv"
 
 // Branch debug tests (2026-01-05)
-`include "rv32i_bne_loop_test.sv"
+// `include "rv32i_bne_loop_test.sv"        // File not present
 
 // Comprehensive test - All 40 RV32I instructions (2026-01-06)
 `include "rv32i_comprehensive_test.sv"

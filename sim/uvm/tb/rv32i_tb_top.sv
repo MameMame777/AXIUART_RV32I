@@ -24,7 +24,7 @@ import uvm_pkg::*;
 interface rv32i_tb_if (input logic clk);
     
     // Reset
-    logic        rst_n;
+    logic        rst;
     
     // CPU control
     logic        cpu_run;
@@ -81,7 +81,7 @@ interface rv32i_tb_if (input logic clk);
     // Clocking block with explicit timing to avoid X-value propagation
     clocking cb @(posedge clk);
         default input #1step output #0;
-        output rst_n;
+        output rst;
         output cpu_run;
         output cpu_halt;
         output cpu_step;
@@ -119,7 +119,7 @@ interface rv32i_tb_if (input logic clk);
     // Initial block to prevent X-value propagation
     // All output signals must have defined values before first clock edge
     initial begin
-        rst_n = 0;
+        rst = 1;
         cpu_run = 0;
         cpu_halt = 0;
         cpu_step = 0;
@@ -170,7 +170,7 @@ module rv32i_tb_top;
     
     rv32i_top dut (
         .clk(clk),
-        .rst_n(tb_if.rst_n),
+        .rst(tb_if.rst),
         
         // Control
         .cpu_run(tb_if.cpu_run),
