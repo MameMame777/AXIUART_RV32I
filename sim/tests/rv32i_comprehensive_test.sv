@@ -38,7 +38,7 @@ class rv32i_comprehensive_test extends rv32i_base_test;
         // Main program (~77) + handler (5) + branches/jumps variations
         uvm_config_db#(int)::set(this, "env.scoreboard", "expected_insn_min", 75);
         uvm_config_db#(int)::set(this, "env.scoreboard", "expected_insn_max", 110);
-        uvm_config_db#(int)::set(this, "env.scoreboard", "expected_led_value", 32'd136); // x30 final value
+        uvm_config_db#(int)::set(this, "env.scoreboard", "expected_led_value", 32'h8); // 136 & 0xF (4-bit LED)
         uvm_config_db#(int)::set(this, "env.scoreboard", "expected_ebreak_count", 1);
         
         `uvm_info("RV32I_COMPREHENSIVE", "Comprehensive test configured (all 40 instructions)", UVM_MEDIUM)

@@ -106,6 +106,7 @@ module rv32i_top
     //==========================================================================
     
     logic running;
+    logic bram_ready;  // BRAM data valid (1 cycle after running)
     logic step_mode;
     logic step_done;
     logic bp_skip_once;
@@ -155,6 +156,15 @@ module rv32i_top
     always_ff @(posedge clk) begin
         if (ram_ena_a) begin
             ram_rdata_if <= ram[ram_addr_if];
+        end
+    end
+    
+    // BRAM ready flag: Set 1 cycle after running to account for registered output latency
+    always_ff @(posedge clk) begin
+        if (rst || soft_reset_active) begin
+            bram_ready <= 1'b0;
+        end else begin
+            bram_ready <= running;
         end
     end
     
@@ -256,7 +266,7 @@ module rv32i_top
             if_id_reg <= if_id_bubble();
         end else if (if_flush) begin
             if_id_reg <= if_id_bubble();
-        end else if (!id_stall) begin
+        end else if (!id_stall && bram_ready) begin  // Wait for BRAM data valid
             if_id_reg.pc    <= if_pc_out;
             if_id_reg.insn  <= if_insn_out;
             if_id_reg.valid <= if_valid_out && running;

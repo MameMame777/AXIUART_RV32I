@@ -1,7 +1,7 @@
 {
   "test_name": "RV32I Comprehensive Test",
   "description": "All 40 RV32I base instructions with interdependencies",
-  "total_instructions": 80,
+  "total_instructions": 86,
   "memory_layout": {
     "main_program": "0x000-0x1FF",
     "exception_handler": "0x200-0x220",
@@ -653,6 +653,38 @@
     },
     {
       "address": "0x200",
+      "encoding": "0x000000B7",
+      "name": "LUI",
+      "operands": "x1, 0",
+      "comment": "x1 = 0x0",
+      "expected_register": "x1",
+      "expected_value": "0x00000000"
+    },
+    {
+      "address": "0x204",
+      "encoding": "0x40008093",
+      "name": "ADDI",
+      "operands": "x1, x1, 0x400",
+      "comment": "x1 = 0x400 (scratch memory base)",
+      "expected_register": "x1",
+      "expected_value": "0x00000400"
+    },
+    {
+      "address": "0x208",
+      "encoding": "0x00A0A023",
+      "name": "SW",
+      "operands": "x10, 0(x1)",
+      "comment": "Save x10 to 0x400"
+    },
+    {
+      "address": "0x20C",
+      "encoding": "0x00B0A223",
+      "name": "SW",
+      "operands": "x11, 4(x1)",
+      "comment": "Save x11 to 0x404"
+    },
+    {
+      "address": "0x210",
       "encoding": "0x34102573",
       "name": "CSRRS",
       "operands": "x10, mepc, x0",
@@ -661,7 +693,7 @@
       "expected_value": null
     },
     {
-      "address": "0x204",
+      "address": "0x214",
       "encoding": "0x342025F3",
       "name": "CSRRS",
       "operands": "x11, mcause, x0",
@@ -670,7 +702,25 @@
       "expected_value": null
     },
     {
-      "address": "0x208",
+      "address": "0x218",
+      "encoding": "0x0000A503",
+      "name": "LW",
+      "operands": "x10, 0(x1)",
+      "comment": "Restore x10 from 0x400",
+      "expected_register": "x10",
+      "expected_value": null
+    },
+    {
+      "address": "0x21C",
+      "encoding": "0x0040A583",
+      "name": "LW",
+      "operands": "x11, 4(x1)",
+      "comment": "Restore x11 from 0x404",
+      "expected_register": "x11",
+      "expected_value": null
+    },
+    {
+      "address": "0x220",
       "encoding": "0x30200073",
       "name": "MRET",
       "operands": "",

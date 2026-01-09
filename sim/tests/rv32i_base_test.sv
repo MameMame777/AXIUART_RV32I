@@ -37,6 +37,23 @@ class rv32i_base_test extends uvm_test;
             `uvm_fatal("RV32I_BASE_TEST", "Failed to get virtual interface from config DB")
         end
         
+        // Setup trace logging
+        begin
+            string trace_file;
+            string test_name;
+            string timestamp_str;
+            
+            void'($value$plusargs("UVM_TESTNAME=%s", test_name));
+            if (test_name == "") test_name = "rv32i_test";
+            
+            timestamp_str = $sformatf("%0t", $time);
+            trace_file = {"../../exec/logs/", test_name, "_trace_", timestamp_str, ".csv"};
+            
+            uvm_config_db#(string)::set(this, "env.monitor", "trace_filename", trace_file);
+            
+            `uvm_info("RV32I_BASE_TEST", $sformatf("Trace will be logged to: %s", trace_file), UVM_LOW)
+        end
+        
         `uvm_info("RV32I_BASE_TEST", "Base test built", UVM_MEDIUM)
     endfunction
     

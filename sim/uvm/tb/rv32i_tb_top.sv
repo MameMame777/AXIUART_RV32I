@@ -247,10 +247,24 @@ module rv32i_tb_top;
                 if ($fopen(hex_file, "r")) begin
                     $readmemh(hex_file, dut.ram);
                     $display("[TB] Loaded %s for test: %s", hex_file, test_name);
+                    $display("========================================");
+                    $display("[RAM_DIAG] RAM contents after $readmemh:");
+                    $display("  ram[0] = 0x%08h (expect 0x20000f93)", dut.ram[0]);
+                    $display("  ram[1] = 0x%08h (expect 0x305f9073)", dut.ram[1]);
+                    $display("  ram[2] = 0x%08h (expect 0x00a00093)", dut.ram[2]);
+                    $display("  ram[3] = 0x%08h", dut.ram[3]);
+                    $display("========================================");
                 end else begin
                     // Fall back to default
                     $readmemh("../../tests/rv32i_ram_init.hex", dut.ram);
                     $display("[TB] Loaded rv32i_ram_init.hex for test: %s (test-specific hex not found)", test_name);
+                    $display("========================================");
+                    $display("[RAM_DIAG] RAM contents after $readmemh:");
+                    $display("  ram[0] = 0x%08h", dut.ram[0]);
+                    $display("  ram[1] = 0x%08h", dut.ram[1]);
+                    $display("  ram[2] = 0x%08h", dut.ram[2]);
+                    $display("  ram[3] = 0x%08h", dut.ram[3]);
+                    $display("========================================");
                 end
             end else begin
                 $display("[TB] Skipping readmemh - test %s uses debug writes", test_name);
@@ -259,6 +273,13 @@ module rv32i_tb_top;
             // Default: load hex file
             $readmemh("../../tests/rv32i_ram_init.hex", dut.ram);
             $display("[TB] Loaded rv32i_ram_init.hex (no UVM_TESTNAME)");
+            $display("========================================");
+            $display("[RAM_DIAG] RAM contents after $readmemh:");
+            $display("  ram[0] = 0x%08h", dut.ram[0]);
+            $display("  ram[1] = 0x%08h", dut.ram[1]);
+            $display("  ram[2] = 0x%08h", dut.ram[2]);
+            $display("  ram[3] = 0x%08h", dut.ram[3]);
+            $display("========================================");
         end
         
         // Enable waveform dumping

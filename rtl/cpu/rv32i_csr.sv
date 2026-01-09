@@ -95,7 +95,7 @@ module rv32i_csr (
             mepc_reg   <= 32'h0000_0000;
             mcause_reg <= 32'h0000_0000;
             mtval_reg  <= 32'h0000_0000;
-            mtvec_reg  <= 32'h0000_0000;  // Software must initialize this!
+            mtvec_reg  <= 32'h0000_0200;  // Default handler at 0x200
         end else begin
             // Exception trap writes (highest priority)
             if (exception_trap) begin
