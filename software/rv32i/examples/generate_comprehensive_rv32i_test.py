@@ -103,9 +103,9 @@ def generate_comprehensive_test():
     # =========================================================================
     # PART 6: STORE OPERATIONS (write test data to memory)
     # =========================================================================
-    add_insn(enc.sw(4, 23, 0), "SW", "x4, 0(x23)", None, None, "MEM[0x400] = x4 (30)")
-    add_insn(enc.sh(5, 23, 4), "SH", "x5, 4(x23)", None, None, "MEM[0x404] = x5[15:0] (20)")
-    add_insn(enc.sb(1, 23, 8), "SB", "x1, 8(x23)", None, None, "MEM[0x408] = x1[7:0] (10)")
+    add_insn(enc.sw(4, 0, 23), "SW", "x4, 0(x23)", None, None, "MEM[0x400] = x4 (30)")
+    add_insn(enc.sh(5, 4, 23), "SH", "x5, 4(x23)", None, None, "MEM[0x404] = x5[15:0] (20)")
+    add_insn(enc.sb(1, 8, 23), "SB", "x1, 8(x23)", None, None, "MEM[0x408] = x1[7:0] (10)")
     
     # =========================================================================
     # PART 7: LOAD OPERATIONS (read back test data)
@@ -215,7 +215,7 @@ def generate_comprehensive_test():
     # =========================================================================
     add_insn(enc.lui(17, 0x4), "LUI", "x17, 0x4", 17, 0x4000, "x17 = 0x4000")
     add_insn(enc.addi(17, 17, 0x7C), "ADDI", "x17, x17, 0x7C", 17, 0x407C, "x17 = 0x407C (LED)")
-    add_insn(enc.sw(30, 17, 0), "SW", "x30, 0(x17)", None, None, "LED = x30")
+    add_insn(enc.sw(30, 0, 17), "SW", "x30, 0(x17)", None, None, "LED = x30")
     add_insn(enc.ebreak(), "EBREAK", "", None, None, "Stop CPU")
     
     # =========================================================================
@@ -230,11 +230,18 @@ def generate_comprehensive_test():
     # =========================================================================
     # EXCEPTION HANDLER @ 0x200
     # =========================================================================
+    # Note: mepc already points to the instruction after ECALL (hardware adds +4)
+    # Handler must save/restore registers without clobbering any used by test
+    # Use x1 (ra) as scratch - set to 0x400 base, then use small offsets
     handler_start = len(instructions)
-    add_insn(enc.csrrs(10, CSR_MEPC, 0), "CSRRS", "x10, mepc, x0", 10, None, "x10 = mepc (exception PC)")
+    add_insn(enc.lui(1, 0), "LUI", "x1, 0", 1, 0, "x1 = 0x0")
+    add_insn(enc.addi(1, 1, 0x400), "ADDI", "x1, x1, 0x400", 1, 0x400, "x1 = 0x400 (scratch memory base)")
+    add_insn(enc.sw(10, 0, 1), "SW", "x10, 0(x1)", None, 0x400, "Save x10 to 0x400")
+    add_insn(enc.sw(11, 4, 1), "SW", "x11, 4(x1)", None, 0x404, "Save x11 to 0x404")
+    add_insn(enc.csrrs(10, CSR_MEPC, 0), "CSRRS", "x10, mepc, x0", 10, None, "x10 = mepc (return address)")
     add_insn(enc.csrrs(11, CSR_MCAUSE, 0), "CSRRS", "x11, mcause, x0", 11, None, "x11 = mcause (exception cause)")
-    add_insn(enc.addi(10, 10, 4), "ADDI", "x10, x10, 4", 10, None, "mepc += 4 (skip ECALL)")
-    add_insn(enc.csrrw(0, CSR_MEPC, 10), "CSRRW", "x0, mepc, x10", None, None, "Update mepc")
+    add_insn(enc.lw(10, 1, 0), "LW", "x10, 0(x1)", 10, None, "Restore x10 from 0x400")
+    add_insn(enc.lw(11, 1, 4), "LW", "x11, 4(x1)", 11, None, "Restore x11 from 0x404")
     add_insn(enc.mret(), "MRET", "", None, None, "Return from exception (PC = mepc)")
     
     return instructions, instruction_map
@@ -265,9 +272,9 @@ if __name__ == "__main__":
     print("Generating comprehensive RV32I test...")
     instructions, instruction_map = generate_comprehensive_test()
     
-    # Output paths
-    hex_file = "../../sim/tests/rv32i_comprehensive_test.hex"
-    map_file = "../../sim/tests/rv32i_comprehensive_map.json"
+    # Output paths (from software/rv32i/examples/ to workspace root sim/tests/)
+    hex_file = "../../../sim/tests/rv32i_comprehensive_test.hex"
+    map_file = "../../../sim/tests/rv32i_comprehensive_map.json"
     
     write_hex_file(instructions, hex_file)
     write_map_file(instruction_map, map_file)

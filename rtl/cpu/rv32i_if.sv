@@ -117,8 +117,12 @@ module rv32i_if
     // Convert byte address to word address for Block RAM
     // PC is byte-addressed, RAM is word-addressed (32-bit words)
     // Address range: 0x0000 - 0x1FFF (8KB) → word address [10:0]
+    //
+    // CRITICAL: Use pc_current to fetch instruction for CURRENT PC.
+    // BRAM's 1-cycle registered output latency means data arrives 1 cycle later,
+    // which aligns with the pipeline's IF→ID transition timing.
     
-    assign insn_ram_addr = pc_current[12:2];  // [12:2] = divide by 4 for word address
+    assign insn_ram_addr = pc_current[12:2];  // Fetch instruction for current PC
     
     //==========================================================================
     // IF Stage Outputs

@@ -169,15 +169,15 @@ class RV32IInstructionEncoder:
         return self._encode_i_type(0x03, rd, 0x5, rs1, imm & 0xFFF)
     
     # Store instructions (STORE: 0x23)
-    def sb(self, rs2, rs1, imm):
+    def sb(self, rs2, imm, rs1):
         """SB rs2, imm(rs1) - Store byte"""
         return self._encode_s_type(0x23, 0x0, rs1, rs2, imm & 0xFFF)
     
-    def sh(self, rs2, rs1, imm):
+    def sh(self, rs2, imm, rs1):
         """SH rs2, imm(rs1) - Store halfword"""
         return self._encode_s_type(0x23, 0x1, rs1, rs2, imm & 0xFFF)
     
-    def sw(self, rs2, rs1, imm):
+    def sw(self, rs2, imm, rs1):
         """SW rs2, imm(rs1) - Store word"""
         return self._encode_s_type(0x23, 0x2, rs1, rs2, imm & 0xFFF)
     
