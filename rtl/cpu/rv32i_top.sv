@@ -399,9 +399,14 @@ module rv32i_top
     
     // Forwarding sources
     logic [31:0] wb_result;       // Combinational from WB stage
-    logic [31:0] wb_result_fwd;   // Registered for forwarding timing
+    logic [31:0] mem_forward_data_mux; // MEM forward: select between ALU result or mem data
+    logic [31:0] wb_result_fwd;   // Registered for forwarding timing (UNUSED after fix)
     logic [31:0] wb_pc_plus4_reg; // Pre-calculated PC+4 for timing (breaks CARRY4 chain)
     logic [4:0]  wb_rf_waddr;
+    
+    // MEM forward data mux: choose between ALU result and memory data for load instructions
+    // This is what will be written to register file from WB stage
+    assign mem_forward_data_mux = mem_wb_reg.ctrl.mem_read ? mem_wb_reg.mem_data : mem_wb_reg.alu_result;
     
     // Register wb_result for forwarding timing
     // Breaks long combinational path: mem_wb_reg → WB mux → EX mux
@@ -426,9 +431,9 @@ module rv32i_top
         .forward_rs2     (id_ex_reg.forward_rs2),
         .ctrl            (id_ex_reg.ctrl),
         .valid           (id_ex_reg.valid),
-        .ex_forward_data (ex_mem_reg.alu_result),
-        .mem_forward_data(wb_result),      // MEM forward: current WB stage result (combinational)
-        .wb_forward_data (wb_result_fwd),  // WB forward: delayed WB result (registered, matches delayed metadata)
+        .ex_forward_data (ex_mem_reg.alu_result),      // EX forward: from EX/MEM ALU result
+        .mem_forward_data(mem_forward_data_mux),       // MEM forward: from MEM/WB (ALU or load data)
+        .wb_forward_data (wb_result),                  // WB forward: current WB combinational result
         .ex_flush        (ex_flush),
         .alu_result      (ex_alu_result),
         .rs2_forwarded_out(ex_rs2_forwarded),
