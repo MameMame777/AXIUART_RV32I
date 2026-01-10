@@ -337,7 +337,7 @@ module rv32i_top
     
     rv32i_hazard u_hazard (
         .clk             (clk),
-        .rst             (rst),
+        .rst             (rst || soft_reset_active),
         .id_rs1_addr     (id_ctrl.rs1_addr),
         .id_rs2_addr     (id_ctrl.rs2_addr),
         .id_valid        (id_valid),
