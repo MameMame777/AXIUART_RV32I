@@ -4,7 +4,7 @@
 <!-- Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.                   -->
 <!-- Copyright 2022-2024 Advanced Micro Devices, Inc. All Rights Reserved.   -->
 
-<Project Product="Vivado" Version="7" Minor="68" Path="E:/Nautilus/workspace/fpgawork/TD4UART/PandR/axi4_rv32i/axi4_rv32i.xpr">
+<Project Product="Vivado" Version="7" Minor="68" Path="E:/Nautilus/workspace/fpgawork/AXIUART_RV32I/PandR/axi4_rv32i/axi4_rv32i.xpr">
   <DefaultLaunch Dir="$PRUNDIR"/>
   <Configuration>
     <Option Name="Id" Val="ba413a7bff6c413888b2bd31fe9e02b1"/>

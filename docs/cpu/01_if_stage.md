@@ -97,6 +97,199 @@ PC[31:0]         pc_reg[12:2]    Block RAM
 
 ## モジュール概要
 
+### CPUリセットと初期化シーケンス
+
+CPUの起動時の動作を理解することは、デバッグとシステム設計において重要です。
+
+#### ハードウェアリセット (rst / rst_n)
+
+**注意**: ドキュメントでは`rst_n`（アクティブロー）を使用していますが、RTL実装では`rst`（アクティブハイ）を使用する場合があります。両者は同じ物理リセット信号を指します。
+
+**リセット時の初期状態** (サイクル0):
+```
+Pipeline Registers:  すべて0にクリア（valid=0）
+PC:                  0x0000_0000（リセットベクタ）
+CSR Registers:
+  mtvec:            0x0000_1000（デフォルトトラップハンドラアドレス）
+  mepc:             0x0000_0000
+  mcause:           0x0000_0000
+  mtval:            0x0000_0000
+Register File:
+  x0 (zero):        0x0000_0000（硬配線、常時）
+  x1-x31:           0x0000_0000（クリア）
+Debug Interface:
+  dbg_bp_enable:    4'b0000（全ブレークポイント無効）
+  dbg_cpu_halted:   1'b1（CPU停止状態）
+```
+
+**リセット解除後の動作** (サイクル1以降):
+```
+Cycle 1:
+  IF:   PC=0x0000_0000から命令フェッチ開始
+        insn_ram_addr = 0x000
+  ID:   Bubble (valid=0, NOP)
+  EX:   Bubble (valid=0, NOP)
+  MEM:  Bubble (valid=0, NOP)
+  WB:   Bubble (valid=0, NOP)
+
+Cycle 2:
+  IF:   PC=0x0000_0004の命令をフェッチ
+  ID:   0x0000_0000番地の命令をデコード
+  EX:   Bubble
+  MEM:  Bubble
+  WB:   Bubble
+
+Cycle 3:
+  IF:   PC=0x0000_0008の命令をフェッチ
+  ID:   0x0000_0004番地の命令をデコード
+  EX:   0x0000_0000番地の命令を実行
+  MEM:  Bubble
+  WB:   Bubble
+
+...（パイプラインが徐々に埋まる）
+
+Cycle 6:
+  WB:   0x0000_0000番地の命令が完了（最初の命令がWBステージに到達）
+```
+
+**典型的なブートコード**:
+```assembly
+# リセットベクタ (0x0000_0000番地)
+_start:
+    # スタックポインタ初期化
+    lui  sp, 0x2        # sp = 0x0000_2000（RAM範囲外から開始）
+    
+    # グローバルポインタ初期化（オプション）
+    lui  gp, 0x1        # gp = 0x0000_1000
+    addi gp, gp, 0x800  # gp = 0x0000_1800（中央値）
+    
+    # BSS領域をゼロクリア（オプション）
+    # ... (省略)
+    
+    # main関数へジャンプ
+    jal  ra, main       # main()を呼び出し
+    
+    # main()から戻った場合の処理
+_end:
+    j    _end           # 無限ループ（CPUを停止）
+```
+
+#### ソフトウェアリセット (dbg_soft_reset)
+
+デバッグインターフェース経由でCPUを再起動できます。ハードウェアリセットと同じ効果を持ちますが、外部ピンを操作する必要がありません。
+
+**トリガー方法**:
+```python
+# Python example using AXIUARTDriver
+driver.write_register(REG_DBG_CTRL, 0x0001)  # soft_reset bit = 1
+```
+
+**タイミング**:
+```
+Cycle N:   dbg_soft_reset=1 を検出
+Cycle N+1: soft_reset_active=1
+           - パイプライン全体をフラッシュ（バブル注入）
+           - PC = 0x0000_0000
+           - CSRs = 初期値
+Cycle N+2: soft_reset_active=0
+           - 通常実行再開（0x0000_0000番地から）
+```
+
+**使用例**:
+1. 新しいプログラムをRAMにロード
+2. ソフトウェアリセットをトリガー
+3. CPUが0x0000_0000から実行開始
+
+#### デバッグ制御実行フロー
+
+デバッグインターフェースを使用したプログラム実行の標準手順：
+
+**ステップ1: プログラムロード**（CPU停止状態）
+```python
+# RAMにプログラムを書き込み
+for addr in range(0x0000, 0x1FFF, 4):
+    driver.write_cpu_mem(addr, instruction[addr//4])
+```
+
+**ステップ2: ブレークポイント設定**（オプション）
+```python
+# ブレークポイント0を0x0000_0010に設定
+driver.write_register(REG_DBG_BP0_ADDR, 0x00000010)
+driver.write_register(REG_DBG_BP_CTRL, 0x00000001)  # Enable BP0
+```
+
+**ステップ3: CPU実行開始**
+```python
+# dbg_cpu_run = 1（W1P: Write-One-Pulse）
+driver.write_register(REG_DBG_CTRL, 0x0100)
+```
+```
+Cycle M:   dbg_cpu_run=1を検出
+Cycle M+1: dbg_cpu_halted=0（実行開始）
+           IF: PC=0x0000_0000から命令フェッチ開始
+```
+
+**ステップ4: 実行状態監視**
+```python
+# CPU状態をポーリング
+while True:
+    status = driver.read_register(REG_CPU_STATUS)
+    if status & CPU_HALTED:
+        # CPU停止（ブレークポイントヒットまたは完了）
+        bp_hit = (status >> 16) & 0xF  # bp_hit[3:0]
+        if bp_hit:
+            print(f"Breakpoint {bp_hit} hit")
+        break
+```
+
+**ステップ5: レジスタ確認**
+```python
+# 全レジスタを読み出し
+for i in range(32):
+    value = driver.read_cpu_register(i)
+    abi_name = ["zero", "ra", "sp", ...][i]  # ABI名参照
+    print(f"x{i} ({abi_name}) = 0x{value:08X}")
+```
+
+**ステップ6: シングルステップ実行**（オプション）
+```python
+# 1命令ずつ実行
+for step in range(10):
+    driver.write_register(REG_DBG_CTRL, 0x0200)  # dbg_cpu_step=1
+    time.sleep(0.001)  # 処理待ち
+    pc = driver.read_register(REG_DBG_PC)
+    insn = driver.read_cpu_mem(pc)
+    print(f"Step {step}: PC=0x{pc:08X}, Insn=0x{insn:08X}")
+```
+
+**ステップ7: 実行再開**
+```python
+# ブレークポイント後に実行を継続
+driver.write_register(REG_DBG_BP_CTRL, 0x00000000)  # Clear BP
+driver.write_register(REG_DBG_CTRL, 0x0100)         # Run
+```
+
+#### 注意事項
+
+**スタックオーバーフロー**:
+- RAM範囲: 0x0000 - 0x1FFF
+- スタック初期値: 0x2000（範囲外）
+- スタックは下方向に成長（sp デクリメント）
+- 深いネストでRAM下限（0x0000）に到達する可能性
+- **対策**: ソフトウェアでスタックポインタ監視（例外機構は未実装）
+
+**RAM書き込みタイミング**:
+- デバッグアクセスはMEMステージとPort Bを共有
+- CPU実行中のRAM書き込みは競合の可能性
+- **推奨**: CPU停止状態（dbg_cpu_halted=1）でRAMをロード
+
+**ブレークポイント制約**:
+- 最大4個まで同時設定可能
+- PCと比較（命令実行前に検出）
+- ヒット時は即座にCPU停止（`dbg_cpu_halted=1`）
+
+---
+
 ### 責務
 
 IFステージは以下の5つの主要責務を持ちます：

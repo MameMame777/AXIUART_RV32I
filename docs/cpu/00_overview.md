@@ -85,6 +85,93 @@
                     └────────────────────────────────┘
 ```
 
+---
+
+## メモリマップ
+
+このCPUは32ビットアドレス空間を持ちますが、実装されているのは8KBのBlock RAMとわずかなMMIOレジスタのみです。
+
+### 物理メモリレイアウト
+
+| Address Range | Size | Type | Description | Access |
+|--------------|------|------|-------------|--------|
+| **0x0000_0000 - 0x0000_1FFF** | 8KB | Block RAM | 統合命令/データメモリ | RW + Execute |
+| 0x0000_2000 - 0x0000_3FFF | - | Reserved | 未実装（将来拡張用） | - |
+| **0x0000_4000 - 0x0000_4FFF** | 4KB | MMIO | Memory-Mapped I/O領域 | Varies |
+| **0x0000_407C** | 4B | MMIO | LED制御レジスタ [3:0] | Write-Only |
+| 0x0000_5000 - 0xFFFF_FFFF | - | Unmapped | 未定義（アクセス例外） | Exception |
+
+### RAM構成 (0x0000 - 0x1FFF)
+
+**Block RAM仕様**:
+- **容量**: 2048 words × 32 bits = 8KB
+- **ポート構成**: Dual-Port BRAM
+  - **Port A**: IFステージ専用（命令フェッチ、読み取り専用）
+  - **Port B**: MEMステージ/デバッグアクセス（データ読み書き）
+- **アドレッシング**: バイトアドレス可能、ワード境界必須
+- **初期化**: デバッグインターフェース経由でロード
+
+**アドレス変換**:
+```
+Byte Address (PC)  →  Word Address (RAM)  →  Physical Array
+0x0000_0000       →      0x000           →    ram[0]
+0x0000_0004       →      0x001           →    ram[1]
+0x0000_0008       →      0x002           →    ram[2]
+...
+0x0000_1FFC       →      0x7FF           →    ram[2047]
+0x0000_2000以上は未定義（範囲外アクセス）
+```
+
+**使用例** (メモリレイアウト):
+```
+0x0000_0000: ┌─────────────────┐
+             │ .text (Code)    │ ← プログラムコード (_start, main, etc.)
+0x0000_0800: ├─────────────────┤
+             │ .rodata         │ ← 読み取り専用データ（文字列、定数テーブル）
+0x0000_0C00: ├─────────────────┤
+             │ .data           │ ← 初期化済みグローバル変数
+0x0000_1000: ├─────────────────┤
+             │ .bss            │ ← 未初期化グローバル変数
+0x0000_1800: ├─────────────────┤
+             │ Heap (未実装)   │ ← 動的メモリ確保領域（将来用）
+0x0000_1C00: ├─────────────────┤
+             │ Stack (grows ↓) │ ← スタック領域（sp初期値=0x2000）
+0x0000_2000: └─────────────────┘ (範囲外)
+```
+
+### MMIO ペリフェラル
+
+#### LED制御レジスタ (0x0000_407C)
+
+**レジスタ構成**:
+```
+Bits [31:4]: Reserved (書き込み無視、読み出し時0)
+Bits [3:0]:  LED出力ビット (1=点灯, 0=消灯)
+Access: Write-Only (読み出し時は常に0を返す)
+```
+
+**使用例**:
+```assembly
+# LEDを0b1010パターンで点灯
+lui  x15, 0x4        # x15 = 0x0000_4000
+addi x16, x15, 0x7C  # x16 = 0x0000_407C (LEDアドレス)
+addi x17, zero, 0xA  # x17 = 0b1010
+sw   x17, 0(x16)     # LEDレジスタに書き込み
+```
+
+#### 新しいMMIOペリフェラルの追加方法
+
+1. **アドレス選定**: `0x4000-0x4FFF`範囲内で未使用アドレスを選択
+2. **MEMステージ修正**: `rtl/cpu/rv32i_mem.sv`のアドレスデコーダを更新
+   ```systemverilog
+   // 例: UARTレジスタを0x4080に追加
+   wire is_uart = (mem_alu_result == 32'h0000_4080);
+   ```
+3. **トップレベル統合**: `rtl/cpu/rv32i_top.sv`でペリフェラルモジュールを接続
+4. **ドキュメント更新**: このテーブルに新しいペリフェラルを追記
+
+---
+
 ### 主要パラメータ
 
 | パラメータ | 値 | 説明 |
@@ -92,7 +179,7 @@
 | **ISA** | RV32I v2.1 | 基本整数命令セット（40命令） |
 | **データ幅** | 32 bit | レジスタ、データバス幅 |
 | **アドレス幅** | 32 bit | バイトアドレッシング |
-| **レジスタ数** | 32 | x0-x31（x0は常に0） |
+| **レジスタ数** | 32 | x0-x31（x0は常に0、[ABI名称は09_software_abi.md参照](09_software_abi.md)） |
 | **内蔵RAM** | 8 KB | 2048 words（デュアルポートBRAM） |
 | **パイプラインステージ** | 5 | IF/ID/EX/MEM/WB |
 | **フォワーディングパス** | 3 | EX→EX, MEM→EX, WB→EX |
@@ -121,13 +208,48 @@
 
 ## パイプライン構造
 
-### 5ステージパイプライン
+### 5ステージパイプライン概要
 
+| Stage | Name | Operations | Key Registers | Critical Decisions |
+|-------|------|------------|---------------|-------------------|
+| **IF** | Instruction Fetch | - PC管理<br>- RAMアドレス計算 (PC[12:2])<br>- 命令読み出し<br>- ブレークポイント検出 | **if_id_reg**:<br>- pc<br>- insn<br>- valid<br>- bp_hit[3:0] | - PCソース選択（例外 > MRET > 分岐 > PC+4）<br>- ストール/フラッシュ制御 |
+| **ID** | Instruction Decode | - 命令デコード<br>- レジスタファイル読み出し<br>- 即値生成 (I/S/B/U/J)<br>- 制御信号生成 | **id_ex_reg**:<br>- rs1_data, rs2_data<br>- rs1_addr, rs2_addr<br>- imm<br>- 制御信号群 | - レジスタx0ハードワイヤー処理<br>- 不正命令検出 |
+| **EX** | Execute | - ALU演算<br>- 分岐条件評価<br>- ジャンプターゲット計算<br>- フォワーディングMUX | **ex_mem_reg**:<br>- alu_result<br>- branch_taken<br>- mem制御信号 | - フォワーディングパス選択（EX/MEM/WB）<br>- RAWハザード解決 |
+| **MEM** | Memory Access | - RAM読み書き<br>- MMIOアドレスデコード<br>- ロード整列<br>- 例外検出 | **mem_wb_reg**:<br>- mem_rdata<br>- alu_result<br>- 例外情報 | - MMIO vs RAM選択<br>- アドレスミスアライン検出<br>- 例外トリガ |
+| **WB** | Write Back | - 結果ソース選択<br>- レジスタファイル書き込み<br>- WBフォワーディング | **wb_result_fwd**:<br>- 書き込みデータ | - メモリ vs ALU結果選択<br>- x0への書き込み防止 |
+
+**パイプラインレジスタ命名規則**: `{source}_{dest}_reg` (例: `if_id_reg`, `id_ex_reg`)
+
+**データフロー例** (連続命令):
 ```
 Clock:     t0      t1      t2      t3      t4      t5
            │       │       │       │       │       │
-Insn1:     IF  →  ID  →  EX  →  MEM →  WB  
-Insn2:            IF  →  ID  →  EX  →  MEM →  WB
+ADDI x1:   IF  →  ID  →  EX  →  MEM →  WB  
+ADD  x2:          IF  →  ID  →  EX  →  MEM →  WB
+SW   x3:                 IF  →  ID  →  EX  →  MEM →  WB
+LW   x4:                        IF  →  ID  →  EX  →  MEM →  WB
+BEQ:                                   IF  →  ID  →  EX  →  MEM
+
+理想CPI = 1.0 (1命令/サイクル)
+```
+
+**ハザード時の動作**:
+```
+# Load-Use Hazard (1サイクルストール)
+Clock:     t0      t1      t2      t3      t4      t5      t6
+LW  x1:    IF  →  ID  →  EX  →  MEM →  WB
+ADD x2:           IF  →  ID  → [STALL] → EX  →  MEM →  WB
+                              (Bubble)
+実効CPI = 2.0 (この2命令で)
+
+# Branch Misprediction (2サイクルペナルティ)
+Clock:     t0      t1      t2      t3      t4
+BEQ:       IF  →  ID  →  EX (判定) →  MEM →  WB
+Target+4:         IF  →  ID (Flush) → [Bubble]
+Target+8:                IF (Flush) → [Bubble]
+Correct:                             IF  →  ID  →  EX
+分岐ペナルティ = 2サイクル
+```
 Insn3:                   IF  →  ID  →  EX  →  MEM →  WB
 Insn4:                          IF  →  ID  →  EX  →  MEM
 Insn5:                                 IF  →  ID  →  EX
