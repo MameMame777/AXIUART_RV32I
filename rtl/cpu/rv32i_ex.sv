@@ -38,7 +38,11 @@ module rv32i_ex
     output logic [31:0]   rs2_forwarded_out,  // For stores
     output logic          branch_taken,
     output logic [31:0]   branch_target,
-    output logic          valid_out
+    output logic          valid_out,
+    
+    // Debug outputs for trace buffer
+    output logic [31:0]   rs1_forwarded_out,  // Forwarded rs1 value (for trace)
+    output logic [31:0]   rs2_forwarded_out_trace  // Forwarded rs2 value (for trace, same as rs2_forwarded_out)
 );
 
     //==========================================================================
@@ -69,6 +73,10 @@ module rv32i_ex
     end
     
     assign rs2_forwarded_out = rs2_forwarded;  // Pass to MEM stage for stores
+    
+    // Debug outputs for trace buffer
+    assign rs1_forwarded_out = rs1_forwarded;
+    assign rs2_forwarded_out_trace = rs2_forwarded;
     
     //==========================================================================
     // ALU Operand Selection

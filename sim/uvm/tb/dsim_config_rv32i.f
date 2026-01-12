@@ -54,5 +54,9 @@
 # ../../assertions/rv32i_branch_debug_assertions.sv
 # ../../assertions/rv32i_branch_debug_bind.sv
 
+# Pipeline Debug Monitor (Direct Module - No Interface)
+../../assertions/debug/rv32i_pipeline_monitor.sv
+../../assertions/bind_rv32i_pipeline_monitor.sv
+
 # Testbench Top (includes all UVM components via rv32i_test_pkg.sv)
 rv32i_tb_top.sv
