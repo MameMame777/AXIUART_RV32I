@@ -50,7 +50,7 @@ interface rv32i_tb_if (input logic clk);
     
     // Trace buffer interface
     logic [5:0]  dbg_trace_addr;
-    logic [127:0] dbg_trace_data;
+    logic [191:0] dbg_trace_data;  // Extended to 192 bits
     logic [5:0]  dbg_trace_wptr;
     logic [5:0]  dbg_trace_count;
     
@@ -61,12 +61,22 @@ interface rv32i_tb_if (input logic clk);
     // LED output
     logic [3:0]  led_reg;
     
-    // Trace buffer interface (UVM direct access)
+    // Trace buffer interface (UVM direct access) - Extended for debug
     logic        trace_valid;
     logic [31:0] trace_pc;
     logic [31:0] trace_insn;
     logic [4:0]  trace_rd_addr;
     logic [31:0] trace_rd_data;
+    // Extended trace fields
+    logic [31:0] trace_rs1_value;
+    logic [31:0] trace_rs2_value;
+    logic [4:0]  trace_rs1_addr;
+    logic [4:0]  trace_rs2_addr;
+    logic [1:0]  trace_forward_rs1;
+    logic [1:0]  trace_forward_rs2;
+    logic        trace_stall;
+    logic        trace_flush;
+    logic        trace_branch_taken;
     
     // Debug memory interface (for test program loading)
     logic [10:0] dbg_mem_addr;
@@ -112,6 +122,15 @@ interface rv32i_tb_if (input logic clk);
         input  trace_insn;
         input  trace_rd_addr;
         input  trace_rd_data;
+        input  trace_rs1_value;
+        input  trace_rs2_value;
+        input  trace_rs1_addr;
+        input  trace_rs2_addr;
+        input  trace_forward_rs1;
+        input  trace_forward_rs2;
+        input  trace_stall;
+        input  trace_flush;
+        input  trace_branch_taken;
         input  dbg_mem_rdata;
         input  pc_if;
     endclocking
@@ -224,6 +243,17 @@ module rv32i_tb_top;
     
     // Expose internal PC for verification
     assign tb_if.pc_if = dut.if_pc_current;
+    
+    // Expose extended trace signals from DUT internal signals (hierarchical access)
+    assign tb_if.trace_rs1_value     = dut.trace_rs1_value;
+    assign tb_if.trace_rs2_value     = dut.trace_rs2_value;
+    assign tb_if.trace_rs1_addr      = dut.trace_rs1_addr;
+    assign tb_if.trace_rs2_addr      = dut.trace_rs2_addr;
+    assign tb_if.trace_forward_rs1   = dut.trace_forward_rs1;
+    assign tb_if.trace_forward_rs2   = dut.trace_forward_rs2;
+    assign tb_if.trace_stall         = dut.trace_stall;
+    assign tb_if.trace_flush         = dut.trace_flush;
+    assign tb_if.trace_branch_taken  = dut.trace_branch_taken;
     
     //==========================================================================
     // UVM CONFIGURATION AND TEST START
