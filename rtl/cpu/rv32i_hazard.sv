@@ -34,6 +34,7 @@ module rv32i_hazard
     input  logic [4:0]  mem_rd_addr,
     input  logic        mem_rf_wen,
     input  logic        mem_valid,
+    input  logic        mem_is_load,
     
     // WB stage inputs
     input  logic [4:0]  wb_rd_addr,
@@ -48,6 +49,10 @@ module rv32i_hazard
     // Forwarding control outputs (pre-computed for ID/EX register)
     output logic [1:0]  forward_rs1_sel,
     output logic [1:0]  forward_rs2_sel,
+    
+    // Debug outputs (WB metadata timing for assertions)
+    output logic [4:0]  wb_rd_addr_delayed_out,
+    output logic        wb_rf_wen_delayed_out,
     
     // Stall and flush outputs
     output logic        if_stall,
@@ -87,6 +92,10 @@ module rv32i_hazard
         end
     end
     
+    // Expose delayed signals for debug/assertions
+    assign wb_rd_addr_delayed_out = wb_rd_addr_delayed;
+    assign wb_rf_wen_delayed_out  = wb_rf_wen_delayed;
+    
     //==========================================================================
     // RAW Hazard Detection
     //==========================================================================
@@ -98,22 +107,24 @@ module rv32i_hazard
     logic id_rs2_match_ex, id_rs2_match_mem, id_rs2_match_wb;
     
     // Write detection (stage produces valid register write)
+    // NOTE: MEM stage excludes loads because with 2-stage pipeline, load results
+    //       are not available until WB stage. Only non-load MEM results can forward.
     assign ex_writes_rd  = ex_rf_wen && (ex_rd_addr != 5'b0) && ex_valid;
-    assign mem_writes_rd = mem_rf_wen && (mem_rd_addr != 5'b0) && mem_valid;
-    // Use delayed WB metadata to catch previous WB instruction
-    assign wb_writes_rd  = wb_rf_wen_delayed && (wb_rd_addr_delayed != 5'b0) && wb_valid_delayed;
+    assign mem_writes_rd = mem_rf_wen && (mem_rd_addr != 5'b0) && mem_valid && !mem_is_load;
+    // Use current WB signals for hazard detection (checked combinationally during ID stage)
+    assign wb_writes_rd  = wb_rf_wen && (wb_rd_addr != 5'b0) && wb_valid;
     
     // RS1 hazard detection
     assign id_rs1_match_ex  = (id_rs1_addr != 5'b0) && ex_writes_rd  && (ex_rd_addr == id_rs1_addr);
     assign id_rs1_match_mem = (id_rs1_addr != 5'b0) && mem_writes_rd && (mem_rd_addr == id_rs1_addr);
-    // Use delayed WB metadata to match against previous WB instruction
-    assign id_rs1_match_wb  = (id_rs1_addr != 5'b0) && wb_writes_rd  && (wb_rd_addr_delayed == id_rs1_addr);
+    // Check against current WB instruction (combinational during ID stage)
+    assign id_rs1_match_wb  = (id_rs1_addr != 5'b0) && wb_writes_rd  && (wb_rd_addr == id_rs1_addr);
     
     // RS2 hazard detection
     assign id_rs2_match_ex  = (id_rs2_addr != 5'b0) && ex_writes_rd  && (ex_rd_addr == id_rs2_addr);
     assign id_rs2_match_mem = (id_rs2_addr != 5'b0) && mem_writes_rd && (mem_rd_addr == id_rs2_addr);
-    // Use delayed WB metadata to match against previous WB instruction
-    assign id_rs2_match_wb  = (id_rs2_addr != 5'b0) && wb_writes_rd  && (wb_rd_addr_delayed == id_rs2_addr);
+    // Check against current WB instruction (combinational during ID stage)
+    assign id_rs2_match_wb  = (id_rs2_addr != 5'b0) && wb_writes_rd  && (wb_rd_addr == id_rs2_addr);
     
     //==========================================================================
     // Forwarding Control (Pre-computed for ID/EX Register)
@@ -134,14 +145,26 @@ module rv32i_hazard
     //==========================================================================
     // Load-Use Hazard Detection
     //==========================================================================
-    // Special case: Load instruction in EX produces result in MEM stage
-    // If ID stage needs load result, must stall 1 cycle
+    // CRITICAL: With 2-stage LOAD pipeline, result is available in WB stage (not MEM)
+    // Load in EX → result ready in WB (2 cycles later)
+    // Load in MEM → result ready in WB (1 cycle later)
+    // Must stall if ID needs result from LOAD in EX or MEM
     
+    logic load_use_hazard_ex;   // ID needs result from LOAD in EX
+    logic load_use_hazard_mem;  // ID needs result from LOAD in MEM
     logic load_use_hazard;
     
-    assign load_use_hazard = ex_is_load && ex_valid &&
-                            ((id_rs1_match_ex && (id_ctrl.rs1_addr != 5'b0)) ||
-                             (id_rs2_match_ex && (id_ctrl.rs2_addr != 5'b0)));
+    // Hazard: LOAD in EX, ID needs result (2-cycle stall needed)
+    assign load_use_hazard_ex = ex_is_load && ex_valid &&
+                                ((id_rs1_match_ex && (id_ctrl.rs1_addr != 5'b0)) ||
+                                 (id_rs2_match_ex && (id_ctrl.rs2_addr != 5'b0)));
+    
+    // Hazard: LOAD in MEM, ID needs result (1-cycle stall needed)
+    assign load_use_hazard_mem = mem_is_load && mem_valid &&
+                                 ((id_rs1_match_mem && (id_ctrl.rs1_addr != 5'b0)) ||
+                                  (id_rs2_match_mem && (id_ctrl.rs2_addr != 5'b0)));
+    
+    assign load_use_hazard = load_use_hazard_ex || load_use_hazard_mem;
     
     //==========================================================================
     // Stall Control

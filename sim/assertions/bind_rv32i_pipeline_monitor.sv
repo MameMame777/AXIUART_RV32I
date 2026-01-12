@@ -47,6 +47,21 @@ bind rv32i_top rv32i_pipeline_monitor u_pipeline_monitor (
     .ex_alu_src2 (u_ex.alu_src2),
     .ex_alu_result (ex_alu_result),
     
+    // Branch control debug signals
+    .ex_is_branch (dbg_ex_is_branch),
+    .ex_is_jump (dbg_ex_is_jump),
+    .ex_branch_taken (dbg_ex_branch_taken),
+    .ex_branch_target (dbg_ex_branch_target),
+    .exmem_branch_taken (dbg_exmem_branch_taken),
+    
+    // MEM Stage signals (for store tracking)
+    .mem_pc (ex_mem_reg.pc),
+    .mem_valid (ex_mem_reg.valid),
+    .mem_write (ex_mem_reg.ctrl.mem_write),
+    .mem_addr (ex_mem_reg.alu_result),  // ALU result is memory address
+    .mem_wdata (ram_wdata_mem),
+    .mem_we_byte (ram_we_byte),
+    
     // Pipeline control
     .ex_rd_addr (id_ex_reg.ctrl.rd_addr),
     .mem_rd_addr (ex_mem_reg.ctrl.rd_addr),

@@ -179,16 +179,76 @@ module rv32i_top
     assign ram_we_b    = cpu_halted ? dbg_mem_we   : ram_we_byte;
     assign ram_wdata_b = cpu_halted ? dbg_mem_wdata : ram_wdata_mem;
     
+    // Memory Protection: Instruction region boundary (first 256 words = 1KB)
+    localparam INSN_REGION_END = 11'h100;  // 0x100 words = 0x400 bytes = 1KB
+    
+    logic mem_protection_violation;
+    assign mem_protection_violation = (|ram_we_b) && !cpu_halted && (ram_addr_b < INSN_REGION_END);
+    
+    // Write-forwarding registers to detect read-after-write hazard
+    logic [10:0] ram_write_addr_prev;
+    logic [31:0] ram_write_data_prev;
+    logic [3:0]  ram_write_en_prev;
+    logic        ram_write_valid_prev;
+    
+    // BRAM read-during-write: when writing AND reading same address in same cycle,
+    // the read gets old data (before write). Forward write data to get correct behavior.
+    always_ff @(posedge clk) begin
+        if (rst || soft_reset_active) begin
+            ram_write_addr_prev  <= 11'h0;
+            ram_write_data_prev  <= 32'h0;
+            ram_write_en_prev    <= 4'h0;
+            ram_write_valid_prev <= 1'b0;
+        end else if (ram_ena_b) begin
+            // Register write information for next cycle forwarding
+            ram_write_addr_prev  <= ram_addr_b;
+            ram_write_data_prev  <= ram_wdata_b;
+            ram_write_en_prev    <= mem_protection_violation ? 4'h0 : ram_we_b;
+            ram_write_valid_prev <= |ram_we_b && !mem_protection_violation;
+        end else begin
+            ram_write_valid_prev <= 1'b0;
+        end
+    end
+    
+    // BRAM write and read logic with forwarding
+    logic [31:0] ram_rdata_raw;
+    logic        forward_write_data;
+    
     always_ff @(posedge clk) begin
         if (ram_ena_b) begin
-            // Write with byte enables
-            if (ram_we_b[0]) ram[ram_addr_b][ 7: 0] <= ram_wdata_b[ 7: 0];
-            if (ram_we_b[1]) ram[ram_addr_b][15: 8] <= ram_wdata_b[15: 8];
-            if (ram_we_b[2]) ram[ram_addr_b][23:16] <= ram_wdata_b[23:16];
-            if (ram_we_b[3]) ram[ram_addr_b][31:24] <= ram_wdata_b[31:24];
-            // Read
-            ram_rdata_mem <= ram[ram_addr_b];
+            // Memory Protection Check
+            if (mem_protection_violation) begin
+                $error("[MEM_PROTECT] CPU write to instruction region blocked: PC=0x%08h, target_addr=0x%03h (byte 0x%04h), we=%04b, data=0x%08h",
+                       ex_mem_reg.pc, ram_addr_b, {ram_addr_b, 2'b00}, ram_we_b, ram_wdata_b);
+            end else begin
+                // Write with byte enables (only if not protected)
+                if (ram_we_b[0]) ram[ram_addr_b][ 7: 0] <= ram_wdata_b[ 7: 0];
+                if (ram_we_b[1]) ram[ram_addr_b][15: 8] <= ram_wdata_b[15: 8];
+                if (ram_we_b[2]) ram[ram_addr_b][23:16] <= ram_wdata_b[23:16];
+                if (ram_we_b[3]) ram[ram_addr_b][31:24] <= ram_wdata_b[31:24];
+            end
+            
+            // Read: Normal BRAM read gets data BEFORE this cycle's write
+            ram_rdata_raw <= ram[ram_addr_b];
+            
+            // Detect if current read address matches previous write address
+            forward_write_data <= ram_write_valid_prev && (ram_addr_b == ram_write_addr_prev);
         end
+    end
+    
+    // Forward logic: merge previous write data with raw RAM data based on byte enables
+    // TEMPORARILY DISABLED for debugging
+    always_comb begin
+        ram_rdata_mem = ram_rdata_raw;
+        // Forwarding disabled - let writes settle to RAM naturally
+        /*
+        if (forward_write_data) begin
+            if (ram_write_en_prev[0]) ram_rdata_mem[ 7: 0] = ram_write_data_prev[ 7: 0];
+            if (ram_write_en_prev[1]) ram_rdata_mem[15: 8] = ram_write_data_prev[15: 8];
+            if (ram_write_en_prev[2]) ram_rdata_mem[23:16] = ram_write_data_prev[23:16];
+            if (ram_write_en_prev[3]) ram_rdata_mem[31:24] = ram_write_data_prev[31:24];
+        end
+        */
     end
     
     assign dbg_mem_rdata = ram_rdata_mem;
@@ -216,6 +276,13 @@ module rv32i_top
     // Branch signals from EX stage (pipelined to MEM)
     logic        branch_taken;
     logic [31:0] branch_target;
+    
+    // Debug signals for branch control investigation
+    (* mark_debug = "true" *) logic dbg_ex_is_branch;
+    (* mark_debug = "true" *) logic dbg_ex_is_jump;
+    (* mark_debug = "true" *) logic dbg_ex_branch_taken;
+    (* mark_debug = "true" *) logic [31:0] dbg_ex_branch_target;
+    (* mark_debug = "true" *) logic dbg_exmem_branch_taken;
     
     rv32i_if u_if (
         .pc_current      (if_pc_current),
@@ -362,6 +429,8 @@ module rv32i_top
     //==========================================================================
     
     logic load_use_stall;
+    logic [4:0] wb_rd_addr_delayed;   // WB delayed metadata from hazard unit
+    logic       wb_rf_wen_delayed;    // WB delayed write enable from hazard unit
     
     rv32i_hazard u_hazard (
         .clk             (clk),
@@ -377,6 +446,7 @@ module rv32i_top
         .mem_rd_addr     (ex_mem_reg.ctrl.rd_addr),
         .mem_rf_wen      (ex_mem_reg.ctrl.rf_wen),
         .mem_valid       (ex_mem_reg.valid),
+        .mem_is_load     (ex_mem_reg.ctrl.mem_read),
         .wb_rd_addr      (mem_wb_reg.ctrl.rd_addr),
         .wb_rf_wen       (mem_wb_reg.ctrl.rf_wen),
         .wb_valid        (mem_wb_reg.valid),
@@ -385,6 +455,8 @@ module rv32i_top
         .mret_req        (mret_req),
         .forward_rs1_sel (forward_rs1_sel),
         .forward_rs2_sel (forward_rs2_sel),
+        .wb_rd_addr_delayed_out (wb_rd_addr_delayed),  // Debug output
+        .wb_rf_wen_delayed_out  (wb_rf_wen_delayed),   // Debug output
         .if_stall        (if_stall),
         .id_stall        (id_stall),
         .if_flush        (if_flush),
@@ -430,24 +502,49 @@ module rv32i_top
     // Forwarding sources
     logic [31:0] wb_result;       // Combinational from WB stage
     logic [31:0] mem_forward_data_mux; // MEM forward: select between ALU result or mem data
-    logic [31:0] wb_result_fwd;   // Registered for forwarding timing (UNUSED after fix)
+    logic [31:0] mem_mem_data_out;    // MEM stage load data output (for forwarding)
+    logic [31:0] wb_result_delayed;   // CRITICAL FIX: Registered WB result aligned with hazard metadata
     logic [31:0] wb_pc_plus4_reg; // Pre-calculated PC+4 for timing (breaks CARRY4 chain)
     logic [4:0]  wb_rf_waddr;
     
-    // MEM forward data mux: choose between ALU result and memory data for load instructions
-    // This is what will be written to register file from WB stage
-    assign mem_forward_data_mux = mem_wb_reg.ctrl.mem_read ? mem_wb_reg.mem_data : mem_wb_reg.alu_result;
+    // Debug: WB forwarding path visibility (waveform inspection)
+    (* mark_debug = "true" *) logic [31:0] dbg_wb_result_current;
+    (* mark_debug = "true" *) logic [31:0] dbg_wb_result_delayed;
+    (* mark_debug = "true" *) logic [4:0]  dbg_wb_rd_delayed;
+    (* mark_debug = "true" *) logic [4:0]  dbg_wb_rd_current;
+    (* mark_debug = "true" *) logic        dbg_wb_skew_detected;
+    (* mark_debug = "true" *) logic [1:0]  dbg_id_ex_fwd_rs1;
+    (* mark_debug = "true" *) logic [1:0]  dbg_id_ex_fwd_rs2;
     
-    // Register wb_result for forwarding timing
-    // Breaks long combinational path: mem_wb_reg → WB mux → EX mux
-    // Pre-calculate PC+4 to break CARRY4 chain in critical timing path
+    assign dbg_wb_result_current = wb_result;
+    assign dbg_wb_result_delayed = wb_result_delayed;
+    assign dbg_wb_rd_delayed = wb_rd_addr_delayed;
+    assign dbg_wb_rd_current = mem_wb_reg.ctrl.rd_addr;
+    assign dbg_id_ex_fwd_rs1 = id_ex_reg.forward_rs1;
+    assign dbg_id_ex_fwd_rs2 = id_ex_reg.forward_rs2;
+    
+    // WB skew detector: Detect when WB forward selector points to wrong data
+    // This catches the bug where selector uses delayed metadata but data is current cycle
+    assign dbg_wb_skew_detected = ((id_ex_reg.forward_rs1 == 2'b11) || (id_ex_reg.forward_rs2 == 2'b11)) &&
+                                  (wb_rd_addr_delayed != mem_wb_reg.ctrl.rd_addr) &&
+                                  wb_rf_wen_delayed && id_ex_reg.valid;
+    
+    // MEM forward data mux: choose between ALU result and memory data for load instructions
+    // CRITICAL FIX: Must use EX/MEM register (current MEM stage), not MEM/WB (1 cycle stale)
+    // Bug: Was using mem_wb_reg which is WB stage data, causing forwarding to use wrong cycle's result
+    assign mem_forward_data_mux = ex_mem_reg.ctrl.mem_read ? mem_mem_data_out : ex_mem_reg.alu_result;
+    
+    // CRITICAL FIX: Register wb_result to align with delayed WB metadata used in hazard detection
+    // Bug: Hazard unit uses wb_rd_addr_delayed (1 cycle old) but forwarding mux used wb_result (current)
+    // Fix: Forward wb_result_delayed so selector metadata and data are synchronized
+    // This prevents forwarding stale/wrong values when WB register changes between cycles
     always_ff @(posedge clk) begin
         if (rst || soft_reset_active) begin
-            wb_result_fwd  <= 32'h0;
-            wb_pc_plus4_reg <= 32'h0;
+            wb_result_delayed <= 32'h0;
+            wb_pc_plus4_reg   <= 32'h0;
         end else begin
-            wb_result_fwd  <= wb_result;
-            wb_pc_plus4_reg <= mem_wb_reg.pc + 32'd4;  // Pre-calculate for WB stage
+            wb_result_delayed <= wb_result;  // Align with wb_rd_addr_delayed timing
+            wb_pc_plus4_reg   <= mem_wb_reg.pc + 32'd4;  // Pre-calculate for WB stage
         end
     end
     
@@ -463,7 +560,7 @@ module rv32i_top
         .valid           (id_ex_reg.valid),
         .ex_forward_data (ex_mem_reg.alu_result),      // EX forward: from EX/MEM ALU result
         .mem_forward_data(mem_forward_data_mux),       // MEM forward: from MEM/WB (ALU or load data)
-        .wb_forward_data (wb_result),                  // WB forward: current WB combinational result
+        .wb_forward_data (wb_result_delayed),          // CRITICAL FIX: WB forward with delayed result (aligned with metadata)
         .ex_flush        (ex_flush),
         .alu_result      (ex_alu_result),
         .rs2_forwarded_out(ex_rs2_forwarded),
@@ -475,6 +572,13 @@ module rv32i_top
     );
     
     assign ex_valid = ex_valid_out;
+    
+    // Debug signal assignments for branch control investigation
+    assign dbg_ex_is_branch = id_ex_reg.ctrl.is_branch;
+    assign dbg_ex_is_jump = id_ex_reg.ctrl.is_jump;
+    assign dbg_ex_branch_taken = ex_branch_taken;
+    assign dbg_ex_branch_target = ex_branch_target;
+    assign dbg_exmem_branch_taken = ex_mem_reg.branch_taken;
     
     //==========================================================================
     // EX/MEM PIPELINE REGISTER
@@ -489,6 +593,7 @@ module rv32i_top
             ex_mem_reg.pc            <= id_ex_reg.pc;
             ex_mem_reg.insn          <= id_ex_reg.insn;
             ex_mem_reg.alu_result    <= ex_alu_result;
+            ex_mem_reg.byte_offset   <= ex_alu_result[1:0];  // Capture address LSBs for load alignment
             ex_mem_reg.rs2_data      <= ex_rs2_forwarded;
             ex_mem_reg.csr_rdata     <= id_ex_reg.csr_rdata;
             ex_mem_reg.branch_taken  <= ex_branch_taken;
@@ -508,8 +613,8 @@ module rv32i_top
     //==========================================================================
     // MEM STAGE WIRING
     //==========================================================================
+    // Note: mem_mem_data_out declared earlier with forwarding signals
     
-    logic [31:0] mem_mem_data_out;
     logic        mem_valid_out;
     logic [3:0]  mem_led_out;
     logic [31:0] mem_exception_pc;
@@ -522,6 +627,7 @@ module rv32i_top
         .pc              (ex_mem_reg.pc),
         .insn            (ex_mem_reg.insn),
         .alu_result      (ex_mem_reg.alu_result),
+        .byte_offset     (ex_mem_reg.byte_offset),  // Address LSBs synchronized with BRAM latency
         .rs2_data        (ex_mem_reg.rs2_data),
         .csr_rdata       (ex_mem_reg.csr_rdata),
         .ctrl            (ex_mem_reg.ctrl),
