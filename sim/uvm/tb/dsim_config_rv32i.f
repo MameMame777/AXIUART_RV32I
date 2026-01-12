@@ -58,5 +58,21 @@
 ../../assertions/debug/rv32i_pipeline_monitor.sv
 ../../assertions/bind_rv32i_pipeline_monitor.sv
 
+# WB Forwarding Correctness Assertions (Critical bug fix validation)
+../../assertions/spec/rv32i_wb_forwarding_spec.sv
+../../assertions/bind_rv32i_wb_forwarding_spec.sv
+
+# Branch Operation Assertions (Validates BEQ/BNE/BLT/BGE/BLTU/BGEU logic)
+../../assertions/spec/rv32i_branch_spec.sv
+../../assertions/bind_rv32i_branch_spec.sv
+
+# Memory Protection Assertions (Prevents data stores from corrupting instruction memory)
+../../assertions/rv32i_mem_protect_spec.sv
+../../assertions/bind_rv32i_mem_protect.sv
+
+# Register File & Forwarding Debug Assertions (Diagnose x23/x24 confusion bug)
+../../assertions/spec/rv32i_regfile_forward_debug_spec.sv
+../../assertions/bind_rv32i_regfile_debug.sv
+
 # Testbench Top (includes all UVM components via rv32i_test_pkg.sv)
 rv32i_tb_top.sv

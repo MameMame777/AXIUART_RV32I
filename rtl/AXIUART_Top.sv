@@ -216,7 +216,7 @@ module AXIUART_Top #(
     // --------------------------------------------------------------------
     rv32i_top rv32i_inst (
         .clk(clk),
-        .rst_n(~rst),  // Active-low reset
+        .rst(rst),  // Active-low reset
         
         // CPU control
         .cpu_run(rv32i_cpu_run),

@@ -49,6 +49,7 @@ package rv32i_pipeline_pkg;
         logic [31:0]   pc;           // Program counter
         logic [31:0]   insn;         // Instruction word
         logic [31:0]   alu_result;   // ALU computation result (address for load/store)
+        logic [1:0]    byte_offset;  // Address LSBs for load alignment (synchronized with RAM latency)
         logic [31:0]   rs2_data;     // RS2 forwarded data (for stores)
         logic [31:0]   csr_rdata;    // CSR read value (pass-through)
         logic          branch_taken; // Branch condition result
@@ -124,6 +125,7 @@ package rv32i_pipeline_pkg;
         ex_mem_bubble.pc            = 32'h0;
         ex_mem_bubble.insn          = 32'h0000_0013;
         ex_mem_bubble.alu_result    = 32'h0;
+        ex_mem_bubble.byte_offset   = 2'b00;
         ex_mem_bubble.rs2_data      = 32'h0;
         ex_mem_bubble.csr_rdata     = 32'h0;
         ex_mem_bubble.branch_taken  = 1'b0;
