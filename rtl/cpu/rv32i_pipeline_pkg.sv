@@ -49,12 +49,20 @@ package rv32i_pipeline_pkg;
         logic [31:0]   pc;           // Program counter
         logic [31:0]   insn;         // Instruction word
         logic [31:0]   alu_result;   // ALU computation result (address for load/store)
+        logic [1:0]    byte_offset;  // Address LSBs for load alignment (synchronized with RAM latency)
         logic [31:0]   rs2_data;     // RS2 forwarded data (for stores)
         logic [31:0]   csr_rdata;    // CSR read value (pass-through)
         logic          branch_taken; // Branch condition result
         logic [31:0]   branch_target;// Branch/jump target address
         decode_ctrl_t  ctrl;         // Control signals
         logic          valid;        // Instruction valid
+        // Debug trace fields (propagate to WB stage)
+        logic [31:0]   rs1_value_debug;  // Source operand 1 (after forwarding)
+        logic [31:0]   rs2_value_debug;  // Source operand 2 (after forwarding)
+        logic [4:0]    rs1_addr_debug;   // Source register 1 address
+        logic [4:0]    rs2_addr_debug;   // Source register 2 address
+        logic [1:0]    forward_rs1_debug;// Forwarding control rs1
+        logic [1:0]    forward_rs2_debug;// Forwarding control rs2
     } ex_mem_reg_t;
     
     //==========================================================================
@@ -68,6 +76,14 @@ package rv32i_pipeline_pkg;
         logic [31:0]   csr_rdata;    // CSR read value (pass-through)
         decode_ctrl_t  ctrl;         // Control signals
         logic          valid;        // Instruction valid
+        logic          branch_taken; // Branch taken (for trace)
+        // Debug trace fields (from EX stage)
+        logic [31:0]   rs1_value_debug;  // Source operand 1 (after forwarding)
+        logic [31:0]   rs2_value_debug;  // Source operand 2 (after forwarding)
+        logic [4:0]    rs1_addr_debug;   // Source register 1 address
+        logic [4:0]    rs2_addr_debug;   // Source register 2 address
+        logic [1:0]    forward_rs1_debug;// Forwarding control rs1
+        logic [1:0]    forward_rs2_debug;// Forwarding control rs2
     } mem_wb_reg_t;
     
     //==========================================================================
@@ -109,12 +125,20 @@ package rv32i_pipeline_pkg;
         ex_mem_bubble.pc            = 32'h0;
         ex_mem_bubble.insn          = 32'h0000_0013;
         ex_mem_bubble.alu_result    = 32'h0;
+        ex_mem_bubble.byte_offset   = 2'b00;
         ex_mem_bubble.rs2_data      = 32'h0;
         ex_mem_bubble.csr_rdata     = 32'h0;
         ex_mem_bubble.branch_taken  = 1'b0;
         ex_mem_bubble.branch_target = 32'h0;
         ex_mem_bubble.ctrl          = '0;
         ex_mem_bubble.valid         = 1'b0;
+        // Debug trace fields
+        ex_mem_bubble.rs1_value_debug   = 32'h0;
+        ex_mem_bubble.rs2_value_debug   = 32'h0;
+        ex_mem_bubble.rs1_addr_debug    = 5'h0;
+        ex_mem_bubble.rs2_addr_debug    = 5'h0;
+        ex_mem_bubble.forward_rs1_debug = 2'b00;
+        ex_mem_bubble.forward_rs2_debug = 2'b00;
     endfunction
     
     function automatic mem_wb_reg_t mem_wb_bubble();
@@ -125,6 +149,14 @@ package rv32i_pipeline_pkg;
         mem_wb_bubble.csr_rdata  = 32'h0;
         mem_wb_bubble.ctrl       = '0;
         mem_wb_bubble.valid      = 1'b0;
+        mem_wb_bubble.branch_taken = 1'b0;
+        // Debug trace fields
+        mem_wb_bubble.rs1_value_debug   = 32'h0;
+        mem_wb_bubble.rs2_value_debug   = 32'h0;
+        mem_wb_bubble.rs1_addr_debug    = 5'h0;
+        mem_wb_bubble.rs2_addr_debug    = 5'h0;
+        mem_wb_bubble.forward_rs1_debug = 2'b00;
+        mem_wb_bubble.forward_rs2_debug = 2'b00;
     endfunction
     
 endpackage : rv32i_pipeline_pkg

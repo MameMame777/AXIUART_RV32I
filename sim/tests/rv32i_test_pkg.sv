@@ -49,4 +49,7 @@
 // Comprehensive test - All 40 RV32I instructions (2026-01-06)
 `include "rv32i_comprehensive_test.sv"
 
+// Simple isolated instruction tests (2026-01-12)
+`include "rv32i_store_simple_test.sv"
+
 `endif // RV32I_TEST_PKG_SV
