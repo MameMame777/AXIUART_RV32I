@@ -167,13 +167,105 @@ module rv32i_hazard
     assign load_use_hazard = load_use_hazard_ex || load_use_hazard_mem;
     
     //==========================================================================
+    // Control Flow Change Detection (for FSM override)
+    //==========================================================================
+    // Detect control flow changes that should reset FSM
+    
+    logic control_flow_change_ex;   // Branch/Jump from EX
+    logic control_flow_change_mem;  // Exception/MRET from MEM
+    
+    assign control_flow_change_ex  = branch_taken;
+    assign control_flow_change_mem = exception_trap || mret_req;
+    
+    //==========================================================================
+    // Load-Use Hazard FSM
+    //==========================================================================
+    // State machine to manage load-use hazard stalls with proper release mechanism
+    // States:
+    //   IDLE: No hazard, normal operation
+    //   DETECTED: Hazard detected, assert stall signals
+    //   WAIT_MEM: Waiting for load to reach WB stage (1 cycle)
+    //   RELEASE: Release stall, allow pipeline to advance
+    
+    typedef enum logic [1:0] {
+        HAZARD_IDLE     = 2'b00,
+        HAZARD_DETECTED = 2'b01,
+        HAZARD_WAIT_MEM = 2'b10,
+        HAZARD_RELEASE  = 2'b11
+    } hazard_state_t;
+    
+    hazard_state_t hazard_state, hazard_next_state;
+    
+    // State register
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            hazard_state <= HAZARD_IDLE;
+        end else begin
+            hazard_state <= hazard_next_state;
+        end
+    end
+    
+    // Next-state logic
+    always_comb begin
+        hazard_next_state = hazard_state;
+        
+        case (hazard_state)
+            HAZARD_IDLE: begin
+                // Detect new load-use hazard
+                if (load_use_hazard) begin
+                    hazard_next_state = HAZARD_DETECTED;
+                end
+            end
+            
+            HAZARD_DETECTED: begin
+                // Load in EX: needs 2 cycles to reach WB
+                if (load_use_hazard_ex) begin
+                    hazard_next_state = HAZARD_WAIT_MEM;
+                end
+                // Load in MEM: needs 1 cycle to reach WB
+                else if (load_use_hazard_mem) begin
+                    hazard_next_state = HAZARD_RELEASE;
+                end
+                // Hazard resolved by forwarding or flush
+                else begin
+                    hazard_next_state = HAZARD_RELEASE;
+                end
+            end
+            
+            HAZARD_WAIT_MEM: begin
+                // Wait for load to move from EX to MEM to WB
+                // After 1 cycle, load is in MEM stage
+                hazard_next_state = HAZARD_RELEASE;
+            end
+            
+            HAZARD_RELEASE: begin
+                // Release stall for 1 cycle to let pipeline advance
+                hazard_next_state = HAZARD_IDLE;
+            end
+            
+            default: begin
+                hazard_next_state = HAZARD_IDLE;
+            end
+        endcase
+        
+        // Override: flush always returns to IDLE
+        if (control_flow_change_ex || control_flow_change_mem) begin
+            hazard_next_state = HAZARD_IDLE;
+        end
+    end
+    
+    //==========================================================================
     // Stall Control
     //==========================================================================
-    // Stall IF and ID stages when load-use hazard detected
-    // EX stage continues with bubble (NOP) inserted
+    // Assert stall when FSM is in stall states (DETECTED or WAIT_MEM)
+    // Release stall when FSM enters RELEASE or IDLE state
     
-    assign if_stall = load_use_hazard;
-    assign id_stall = load_use_hazard;
+    logic fsm_stall_active;
+    assign fsm_stall_active = (hazard_state == HAZARD_DETECTED) || 
+                              (hazard_state == HAZARD_WAIT_MEM);
+    
+    assign if_stall = fsm_stall_active;
+    assign id_stall = fsm_stall_active;
     
     //==========================================================================
     // Flush Control
@@ -192,12 +284,6 @@ module rv32i_hazard
     //   - Flush IF, ID, and EX stages (3 bubbles)
     //   - Restore PC from mepc
     
-    logic control_flow_change_ex;   // Branch/Jump from EX
-    logic control_flow_change_mem;  // Exception/MRET from MEM
-    
-    assign control_flow_change_ex  = branch_taken;
-    assign control_flow_change_mem = exception_trap || mret_req;
-    
     // IF stage flush: On any control flow change
     assign if_flush = control_flow_change_ex || control_flow_change_mem;
     
@@ -206,5 +292,51 @@ module rv32i_hazard
     
     // EX stage flush: Only on MEM stage control flow change (exception/MRET)
     assign ex_flush = control_flow_change_mem;
+    
+    //==========================================================================
+    // Debug Monitoring (optional, enabled with +define+STALL_DEBUG)
+    //==========================================================================
+`ifdef STALL_DEBUG
+    // State duration counter
+    logic [15:0] state_duration;
+    logic [31:0] total_stall_cycles;
+    
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            state_duration <= 16'b0;
+            total_stall_cycles <= 32'b0;
+        end else begin
+            // Increment state duration
+            if (hazard_state == hazard_next_state) begin
+                state_duration <= state_duration + 1'b1;
+            end else begin
+                state_duration <= 16'b0;
+            end
+            
+            // Count total stall cycles
+            if (fsm_stall_active) begin
+                total_stall_cycles <= total_stall_cycles + 1'b1;
+            end
+            
+            // Timeout detection (100 cycles in same state)
+            if (state_duration > 100) begin
+                $display("[HAZARD TIMEOUT] State=%0d stuck for %0d cycles at time %0t",
+                         hazard_state, state_duration, $time);
+                $display("  load_use_hazard_ex=%b, load_use_hazard_mem=%b",
+                         load_use_hazard_ex, load_use_hazard_mem);
+                $display("  ex_is_load=%b, mem_is_load=%b",
+                         ex_is_load, mem_is_load);
+            end
+        end
+    end
+    
+    // State transition monitoring
+    always_ff @(posedge clk) begin
+        if (!rst && (hazard_state != hazard_next_state)) begin
+            $display("[HAZARD FSM] Transition: %0s -> %0s at time %0t",
+                     hazard_state.name(), hazard_next_state.name(), $time);
+        end
+    end
+`endif
     
 endmodule : rv32i_hazard

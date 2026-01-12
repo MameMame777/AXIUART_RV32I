@@ -9,3 +9,7 @@
 ../../../sim/assertions/rv32i_data_hazard_spec.sv
 ../../../sim/assertions/bind_rv32i_debug_spec.sv
 ../../../sim/assertions/bind_rv32i_ebreak_debug_spec.sv
+
+# RV32I MEM Stage Stall assertions
+../../../sim/assertions/spec/mem_stage_stall.sva
+../../../sim/assertions/bind_rv32i_mem_stall_spec.sv

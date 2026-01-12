@@ -87,6 +87,7 @@ module rv32i_top
     
     logic if_stall;
     logic id_stall;
+    logic mem_stall;  // MEM stage structural stall for multi-cycle LOAD
     logic if_flush;
     logic id_flush;
     logic ex_flush;
@@ -318,7 +319,7 @@ module rv32i_top
             if_pc_current <= 32'h00000000;
         end else if (cpu_run && cpu_halted && if_pc_current == 32'h00000000) begin
             if_pc_current <= 32'h00000000;  // Reset PC to 0 on initial start
-        end else if (running && !cpu_halt && (!if_bp_match || bp_skip_once)) begin
+        end else if (running && !cpu_halt && (!if_bp_match || bp_skip_once) && !mem_stall && !id_stall) begin
             if_pc_current <= if_pc_next;
         end
     end
@@ -339,7 +340,7 @@ module rv32i_top
             // speculative PC from propagating through the pipeline.
             // NOTE: Remove bram_ready condition here to ensure flush always updates!
             if_pc_delayed <= if_pc_next;
-        end else if (!id_stall && bram_ready) begin
+        end else if (!mem_stall && !id_stall && bram_ready) begin
             if_pc_delayed <= if_pc_out;
         end
     end
@@ -349,14 +350,21 @@ module rv32i_top
     //==========================================================================
     // IF/ID PIPELINE REGISTER
     //==========================================================================
-    // Iteration 10: Synchronous valid clear + retain other fields
-    // Problem: Speculative instruction captured at cycle N-1 before flush asserted
-    // Solution: Clear valid synchronously but retain other fields to avoid X-propagation
+    // Critical Fix #3: Explicit priority order for pipeline control
+    // Priority: reset → mem_stall → id_stall → bram_ready
+    // Rationale: MEM stall is highest priority structural hazard, must freeze entire pipeline
     always_ff @(posedge clk) begin
         if (rst || soft_reset_active) begin
+            // Priority 1: Reset
             if_id_reg <= if_id_bubble();
-        end else if (!id_stall && bram_ready) begin
-            // Normal pipeline advance - capture instruction
+        end else if (mem_stall) begin
+            // Priority 2: MEM stall - highest priority, freeze IF/ID register
+            if_id_reg <= if_id_reg;
+        end else if (id_stall) begin
+            // Priority 3: ID stall (load-use hazard)
+            if_id_reg <= if_id_reg;
+        end else if (bram_ready) begin
+            // Priority 4: Normal pipeline advance
             if_id_reg.pc    <= if_pc_delayed;
             if_id_reg.insn  <= if_insn_out;
             if_id_reg.valid <= if_valid_out;
@@ -473,6 +481,9 @@ module rv32i_top
             id_ex_reg <= id_ex_bubble();
         end else if (id_flush) begin
             id_ex_reg <= id_ex_bubble();
+        end else if (mem_stall) begin
+            // MEM stall: Hold ID/EX register (freeze pipeline upstream of MEM)
+            id_ex_reg <= id_ex_reg;
         end else if (!id_stall) begin
             id_ex_reg.pc          <= id_pc_out;
             id_ex_reg.insn        <= id_insn_out;
@@ -530,8 +541,8 @@ module rv32i_top
                                   wb_rf_wen_delayed && id_ex_reg.valid;
     
     // MEM forward data mux: choose between ALU result and memory data for load instructions
-    // CRITICAL FIX: Must use EX/MEM register (current MEM stage), not MEM/WB (1 cycle stale)
-    // Bug: Was using mem_wb_reg which is WB stage data, causing forwarding to use wrong cycle's result
+    // Use ex_mem_reg.ctrl for forwarding decision (current MEM cycle), not mem_ctrl_out (delayed for WB)
+    // mem_ctrl_out is delayed to match BRAM and used only for MEM/WB register
     assign mem_forward_data_mux = ex_mem_reg.ctrl.mem_read ? mem_mem_data_out : ex_mem_reg.alu_result;
     
     // CRITICAL FIX: Register wb_result to align with delayed WB metadata used in hazard detection
@@ -589,6 +600,9 @@ module rv32i_top
             ex_mem_reg <= ex_mem_bubble();
         end else if (ex_flush) begin
             ex_mem_reg <= ex_mem_bubble();
+        end else if (mem_stall) begin
+            // MEM stall: Hold EX/MEM register to preserve LOAD instruction in MEM stage
+            ex_mem_reg <= ex_mem_reg;
         end else begin
             ex_mem_reg.pc            <= id_ex_reg.pc;
             ex_mem_reg.insn          <= id_ex_reg.insn;
@@ -615,11 +629,75 @@ module rv32i_top
     //==========================================================================
     // Note: mem_mem_data_out declared earlier with forwarding signals
     
+    decode_ctrl_t mem_ctrl_out;
     logic        mem_valid_out;
     logic [3:0]  mem_led_out;
     logic [31:0] mem_exception_pc;
     logic [3:0]  mem_exception_code;
     logic [31:0] mem_exception_tval;
+    
+    //==========================================================================
+    // MEM STAGE STATE MACHINE (2-CYCLE LOAD CONTROL)
+    //==========================================================================
+    // Purpose: Hold LOAD instructions in MEM stage for 2 cycles to account for
+    //          BRAM registered output latency (address at N → data at N+1)
+    // Design:  MEM_IDLE      - Normal single-cycle operation (ALU, STORE, etc.)
+    //          MEM_LOAD_WAIT - LOAD instruction waiting for BRAM data (cycle 2)
+    // Critical Fix #1: Explicit bram_data_ready condition prevents fragile assumptions
+    //==========================================================================
+    
+    typedef enum logic {
+        MEM_IDLE      = 1'b0,
+        MEM_LOAD_WAIT = 1'b1
+    } mem_state_t;
+    
+    mem_state_t mem_state, mem_state_next;
+    logic       bram_data_ready;  // BRAM data valid for current LOAD
+    
+    // BRAM data ready: For synchronous BRAM with 1-cycle registered output,
+    // data is ready 1 cycle after address presentation (fixed latency).
+    // Critical Fix #1: Making this explicit enables future AXI/cache integration.
+    always_comb begin
+        // Current implementation: Fixed 1-cycle BRAM latency
+        // Future-proof: Can be replaced with handshake signal for variable latency
+        bram_data_ready = (mem_state == MEM_LOAD_WAIT);
+    end
+    
+    // State transition logic
+    always_comb begin
+        mem_state_next = mem_state;
+        
+        case (mem_state)
+            MEM_IDLE: begin
+                // Enter LOAD_WAIT state when LOAD instruction is about to enter MEM stage
+                // Must check ID/EX register (not EX/MEM) to detect entering LOAD before stall freezes pipeline
+                if (id_ex_reg.valid && id_ex_reg.ctrl.mem_read && !id_flush && !ex_flush) begin
+                    mem_state_next = MEM_LOAD_WAIT;
+                end
+            end
+            
+            MEM_LOAD_WAIT: begin
+                // Critical Fix #1: Explicit data ready condition instead of
+                // unconditional transition. Prevents assumptions about timing.
+                if (bram_data_ready) begin
+                    mem_state_next = MEM_IDLE;
+                end
+            end
+        endcase
+    end
+    
+    // State register
+    always_ff @(posedge clk) begin
+        if (rst || soft_reset_active) begin
+            mem_state <= MEM_IDLE;
+        end else begin
+            mem_state <= mem_state_next;
+        end
+    end
+    
+    // MEM stall signal: Asserted when MEM stage is occupied by multi-cycle LOAD
+    // This is a structural hazard (resource conflict), separate from data hazards
+    assign mem_stall = (mem_state == MEM_LOAD_WAIT);
     
     rv32i_mem u_mem (
         .clk             (clk),
@@ -643,7 +721,8 @@ module rv32i_top
         .exception_code  (mem_exception_code),
         .exception_tval  (mem_exception_tval),
         .mem_data_out    (mem_mem_data_out),
-        .valid_out       (mem_valid_out)
+        .valid_out       (mem_valid_out),
+        .ctrl_out        (mem_ctrl_out)
     );
     
     assign mem_valid = mem_valid_out;
@@ -659,17 +738,27 @@ module rv32i_top
     //==========================================================================
     // MEM/WB PIPELINE REGISTER
     //==========================================================================
+    // Critical Fix #2: MEM/WB holds during mem_stall, does NOT bubble
+    // Semantic meaning: When LOAD is not complete, MEM/WB preserves the previous
+    //                   instruction, and WB stage continues executing it.
+    //                   This prevents creating pipeline bubbles and maintains
+    //                   architectural correctness (no lost instructions).
     
     always_ff @(posedge clk) begin
         if (rst || soft_reset_active) begin
             mem_wb_reg <= mem_wb_bubble();
+        end else if (mem_stall) begin
+            // LOAD instruction not yet complete in MEM stage.
+            // Hold MEM/WB register: WB stage continues with previous instruction.
+            // This is NOT a bubble - the previous instruction remains active in WB.
+            mem_wb_reg <= mem_wb_reg;
         end else begin
             mem_wb_reg.pc          <= ex_mem_reg.pc;
             mem_wb_reg.insn        <= ex_mem_reg.insn;
             mem_wb_reg.mem_data    <= mem_mem_data_out;
             mem_wb_reg.alu_result  <= ex_mem_reg.alu_result;
             mem_wb_reg.csr_rdata   <= ex_mem_reg.csr_rdata;
-            mem_wb_reg.ctrl        <= ex_mem_reg.ctrl;
+            mem_wb_reg.ctrl        <= mem_ctrl_out;
             mem_wb_reg.valid       <= mem_valid;
             mem_wb_reg.branch_taken <= ex_mem_reg.branch_taken;
             // Debug trace fields - propagate from EX/MEM to align with WB stage
@@ -823,7 +912,7 @@ module rv32i_top
         end else if (running) begin
             cycle_counter <= cycle_counter + 32'd1;
             if (wb_valid) insn_counter <= insn_counter + 32'd1;
-            if (if_stall || id_stall) stall_counter <= stall_counter + 32'd1;
+            if (mem_stall || if_stall || id_stall) stall_counter <= stall_counter + 32'd1;
             if (if_flush || id_flush || ex_flush) flush_counter <= flush_counter + 32'd1;
         end
     end
