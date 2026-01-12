@@ -17,6 +17,7 @@ module rv32i_mem
     input  logic [31:0]   pc,
     input  logic [31:0]   insn,
     input  logic [31:0]   alu_result,      // Memory address
+    input  logic [1:0]    byte_offset,     // Address LSBs delayed by 1 cycle (synchronized with BRAM latency)
     input  logic [31:0]   rs2_data,        // Store data
     input  logic [31:0]   csr_rdata,
     input  decode_ctrl_t  ctrl,
@@ -64,26 +65,47 @@ module rv32i_mem
     assign is_invalid_addr = !is_ram_access && !is_mmio_led;
     
     //==========================================================================
-    // Load Data Alignment and Sign Extension
+    // Load Data Processing - Registered Output Synchronized with BRAM
     //==========================================================================
-    logic [1:0]  byte_offset;
+    // BRAM registered output timing:
+    // Cycle N:   LOAD in MEM, ram_addr_b sent, ctrl/byte_offset captured
+    // Cycle N+1: Next insn in MEM, ram_rdata_raw updated at clock edge
+    //            → Combinational logic evaluates BEFORE edge (uses old data!)
+    //            → Solution: Register load_data_aligned output
+    //            → Processing happens AFTER edge when BRAM data is stable ✓
+    //
+    // Key: Delay ctrl by 1 cycle, then register the output processing
+    
+    logic [1:0]       byte_offset_delayed;
+    decode_ctrl_t     ctrl_delayed;
+    logic             valid_delayed;
+    
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            byte_offset_delayed <= 2'b00;
+            ctrl_delayed        <= '0;
+            valid_delayed       <= 1'b0;
+        end else begin
+            byte_offset_delayed <= byte_offset;
+            ctrl_delayed        <= ctrl;
+            valid_delayed       <= valid;
+        end
+    end
+    
+    // Extract byte/halfword (combinational, for registered output below)
     logic [7:0]  load_byte;
     logic [15:0] load_halfword;
     logic [31:0] load_word;
-    logic [31:0] load_data_aligned;
     
-    assign byte_offset = mem_addr[1:0];
-    
-    // Extract byte/halfword based on address offset
     always_comb begin
-        case (byte_offset)
+        case (byte_offset_delayed)
             2'b00: load_byte = data_ram_rdata[7:0];
             2'b01: load_byte = data_ram_rdata[15:8];
             2'b10: load_byte = data_ram_rdata[23:16];
             2'b11: load_byte = data_ram_rdata[31:24];
         endcase
         
-        case (byte_offset[1])
+        case (byte_offset_delayed[1])
             1'b0: load_halfword = data_ram_rdata[15:0];
             1'b1: load_halfword = data_ram_rdata[31:16];
         endcase
@@ -91,16 +113,18 @@ module rv32i_mem
         load_word = data_ram_rdata;
     end
     
-    // Sign/zero extension
+    // Sign/zero extension (combinational)
+    logic [31:0] load_data_aligned;
+    
     always_comb begin
-        case (ctrl.mem_width)
+        case (ctrl_delayed.mem_width)
             MEM_BYTE: begin
-                load_data_aligned = ctrl.mem_sign_ext ? 
+                load_data_aligned = ctrl_delayed.mem_sign_ext ? 
                                    {{24{load_byte[7]}}, load_byte} : 
                                    {24'h0, load_byte};
             end
             MEM_HALF: begin
-                load_data_aligned = ctrl.mem_sign_ext ? 
+                load_data_aligned = ctrl_delayed.mem_sign_ext ? 
                                    {{16{load_halfword[15]}}, load_halfword} : 
                                    {16'h0, load_halfword};
             end
@@ -111,8 +135,11 @@ module rv32i_mem
         endcase
     end
     
+    //==========================================================================
+    // Load Data Output (registered, synchronized with BRAM)
+    //==========================================================================
     assign mem_data_out = load_data_aligned;
-    
+    assign valid_out = valid_delayed;    
     //==========================================================================
     // Store Data Alignment and Write Enables
     //==========================================================================
@@ -251,10 +278,5 @@ module rv32i_mem
             end
         end
     end
-    
-    //==========================================================================
-    // Valid Output
-    //==========================================================================
-    assign valid_out = valid;
     
 endmodule : rv32i_mem

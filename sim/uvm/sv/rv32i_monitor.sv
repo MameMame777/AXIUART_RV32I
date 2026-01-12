@@ -51,8 +51,8 @@ class rv32i_monitor extends uvm_monitor;
                 `uvm_error("RV32I_MONITOR", $sformatf("Failed to open trace file: %s", trace_filename))
                 trace_enabled = 0;
             end else begin
-                // Write CSV header
-                $fdisplay(trace_file, "#,PC,Encoding,Instruction,Operands,rd,rd_value,Time_ps");
+                // Write CSV header with extended debug fields
+                $fdisplay(trace_file, "#,PC,Encoding,Instruction,Operands,rd,rd_value,rs1,rs1_val,rs2,rs2_val,fwd_rs1,fwd_rs2,stall,flush,Time_ps");
                 `uvm_info("RV32I_MONITOR", 
                          $sformatf("Trace logging enabled: %s (max %0d lines)", trace_filename, max_trace_lines), 
                          UVM_LOW)
@@ -73,12 +73,21 @@ class rv32i_monitor extends uvm_monitor;
                 // Create transaction
                 trans = rv32i_transaction::type_id::create("trans");
                 
-                // Capture trace data
-                trans.pc        = vif.trace_pc;
-                trans.insn      = vif.trace_insn;
-                trans.rd_addr   = vif.trace_rd_addr;
-                trans.rd_value  = vif.trace_rd_data;
-                trans.timestamp = $time;
+                // Capture trace data with extended debug fields
+                trans.pc           = vif.trace_pc;
+                trans.insn         = vif.trace_insn;
+                trans.rd_addr      = vif.trace_rd_addr;
+                trans.rd_value     = vif.trace_rd_data;
+                trans.rs1_value    = vif.trace_rs1_value;
+                trans.rs2_value    = vif.trace_rs2_value;
+                trans.rs1_addr     = vif.trace_rs1_addr;
+                trans.rs2_addr     = vif.trace_rs2_addr;
+                trans.forward_rs1  = vif.trace_forward_rs1;
+                trans.forward_rs2  = vif.trace_forward_rs2;
+                trans.stall        = vif.trace_stall;
+                trans.flush        = vif.trace_flush;
+                trans.branch_taken = vif.trace_branch_taken;
+                trans.timestamp    = $time;
                 
                 // Increment instruction counter
                 instruction_count++;
@@ -87,7 +96,24 @@ class rv32i_monitor extends uvm_monitor;
                 if (trace_enabled && instruction_count <= max_trace_lines) begin
                     string insn_name = trans.decode_instruction();
                     string operands = trans.get_operands();
-                    $fdisplay(trace_file, "%0d,0x%08h,0x%08h,%s,\"%s\",x%0d,0x%08h,%0t",
+                    string fwd_rs1_str, fwd_rs2_str;
+                    
+                    // Decode forwarding control to human-readable format
+                    case (trans.forward_rs1)
+                        2'b00: fwd_rs1_str = "RF";
+                        2'b01: fwd_rs1_str = "EX";
+                        2'b10: fwd_rs1_str = "MEM";
+                        2'b11: fwd_rs1_str = "WB";
+                    endcase
+                    
+                    case (trans.forward_rs2)
+                        2'b00: fwd_rs2_str = "RF";
+                        2'b01: fwd_rs2_str = "EX";
+                        2'b10: fwd_rs2_str = "MEM";
+                        2'b11: fwd_rs2_str = "WB";
+                    endcase
+                    
+                    $fdisplay(trace_file, "%0d,0x%08h,0x%08h,%s,\"%s\",x%0d,0x%08h,x%0d,0x%08h,x%0d,0x%08h,%s,%s,%0d,%0d,%0t",
                              instruction_count,
                              trans.pc,
                              trans.insn,
@@ -95,6 +121,14 @@ class rv32i_monitor extends uvm_monitor;
                              operands,
                              trans.rd_addr,
                              trans.rd_value,
+                             trans.rs1_addr,
+                             trans.rs1_value,
+                             trans.rs2_addr,
+                             trans.rs2_value,
+                             fwd_rs1_str,
+                             fwd_rs2_str,
+                             trans.stall,
+                             trans.flush,
                              trans.timestamp);
                     $fflush(trace_file);
                 end

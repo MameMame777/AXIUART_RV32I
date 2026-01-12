@@ -236,7 +236,7 @@
       "encoding": "0x400B8B93",
       "name": "ADDI",
       "operands": "x23, x23, 0x400",
-      "comment": "x23 = 0x400 (data area)",
+      "comment": "x23 = 0x400 (data area - safe from protection)",
       "expected_register": "x23",
       "expected_value": "0x00000400"
     },

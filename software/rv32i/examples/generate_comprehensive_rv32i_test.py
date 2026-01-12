@@ -11,6 +11,10 @@ Memory Layout:
 - 0x200-0x220: Exception handler (16 instructions)
 - 0x400-0x500: Data area for load/store tests (256 bytes)
 
+CRITICAL: Data area MUST start at byte address 0x400 (word address 0x100).
+RTL memory protection enforces INSN_REGION_END = 0x100 words (1KB boundary).
+This configuration is validated at generation time.
+
 Output:
 - rv32i_comprehensive_test.hex: Hex file for UVM test
 - rv32i_comprehensive_map.json: Instruction map with expected results
@@ -21,6 +25,12 @@ import json
 sys.path.insert(0, '..')
 
 from encoder import RV32IInstructionEncoder
+
+# Memory Layout Configuration (MUST match RTL)
+# RTL defines INSN_REGION_END = 0x100 words = 0x400 bytes
+INSN_REGION_END_BYTE = 0x400  # First safe address for data stores
+DATA_AREA_START = 0x400       # Data region base address
+DATA_AREA_SIZE = 0x100        # 256 bytes available
 
 # CSR addresses
 CSR_MTVEC = 0x305
@@ -33,6 +43,22 @@ def generate_comprehensive_test():
     enc = RV32IInstructionEncoder()
     instructions = []
     instruction_map = []
+    
+    # Validate memory layout before generating instructions
+    def validate_memory_layout():
+        """Ensure data area doesn't conflict with instruction region"""
+        if DATA_AREA_START < INSN_REGION_END_BYTE:
+            raise ValueError(
+                f"MEMORY LAYOUT ERROR: Data area (0x{DATA_AREA_START:03X}) conflicts with "
+                f"instruction region (0x000-0x{INSN_REGION_END_BYTE-1:03X}). "
+                f"RTL memory protection will block stores!"
+            )
+        print(f"[CONFIG] Memory layout validated:")
+        print(f"  - Instruction region: 0x000-0x{INSN_REGION_END_BYTE-1:03X}")
+        print(f"  - Data area start: 0x{DATA_AREA_START:03X}")
+        print(f"  - Configuration matches RTL INSN_REGION_END = 0x{INSN_REGION_END_BYTE>>2:03X} words")
+    
+    validate_memory_layout()
     
     def add_insn(insn, name, operands="", expected_reg=None, expected_val=None, comment=""):
         """Helper to add instruction with metadata"""
@@ -97,7 +123,8 @@ def generate_comprehensive_test():
     # PART 5: MEMORY ADDRESS PREPARATION
     # =========================================================================
     add_insn(enc.lui(23, 0), "LUI", "x23, 0", 23, 0, "x23 = 0x0 (RAM base)")
-    add_insn(enc.addi(23, 23, 0x400), "ADDI", "x23, x23, 0x400", 23, 0x400, "x23 = 0x400 (data area)")
+    add_insn(enc.addi(23, 23, DATA_AREA_START), "ADDI", f"x23, x23, 0x{DATA_AREA_START:03X}", 23, DATA_AREA_START, 
+             f"x23 = 0x{DATA_AREA_START:03X} (data area - safe from protection)")
     add_insn(enc.auipc(24, 0), "AUIPC", "x24, 0", 24, None, "x24 = PC + 0 (PC-relative)")
     
     # =========================================================================

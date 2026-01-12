@@ -18,12 +18,32 @@ class rv32i_transaction extends uvm_sequence_item;
     rand bit [31:0] rd_value;     // Destination register value
     bit [63:0]      timestamp;    // Simulation timestamp
     
+    // Extended debug fields for trace analysis
+    rand bit [31:0] rs1_value;    // Source operand 1 (after forwarding)
+    rand bit [31:0] rs2_value;    // Source operand 2 (after forwarding)
+    rand bit [4:0]  rs1_addr;     // Source register 1 address
+    rand bit [4:0]  rs2_addr;     // Source register 2 address
+    rand bit [1:0]  forward_rs1;  // Forwarding control for rs1 (00=RF, 01=EX, 10=MEM, 11=WB)
+    rand bit [1:0]  forward_rs2;  // Forwarding control for rs2
+    rand bit        stall;        // Pipeline stall flag
+    rand bit        flush;        // Pipeline flush flag
+    rand bit        branch_taken; // Branch taken flag
+    
     // UVM registration
     `uvm_object_utils_begin(rv32i_transaction)
         `uvm_field_int(pc, UVM_ALL_ON | UVM_HEX)
         `uvm_field_int(insn, UVM_ALL_ON | UVM_HEX)
         `uvm_field_int(rd_addr, UVM_ALL_ON | UVM_DEC)
         `uvm_field_int(rd_value, UVM_ALL_ON | UVM_HEX)
+        `uvm_field_int(rs1_value, UVM_ALL_ON | UVM_HEX)
+        `uvm_field_int(rs2_value, UVM_ALL_ON | UVM_HEX)
+        `uvm_field_int(rs1_addr, UVM_ALL_ON | UVM_DEC)
+        `uvm_field_int(rs2_addr, UVM_ALL_ON | UVM_DEC)
+        `uvm_field_int(forward_rs1, UVM_ALL_ON | UVM_BIN)
+        `uvm_field_int(forward_rs2, UVM_ALL_ON | UVM_BIN)
+        `uvm_field_int(stall, UVM_ALL_ON | UVM_BIN)
+        `uvm_field_int(flush, UVM_ALL_ON | UVM_BIN)
+        `uvm_field_int(branch_taken, UVM_ALL_ON | UVM_BIN)
         `uvm_field_int(timestamp, UVM_ALL_ON | UVM_TIME)
     `uvm_object_utils_end
     
