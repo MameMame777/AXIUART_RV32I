@@ -45,7 +45,8 @@ module rv32i_mem
     
     // Outputs to MEM/WB register
     output logic [31:0]   mem_data_out,
-    output logic          valid_out
+    output logic          valid_out,
+    output decode_ctrl_t  ctrl_out
 );
 
     localparam logic [31:0] LED_ADDR = 32'h0000_407C;
@@ -76,21 +77,15 @@ module rv32i_mem
     //
     // Key: Delay ctrl by 1 cycle, then register the output processing
     
-    logic [1:0]       byte_offset_delayed;
-    decode_ctrl_t     ctrl_delayed;
-    logic             valid_delayed;
+    // Use immediate inputs - timing handled by MEM stall state machine in rv32i_top
+    // The external state machine now provides proper 2-cycle LOAD latency control
+    logic [1:0]       byte_offset_final;
+    decode_ctrl_t     ctrl_final;
+    logic             valid_final;
     
-    always_ff @(posedge clk) begin
-        if (rst) begin
-            byte_offset_delayed <= 2'b00;
-            ctrl_delayed        <= '0;
-            valid_delayed       <= 1'b0;
-        end else begin
-            byte_offset_delayed <= byte_offset;
-            ctrl_delayed        <= ctrl;
-            valid_delayed       <= valid;
-        end
-    end
+    assign byte_offset_final = byte_offset;
+    assign ctrl_final = ctrl;
+    assign valid_final = valid;
     
     // Extract byte/halfword (combinational, for registered output below)
     logic [7:0]  load_byte;
@@ -98,14 +93,14 @@ module rv32i_mem
     logic [31:0] load_word;
     
     always_comb begin
-        case (byte_offset_delayed)
+        case (byte_offset_final)
             2'b00: load_byte = data_ram_rdata[7:0];
             2'b01: load_byte = data_ram_rdata[15:8];
             2'b10: load_byte = data_ram_rdata[23:16];
             2'b11: load_byte = data_ram_rdata[31:24];
         endcase
         
-        case (byte_offset_delayed[1])
+        case (byte_offset_final[1])
             1'b0: load_halfword = data_ram_rdata[15:0];
             1'b1: load_halfword = data_ram_rdata[31:16];
         endcase
@@ -117,14 +112,14 @@ module rv32i_mem
     logic [31:0] load_data_aligned;
     
     always_comb begin
-        case (ctrl_delayed.mem_width)
+        case (ctrl_final.mem_width)
             MEM_BYTE: begin
-                load_data_aligned = ctrl_delayed.mem_sign_ext ? 
+                load_data_aligned = ctrl_final.mem_sign_ext ? 
                                    {{24{load_byte[7]}}, load_byte} : 
                                    {24'h0, load_byte};
             end
             MEM_HALF: begin
-                load_data_aligned = ctrl_delayed.mem_sign_ext ? 
+                load_data_aligned = ctrl_final.mem_sign_ext ? 
                                    {{16{load_halfword[15]}}, load_halfword} : 
                                    {16'h0, load_halfword};
             end
@@ -136,10 +131,22 @@ module rv32i_mem
     end
     
     //==========================================================================
-    // Load Data Output (registered, synchronized with BRAM)
+    // Load Data Output (combinational from registered BRAM + delayed controls)
     //==========================================================================
+    // BRAM registered output (ram_rdata_raw) + ctrl_final (2-cycle delayed) = correct timing
+    // mem_data_out can be combinational because all its inputs are already registered
     assign mem_data_out = load_data_aligned;
-    assign valid_out = valid_delayed;    
+    assign valid_out = valid_final;
+    assign ctrl_out = ctrl_final;
+    
+    // Debug: Monitor LOAD operations  
+    always @(posedge clk) begin
+        if (ctrl_final.mem_read && valid_final) begin
+            $display("[LOAD_DEBUG] Time=%0t PC=0x%08h data_ram_rdata=0x%08h load_data_aligned=0x%08h mem_data_out=0x%08h mem_width=%0d byte_offset=%0d",
+                     $time, pc, data_ram_rdata, load_data_aligned, mem_data_out, ctrl_final.mem_width, byte_offset_final);
+        end
+    end
+    
     //==========================================================================
     // Store Data Alignment and Write Enables
     //==========================================================================

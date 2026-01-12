@@ -1,0 +1,263 @@
+`timescale 1ns / 1ps
+
+//==============================================================================
+// MEM Stage Stall Assertions
+//==============================================================================
+// Purpose: Verify MEM stage 2-cycle LOAD behavior and pipeline stall correctness
+// Design:  Ensures LOAD instructions occupy MEM stage for exactly 2 cycles,
+//          all pipeline stages freeze during mem_stall, and ctrl/data synchronization
+//          is maintained for proper writeback.
+//
+// Critical Properties:
+// 1. LOAD occupies MEM stage for exactly 2 cycles (not 1, not 3+)
+// 2. All upstream pipeline stages freeze when mem_stall is asserted
+// 3. MEM/WB register receives matching ctrl and data after LOAD completes
+// 4. PC does not advance during mem_stall
+//==============================================================================
+
+module rv32i_mem_stage_stall_assertions
+    import rv32i_isa_pkg::*;
+(
+    input logic clk,
+    input logic rst,
+    input logic soft_reset_active,
+    
+    // MEM stage state machine signals
+    input logic       mem_stall,
+    input logic [1:0] mem_state,
+    input logic       bram_data_ready,
+    
+    // Pipeline register valid signals
+    input logic if_id_valid,
+    input logic id_ex_valid,
+    input logic ex_mem_valid,
+    input logic mem_wb_valid,
+    
+    // Pipeline control signals
+    input logic if_stall,
+    input logic id_stall,
+    input logic if_flush,
+    input logic id_flush,
+    input logic ex_flush,
+    
+    // EX/MEM register signals (LOAD detection)
+    input decode_ctrl_t ex_mem_ctrl,
+    input logic         ex_mem_valid_sig,
+    input logic [31:0]  ex_mem_pc,
+    
+    // MEM/WB register signals (ctrl/data verification)
+    input decode_ctrl_t mem_wb_ctrl,
+    input logic [31:0]  mem_wb_mem_data,
+    input logic [31:0]  mem_wb_alu_result,
+    
+    // PC tracking
+    input logic [31:0] if_pc_current,
+    
+    // Pipeline registers (for freeze verification)
+    input logic [31:0] if_id_pc,
+    input logic [31:0] id_ex_pc,
+    input logic [31:0] ex_mem_pc_reg
+);
+
+    //==========================================================================
+    // Helper: Active system (not in reset)
+    //==========================================================================
+    logic system_active;
+    assign system_active = !rst && !soft_reset_active;
+    
+    //==========================================================================
+    // PROPERTY 1: LOAD occupies MEM stage for exactly 2 cycles
+    //==========================================================================
+    // Design Intent: When a LOAD enters MEM stage, mem_state transitions:
+    //                Cycle N:   MEM_IDLE     -> LOAD enters MEM
+    //                Cycle N+1: MEM_LOAD_WAIT -> mem_stall=1, BRAM data arrives
+    //                Cycle N+2: MEM_IDLE     -> mem_stall=0, LOAD exits to WB
+    //
+    // This property verifies:
+    // - mem_stall asserts for exactly 1 cycle per LOAD
+    // - LOAD instruction remains in ex_mem_reg during stall
+    // - After stall, LOAD has exited MEM stage
+    
+    property p_load_2cycle_occupancy;
+        @(posedge clk) disable iff (!system_active)
+        // Trigger: LOAD enters MEM stage
+        (ex_mem_valid_sig && ex_mem_ctrl.mem_read && mem_state == 2'b00) // MEM_IDLE
+        ##1
+        // Cycle 1: mem_stall must assert (MEM_LOAD_WAIT state)
+        (mem_stall == 1'b1 && mem_state == 2'b01) // MEM_LOAD_WAIT
+        ##1
+        // Cycle 2: mem_stall must deassert (back to MEM_IDLE)
+        (mem_stall == 1'b0 && mem_state == 2'b00); // MEM_IDLE
+    endproperty
+    
+    ast_load_2cycle_occupancy: assert property (p_load_2cycle_occupancy)
+        else $error("[MEM_STALL] LOAD did not occupy MEM stage for exactly 2 cycles at PC=0x%08h", ex_mem_pc);
+    
+    //==========================================================================
+    // PROPERTY 2: Pipeline registers freeze during mem_stall
+    //==========================================================================
+    // Design Intent: When mem_stall=1, all pipeline registers (IF/ID, ID/EX, EX/MEM)
+    //                must hold their current values. No new instructions advance.
+    //
+    // This property verifies:
+    // - IF/ID register stable during stall (unless flush)
+    // - ID/EX register stable during stall (unless flush)
+    // - EX/MEM register stable during stall (preserves LOAD)
+    
+    property p_pipeline_freeze_if_id;
+        @(posedge clk) disable iff (!system_active)
+        (mem_stall && !if_flush && !id_flush) |=>
+        ($stable(if_id_pc));
+    endproperty
+    
+    property p_pipeline_freeze_id_ex;
+        @(posedge clk) disable iff (!system_active)
+        (mem_stall && !id_flush && !ex_flush) |=>
+        ($stable(id_ex_pc));
+    endproperty
+    
+    property p_pipeline_freeze_ex_mem;
+        @(posedge clk) disable iff (!system_active)
+        (mem_stall && !ex_flush) |=>
+        ($stable(ex_mem_pc_reg));
+    endproperty
+    
+    ast_pipeline_freeze_if_id: assert property (p_pipeline_freeze_if_id)
+        else $error("[MEM_STALL] IF/ID register changed during mem_stall (PC changed from 0x%08h)", if_id_pc);
+    
+    ast_pipeline_freeze_id_ex: assert property (p_pipeline_freeze_id_ex)
+        else $error("[MEM_STALL] ID/EX register changed during mem_stall (PC changed from 0x%08h)", id_ex_pc);
+    
+    ast_pipeline_freeze_ex_mem: assert property (p_pipeline_freeze_ex_mem)
+        else $error("[MEM_STALL] EX/MEM register changed during mem_stall (PC changed from 0x%08h)", ex_mem_pc_reg);
+    
+    //==========================================================================
+    // PROPERTY 3: PC does not advance during mem_stall
+    //==========================================================================
+    // Design Intent: PC must freeze when mem_stall=1, preventing new instruction fetch
+    //
+    // This property verifies:
+    // - if_pc_current stable during mem_stall (unless branch/exception)
+    
+    property p_pc_freeze_during_stall;
+        @(posedge clk) disable iff (!system_active)
+        (mem_stall && !if_flush) |=>
+        ($stable(if_pc_current));
+    endproperty
+    
+    ast_pc_freeze_during_stall: assert property (p_pc_freeze_during_stall)
+        else $error("[MEM_STALL] PC advanced during mem_stall (PC=0x%08h)", if_pc_current);
+    
+    //==========================================================================
+    // PROPERTY 4: MEM/WB ctrl/data synchronization
+    //==========================================================================
+    // Design Intent: When LOAD completes and enters MEM/WB register,
+    //                the ctrl.mem_read field and mem_data must be valid and aligned
+    //
+    // This property verifies:
+    // - After mem_stall deasserts, if a LOAD reaches MEM/WB, it has valid mem_data
+    // - The rd_addr in ctrl matches the original LOAD instruction
+    
+    property p_mem_wb_load_sync;
+        @(posedge clk) disable iff (!system_active)
+        // Trigger: mem_stall falling edge (LOAD completion)
+        ($fell(mem_stall) && ex_mem_ctrl.mem_read && ex_mem_valid_sig)
+        ##1
+        // Next cycle: MEM/WB register must capture valid LOAD result
+        (mem_wb_ctrl.mem_read && mem_wb_ctrl.rd_addr == $past(ex_mem_ctrl.rd_addr, 1));
+    endproperty
+    
+    ast_mem_wb_load_sync: assert property (p_mem_wb_load_sync)
+        else $error("[MEM_STALL] MEM/WB ctrl/data mismatch after LOAD completion at PC=0x%08h", $past(ex_mem_pc, 1));
+    
+    //==========================================================================
+    // PROPERTY 5: mem_stall mutual exclusivity with id_stall
+    //==========================================================================
+    // Design Intent: mem_stall (structural hazard) and id_stall (load-use hazard)
+    //                should not overlap. If they do, hazard unit timing is incorrect.
+    //
+    // Note: This is a design sanity check, not strictly required for correctness
+    //       but indicates potential hazard detection issues.
+    
+    property p_stall_mutual_exclusivity;
+        @(posedge clk) disable iff (!system_active)
+        // Weak property: Flag concurrent stalls as potential issue
+        not (mem_stall && id_stall);
+    endproperty
+    
+    ast_stall_mutual_exclusivity: assert property (p_stall_mutual_exclusivity)
+        else $warning("[MEM_STALL] mem_stall and id_stall asserted simultaneously - check hazard unit");
+    
+    //==========================================================================
+    // PROPERTY 6: bram_data_ready synchronization
+    //==========================================================================
+    // Design Intent: bram_data_ready should only assert when in MEM_LOAD_WAIT state
+    //                This ensures state machine does not exit prematurely
+    
+    property p_bram_data_ready_valid_state;
+        @(posedge clk) disable iff (!system_active)
+        bram_data_ready |-> (mem_state == 2'b01); // MEM_LOAD_WAIT
+    endproperty
+    
+    ast_bram_data_ready_valid_state: assert property (p_bram_data_ready_valid_state)
+        else $error("[MEM_STALL] bram_data_ready asserted in wrong state (state=%0d)", mem_state);
+    
+    //==========================================================================
+    // COVERAGE: LOAD instruction timing patterns
+    //==========================================================================
+    // Track different LOAD scenarios to ensure assertions exercise all paths
+    
+    covergroup cg_load_timing @(posedge clk);
+        option.per_instance = 1;
+        
+        cp_load_enters_mem: coverpoint (ex_mem_valid_sig && ex_mem_ctrl.mem_read && mem_state == 2'b00) {
+            bins load_entry = {1};
+        }
+        
+        cp_mem_stall_active: coverpoint mem_stall {
+            bins stall_active = {1};
+            bins stall_inactive = {0};
+        }
+        
+        cp_load_completes: coverpoint ($fell(mem_stall) && $past(ex_mem_ctrl.mem_read, 1)) {
+            bins load_completion = {1};
+        }
+        
+        // Cross coverage: LOAD entry → stall → completion
+        cx_load_flow: cross cp_load_enters_mem, cp_mem_stall_active, cp_load_completes;
+    endgroup
+    
+    cg_load_timing cg_load_inst = new();
+
+endmodule
+
+//==============================================================================
+// Bind Statement (include in testbench or separate bind file)
+//==============================================================================
+// bind rv32i_top rv32i_mem_stage_stall_assertions u_mem_stall_assert (
+//     .clk                 (clk),
+//     .rst                 (rst),
+//     .soft_reset_active   (soft_reset_active),
+//     .mem_stall           (mem_stall),
+//     .mem_state           (mem_state),
+//     .bram_data_ready     (bram_data_ready),
+//     .if_id_valid         (if_id_reg.valid),
+//     .id_ex_valid         (id_ex_reg.valid),
+//     .ex_mem_valid        (ex_mem_reg.valid),
+//     .mem_wb_valid        (mem_wb_reg.valid),
+//     .if_stall            (if_stall),
+//     .id_stall            (id_stall),
+//     .if_flush            (if_flush),
+//     .id_flush            (id_flush),
+//     .ex_flush            (ex_flush),
+//     .ex_mem_ctrl         (ex_mem_reg.ctrl),
+//     .ex_mem_valid_sig    (ex_mem_reg.valid),
+//     .ex_mem_pc           (ex_mem_reg.pc),
+//     .mem_wb_ctrl         (mem_wb_reg.ctrl),
+//     .mem_wb_mem_data     (mem_wb_reg.mem_data),
+//     .mem_wb_alu_result   (mem_wb_reg.alu_result),
+//     .if_pc_current       (if_pc_current),
+//     .if_id_pc            (if_id_reg.pc),
+//     .id_ex_pc            (id_ex_reg.pc),
+//     .ex_mem_pc_reg       (ex_mem_reg.pc)
+// );

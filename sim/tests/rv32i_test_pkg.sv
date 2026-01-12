@@ -51,5 +51,6 @@
 
 // Simple isolated instruction tests (2026-01-12)
 `include "rv32i_store_simple_test.sv"
+`include "rv32i_load_simple_test.sv"
 
 `endif // RV32I_TEST_PKG_SV
