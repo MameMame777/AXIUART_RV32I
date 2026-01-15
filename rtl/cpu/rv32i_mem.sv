@@ -26,6 +26,9 @@ module rv32i_mem
     // Debug mode control
     input  logic          debug_mode_enable,
     
+    // MEM stall signal (hold ctrl_final during LOAD wait)
+    input  logic          mem_stall,
+    
     // Data RAM interface (Port B)
     output logic [10:0]   data_ram_addr,
     output logic [31:0]   data_ram_wdata,
@@ -77,15 +80,64 @@ module rv32i_mem
     //
     // Key: Delay ctrl by 1 cycle, then register the output processing
     
-    // Use immediate inputs - timing handled by MEM stall state machine in rv32i_top
-    // The external state machine now provides proper 2-cycle LOAD latency control
+    // CRITICAL FIX: Hold ctrl during mem_stall ONLY for LOAD instructions
+    // Problem: When mem_stall=1, the EX/MEM register is held. The NEXT
+    // instruction's ctrl would contaminate the current LOAD's rd_addr.
+    // Solution: 
+    //   - LOAD instructions: Use registered ctrl_held when mem_stall=1
+    //   - Other instructions: Pass ctrl directly (no delay) via combinational path
+    logic [1:0]       byte_offset_held;
+    decode_ctrl_t     ctrl_held;
+    logic             valid_held;
+    
+    // Hold registers - capture LOAD instruction's ctrl on first cycle
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            byte_offset_held          <= 2'b00;
+            valid_held                <= 1'b0;
+            // Initialize ctrl_held struct with proper enum types
+            ctrl_held.rf_wen          <= 1'b0;
+            ctrl_held.rd_addr         <= 5'h00;
+            ctrl_held.rs1_addr        <= 5'h00;
+            ctrl_held.rs2_addr        <= 5'h00;
+            ctrl_held.alu_src1_pc     <= 1'b0;
+            ctrl_held.alu_src2_imm    <= 1'b0;
+            ctrl_held.alu_op          <= ALU_ADD;
+            ctrl_held.mem_read        <= 1'b0;
+            ctrl_held.mem_write       <= 1'b0;
+            ctrl_held.mem_width       <= MEM_WORD;
+            ctrl_held.mem_sign_ext    <= 1'b0;
+            ctrl_held.is_branch       <= 1'b0;
+            ctrl_held.is_jump         <= 1'b0;
+            ctrl_held.is_jalr         <= 1'b0;
+            ctrl_held.branch_op       <= BR_EQ;
+            ctrl_held.wb_src          <= WB_ALU;
+            ctrl_held.is_ecall        <= 1'b0;
+            ctrl_held.is_ebreak       <= 1'b0;
+            ctrl_held.is_fence        <= 1'b0;
+            ctrl_held.is_mret         <= 1'b0;
+            ctrl_held.is_csr          <= 1'b0;
+            ctrl_held.csr_op          <= CSR_RW;
+            ctrl_held.csr_addr        <= 12'h000;
+            ctrl_held.csr_imm_mode    <= 1'b0;
+            ctrl_held.immediate       <= 32'h00000000;
+            ctrl_held.illegal         <= 1'b0;
+        end else if (ctrl.mem_read && !mem_stall) begin
+            // Capture LOAD instruction's ctrl on first cycle (when mem_stall=0)
+            byte_offset_held <= byte_offset;
+            ctrl_held        <= ctrl;
+            valid_held       <= valid;
+        end
+    end
+    
+    // Output selection - combinational for non-LOAD, held value during LOAD stall
     logic [1:0]       byte_offset_final;
     decode_ctrl_t     ctrl_final;
     logic             valid_final;
     
-    assign byte_offset_final = byte_offset;
-    assign ctrl_final = ctrl;
-    assign valid_final = valid;
+    assign byte_offset_final = mem_stall ? byte_offset_held : byte_offset;
+    assign ctrl_final        = mem_stall ? ctrl_held : ctrl;
+    assign valid_final       = mem_stall ? valid_held : valid;
     
     // Extract byte/halfword (combinational, for registered output below)
     logic [7:0]  load_byte;
