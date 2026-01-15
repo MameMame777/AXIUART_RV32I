@@ -56,11 +56,11 @@ module rv32i_top
     input  logic [4:0]  dbg_rf_addr,    // Register address to read
     output logic [31:0] dbg_rf_rdata,   // Register data output
     
-    // Trace buffer read interface (UART accessible)
-    input  logic [5:0]  dbg_trace_addr,   // Trace entry index to read
-    output logic [127:0] dbg_trace_data,  // Trace entry data [127:96]=PC [95:64]=insn [63:32]=rd_value [31:27]=rd_addr
-    output logic [5:0]  dbg_trace_wptr,   // Current write pointer
-    output logic [5:0]  dbg_trace_count,  // Number of valid entries
+    // Trace buffer read interface (UART accessible) - Updated to 192-bit format
+    input  logic [5:0]   dbg_trace_addr,   // Trace entry index to read
+    output logic [191:0] dbg_trace_data,   // Trace entry: [191:160]=PC [159:128]=insn [127:96]=rd_value [95:64]=rs1 [63:32]=rs2 [31:0]=control_flags
+    output logic [5:0]   dbg_trace_wptr,   // Current write pointer
+    output logic [5:0]   dbg_trace_count,  // Number of valid entries
     
     // Software reset interface
     input  logic        dbg_soft_reset,   // Software reset request (W1P)
@@ -284,6 +284,40 @@ module rv32i_top
     (* mark_debug = "true" *) logic dbg_ex_branch_taken;
     (* mark_debug = "true" *) logic [31:0] dbg_ex_branch_target;
     (* mark_debug = "true" *) logic dbg_exmem_branch_taken;
+    
+    //==========================================================================
+    // DEBUG SIGNALS FOR LB x19 INVESTIGATION
+    //==========================================================================
+    (* mark_debug = "true" *) logic [31:0] dbg_ram_rdata_if;
+    (* mark_debug = "true" *) logic [31:0] dbg_if_insn_out;
+    (* mark_debug = "true" *) logic [31:0] dbg_if_id_pc;
+    (* mark_debug = "true" *) logic [31:0] dbg_if_id_insn;
+    (* mark_debug = "true" *) logic        dbg_if_id_valid;
+    
+    (* mark_debug = "true" *) logic [31:0] dbg_id_ex_pc;
+    (* mark_debug = "true" *) logic [31:0] dbg_id_ex_insn;
+    (* mark_debug = "true" *) logic [4:0]  dbg_id_ex_rd_addr;
+    (* mark_debug = "true" *) logic        dbg_id_ex_rf_wen;
+    (* mark_debug = "true" *) logic        dbg_id_ex_mem_read;
+    (* mark_debug = "true" *) logic        dbg_id_ex_valid;
+    
+    (* mark_debug = "true" *) logic [31:0] dbg_ex_mem_pc;
+    (* mark_debug = "true" *) logic [4:0]  dbg_ex_mem_rd_addr;
+    (* mark_debug = "true" *) logic        dbg_ex_mem_rf_wen;
+    (* mark_debug = "true" *) logic        dbg_ex_mem_mem_read;
+    (* mark_debug = "true" *) logic        dbg_ex_mem_valid;
+    
+    (* mark_debug = "true" *) logic [31:0] dbg_mem_wb_pc;
+    (* mark_debug = "true" *) logic [4:0]  dbg_mem_wb_rd_addr;
+    (* mark_debug = "true" *) logic        dbg_mem_wb_rf_wen;
+    (* mark_debug = "true" *) logic [31:0] dbg_mem_wb_mem_data;
+    (* mark_debug = "true" *) logic        dbg_mem_wb_valid;
+    
+    (* mark_debug = "true" *) logic [4:0]  dbg_rf_waddr_actual;
+    (* mark_debug = "true" *) logic [31:0] dbg_rf_wdata_actual;
+    (* mark_debug = "true" *) logic        dbg_rf_wen_actual;
+    
+    (* mark_debug = "true" *) logic [1:0]  dbg_mem_state_enum;
     
     rv32i_if u_if (
         .pc_current      (if_pc_current),
@@ -711,6 +745,7 @@ module rv32i_top
         .ctrl            (ex_mem_reg.ctrl),
         .valid           (ex_mem_reg.valid),
         .debug_mode_enable (debug_mode_enable),
+        .mem_stall       (mem_stall),  // Hold ctrl_final during LOAD wait
         .data_ram_rdata  (ram_rdata_mem),
         .data_ram_addr   (ram_addr_mem),
         .data_ram_wdata  (ram_wdata_mem),
@@ -1040,5 +1075,39 @@ module rv32i_top
         .write_ptr       (),
         .entry_count     ()
     );
+    
+    //==========================================================================
+    // DEBUG SIGNAL ASSIGNMENTS FOR LB x19 INVESTIGATION
+    //==========================================================================
+    assign dbg_ram_rdata_if     = ram_rdata_if;
+    assign dbg_if_insn_out      = if_insn_out;
+    assign dbg_if_id_pc         = if_id_reg.pc;
+    assign dbg_if_id_insn       = if_id_reg.insn;
+    assign dbg_if_id_valid      = if_id_reg.valid;
+    
+    assign dbg_id_ex_pc         = id_ex_reg.pc;
+    assign dbg_id_ex_insn       = id_ex_reg.insn;
+    assign dbg_id_ex_rd_addr    = id_ex_reg.ctrl.rd_addr;
+    assign dbg_id_ex_rf_wen     = id_ex_reg.ctrl.rf_wen;
+    assign dbg_id_ex_mem_read   = id_ex_reg.ctrl.mem_read;
+    assign dbg_id_ex_valid      = id_ex_reg.valid;
+    
+    assign dbg_ex_mem_pc        = ex_mem_reg.pc;
+    assign dbg_ex_mem_rd_addr   = ex_mem_reg.ctrl.rd_addr;
+    assign dbg_ex_mem_rf_wen    = ex_mem_reg.ctrl.rf_wen;
+    assign dbg_ex_mem_mem_read  = ex_mem_reg.ctrl.mem_read;
+    assign dbg_ex_mem_valid     = ex_mem_reg.valid;
+    
+    assign dbg_mem_wb_pc        = mem_wb_reg.pc;
+    assign dbg_mem_wb_rd_addr   = mem_wb_reg.ctrl.rd_addr;
+    assign dbg_mem_wb_rf_wen    = mem_wb_reg.ctrl.rf_wen;
+    assign dbg_mem_wb_mem_data  = mem_wb_reg.mem_data;
+    assign dbg_mem_wb_valid     = mem_wb_reg.valid;
+    
+    assign dbg_rf_waddr_actual  = rf_waddr;
+    assign dbg_rf_wdata_actual  = rf_wdata;
+    assign dbg_rf_wen_actual    = rf_wen;
+    
+    assign dbg_mem_state_enum   = mem_state;
 
 endmodule : rv32i_top

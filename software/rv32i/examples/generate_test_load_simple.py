@@ -126,8 +126,8 @@ instructions.append(encode_s_type(0b0100011, 0b010, 26, 25, 0))  # sw x25, 0(x26
 # EBREAK to signal completion
 instructions.append(0x00100073)
 
-# Write to hex file
-output_file = "sim/tests/test_load_simple.hex"
+# Write to hex file (matches UVM test expectation: rv32i_load_simple_test.hex)
+output_file = "sim/tests/rv32i_load_simple_test.hex"
 with open(output_file, "w") as f:
     for insn in instructions:
         f.write(f"{insn:08x}\n")

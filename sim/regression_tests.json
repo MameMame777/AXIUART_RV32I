@@ -50,6 +50,27 @@
       "description": "RV32I CPU basic verification",
       "tests": [
         {
+          "name": "rv32i_basic_imm_test",
+          "description": "Test 1.1: Basic immediate instructions (ADDI) - Issue #1 validation",
+          "timeout": 60,
+          "expected_duration": 15,
+          "notes": "Critical test validating ADDI rd field decoding fix"
+        },
+        {
+          "name": "rv32i_upper_imm_test",
+          "description": "Test 1.2: Upper immediate instructions (LUI/AUIPC)",
+          "timeout": 60,
+          "expected_duration": 15,
+          "notes": "Tests LUI and AUIPC with various immediate values and PC-relative addressing"
+        },
+        {
+          "name": "rv32i_imm_logic_test",
+          "description": "Test 1.3: Immediate arithmetic/logic (SLTI/SLTIU/XORI/ORI/ANDI)",
+          "timeout": 60,
+          "expected_duration": 15,
+          "notes": "Tests comparison and bitwise immediate instructions"
+        },
+        {
           "name": "rv32i_basic_test",
           "description": "RV32I basic instruction execution (ADD, ADDI, LW, SW, EBREAK)",
           "timeout": 120,
