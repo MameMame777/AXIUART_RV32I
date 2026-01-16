@@ -71,6 +71,33 @@
           "notes": "Tests comparison and bitwise immediate instructions"
         },
         {
+          "name": "rv32i_shift_imm_test",
+          "description": "Test 1.4: Shift immediate (SLLI/SRLI/SRAI) with edge cases",
+          "timeout": 60,
+          "expected_duration": 15,
+          "notes": "Critical: Verifies SRLI/SRAI distinction on negative operands"
+        },        {
+            "name": "rv32i_reg_alu_test",
+            "description": "Test 2.1: R-type register ALU (ADD/SUB/SLT/SLTU/XOR/OR/AND)",
+            "timeout": 60,
+            "expected_duration": 20,
+            "notes": "Phase 2 start: Register operations with overflow/underflow, signed vs unsigned"
+        },
+        {
+            "name": "rv32i_reg_shift_test",
+            "description": "Test 2.3: R-type register shift (SLL/SRL/SRA) with register amounts",
+            "timeout": 60,
+            "expected_duration": 18,
+            "notes": "Phase 2 complete: Register shift vs immediate shift, SRL/SRA distinction"
+        },
+        {
+            "name": "rv32i_load_simple_test",
+            "description": "Test 3.2/3.3: LOAD instructions (LW/LH/LHU/LB/LBU) + load-use hazard",
+            "timeout": 60,
+            "expected_duration": 20,
+            "notes": "Phase 3 complete: All LOAD variants with sign/zero extension + load-use stall verification (Test 3.3 integrated)"
+        },
+        {
           "name": "rv32i_basic_test",
           "description": "RV32I basic instruction execution (ADD, ADDI, LW, SW, EBREAK)",
           "timeout": 120,
