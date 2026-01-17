@@ -168,3 +168,7 @@ sim/exec/logs/*csv
 sim/exec/reports/
 PandR/axi4_rv32i/*.xpr
 sim/regression_tests.json
+vexriscv_reference/config/GenSmallOptimized.scala
+vexriscv_reference/generated/cpu.yaml
+vexriscv_reference/generated/VexRiscv_GenSmallAndProductive.v
+vexriscv_reference/generated/VexRiscv.v
