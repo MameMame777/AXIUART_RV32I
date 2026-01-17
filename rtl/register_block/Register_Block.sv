@@ -445,7 +445,7 @@ module Register_Block #(
             cpu_mem_addr_reg <= 32'h0000_0000;
             cpu_mem_wdata_reg <= 32'h0000_0000;
             cpu_mem_rdata_reg <= 32'h0000_0000;
-            cpu_mem_ctrl_reg <= 32'h0000_0000;
+            cpu_mem_ctrl_reg <= 32'h0000_0100;  // Bit[8]=1 (HALT) - Start with CPU halted
             latched_mem_addr <= 32'h0000_0000;
             latched_mem_wdata <= 32'h0000_0000;
             

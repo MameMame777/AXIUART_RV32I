@@ -25,6 +25,9 @@
 # Generated Register Package (from register_map/axiuart_registers.json)
 ../../../rtl/register_block/axiuart_reg_pkg.sv
 
+# UVM Package (environment, agents, sequences)
+../sv/axiuart_pkg.sv
+
 # Generated ISA package (from isa/)
 # ../../../rtl/cpu/rv32i_isa_pkg.sv  # Legacy RV32I - not used
 
