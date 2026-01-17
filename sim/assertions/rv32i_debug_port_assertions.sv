@@ -258,6 +258,10 @@ endmodule
 //==============================================================================
 // Bind Statement
 //==============================================================================
+// NOTE: Temporarily disabled for VexRiscv integration
+// VexRiscv uses different internal structure (no rv32i_core module)
+// TODO: Create vexriscv_debug_port_assertions.sv for VexRiscv-specific checks
+/*
 bind rv32i_core rv32i_debug_port_assertions u_debug_port_assertions (
     .clk(clk),
     .rst_n(rst_n),
@@ -277,3 +281,4 @@ bind rv32i_core rv32i_debug_port_assertions u_debug_port_assertions (
     // BRAM control
     .ram_ena_b(ram_ena_b)
 );
+*/
