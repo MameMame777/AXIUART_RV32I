@@ -719,6 +719,143 @@ def create_fastmcp_server() -> FastMCP:
         return logs_data
 
     @mcp.tool
+    def compile_rtl_modules(
+        file_list: str,
+        top_module: Optional[str] = None,
+        work_lib: str = "work",
+        image_name: str = "rtl_compile",
+        timeout: int = 120
+    ) -> Dict[str, Any]:
+        """
+        Compile standalone RTL modules using DSIM (non-UVM)
+        
+        Args:
+            file_list: Path to file list (.f file) relative to workspace
+            top_module: Optional top module name
+            work_lib: Work library name (default: work)
+            image_name: Output image name
+            timeout: Compilation timeout in seconds
+            
+        Returns:
+            Compilation results with status and diagnostics
+        """
+        import subprocess
+        
+        workspace = get_workspace_path()
+        file_list_path = workspace / file_list
+        
+        if not file_list_path.exists():
+            return {
+                "status": "error",
+                "message": f"File list not found: {file_list_path}",
+                "file_list": str(file_list_path)
+            }
+        
+        # Get DSIM executable
+        dsim_home = os.environ.get("DSIM_HOME")
+        if not dsim_home:
+            return {
+                "status": "error",
+                "message": "DSIM_HOME environment variable not set"
+            }
+        
+        dsim_exe = Path(dsim_home) / "bin" / "dsim.exe"
+        if not dsim_exe.exists():
+            return {
+                "status": "error",
+                "message": f"DSIM executable not found: {dsim_exe}"
+            }
+        
+        # Build DSIM command
+        cmd = [
+            str(dsim_exe),
+            "-timescale", "1ns/1ps",
+            "+define+DEFINE_SIM",
+            "-work", work_lib,
+            "-genimage", image_name,
+            "-f", str(file_list_path)
+        ]
+        
+        if top_module:
+            cmd.extend(["-top", top_module])
+        
+        logger.info(f"Compiling RTL modules from {file_list}")
+        logger.info(f"Command: {' '.join(cmd)}")
+        
+        # Prepare environment with DSIM paths
+        env = os.environ.copy()
+        if dsim_home:
+            env["DSIM_HOME"] = dsim_home
+            env["DSIM_ROOT"] = dsim_home
+            env["DSIM_LIB_PATH"] = str(Path(dsim_home) / "lib")
+            # Add DSIM bin to PATH
+            env["PATH"] = str(Path(dsim_home) / "bin") + os.pathsep + env.get("PATH", "")
+        
+        try:
+            # Run compilation (synchronous)
+            result = subprocess.run(
+                cmd,
+                cwd=str(workspace),
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                env=env
+            )
+            
+            stdout_text = result.stdout
+            stderr_text = result.stderr
+            
+            # Analyze output
+            errors = []
+            warnings = []
+            
+            for line in stdout_text.split('\n') + stderr_text.split('\n'):
+                if 'error' in line.lower() and line.strip():
+                    errors.append(line.strip())
+                elif 'warning' in line.lower() and line.strip():
+                    warnings.append(line.strip())
+            
+            # Check for successful compilation
+            if result.returncode == 0:
+                return {
+                    "status": "success",
+                    "message": "RTL modules compiled successfully",
+                    "file_list": file_list,
+                    "work_lib": work_lib,
+                    "image_name": image_name,
+                    "warnings": warnings,
+                    "stdout": stdout_text,
+                    "exit_code": result.returncode
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": "Compilation failed",
+                    "file_list": file_list,
+                    "errors": errors,
+                    "warnings": warnings,
+                    "stdout": stdout_text,
+                    "stderr": stderr_text,
+                    "exit_code": result.returncode
+                }
+                
+        except subprocess.TimeoutExpired:
+            return {
+                "status": "timeout",
+                "message": f"Compilation exceeded {timeout}s timeout",
+                "command": ' '.join(cmd),
+                "file_list": file_list
+            }
+        except Exception as e:
+            logger.error(f"RTL compilation error: {e}", exc_info=True)
+            return {
+                "status": "error",
+                "message": f"Compilation exception: {str(e)}",
+                "error_type": type(e).__name__,
+                "file_list": file_list
+            }
+
+    @mcp.tool
     def run_regression_suite(
         suite: str = "smoke",
         stop_on_failure: bool = False,
