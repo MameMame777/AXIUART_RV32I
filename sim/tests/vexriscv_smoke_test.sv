@@ -231,8 +231,8 @@ class vexriscv_smoke_test extends axiuart_base_test;
     task write_register(input bit [31:0] addr, input bit [31:0] data);
         uart_reg_write_sequence write_seq;
         write_seq = uart_reg_write_sequence::type_id::create("write_seq");
-        write_seq.addr = addr;
-        write_seq.data = data;
+        write_seq.reg_addr = addr;
+        write_seq.reg_data = data;
         write_seq.start(env.uart_agt.sequencer);
     endtask
     
@@ -240,7 +240,7 @@ class vexriscv_smoke_test extends axiuart_base_test;
     task read_register(input bit [31:0] addr, output bit [31:0] data);
         uart_reg_read_sequence read_seq;
         read_seq = uart_reg_read_sequence::type_id::create("read_seq");
-        read_seq.addr = addr;
+        read_seq.reg_addr = addr;
         read_seq.start(env.uart_agt.sequencer);
         data = read_seq.read_data;
     endtask
