@@ -57,6 +57,13 @@ def _parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--path", type=str, help="File path for analysis tools")
     parser.add_argument("--test-scenario", type=str, default="", help="Scenario name to append to plusargs")
     parser.add_argument("--list-tools", action="store_true", help="List available tools and exit")
+    
+    # RTL compilation arguments
+    parser.add_argument("--file-list", type=str, help="File list path for RTL compilation")
+    parser.add_argument("--top-module", type=str, help="Top module name for RTL compilation")
+    parser.add_argument("--work-lib", type=str, default="work", help="Work library name")
+    parser.add_argument("--image-name", type=str, default="rtl_compile", help="Output image name")
+    
     return parser.parse_args(argv)
 
 
@@ -125,6 +132,20 @@ def _resolve_tool_invocation(args: argparse.Namespace) -> Tuple[str, Dict[str, A
             tool_args["timeout"] = args.timeout
         if plusargs:
             tool_args["plusargs"] = plusargs
+        return args.tool, tool_args
+
+    if args.tool == "compile_rtl_modules":
+        if not args.file_list:
+            raise ValueError("--file-list is required for compile_rtl_modules")
+        tool_args = {
+            "file_list": args.file_list,
+            "work_lib": args.work_lib,
+            "image_name": args.image_name,
+        }
+        if args.top_module:
+            tool_args["top_module"] = args.top_module
+        if args.timeout is not None:
+            tool_args["timeout"] = args.timeout
         return args.tool, tool_args
 
     tool_args: Dict[str, Any] = {}
