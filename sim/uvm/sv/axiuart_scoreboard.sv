@@ -115,6 +115,10 @@ class axiuart_scoreboard extends uvm_scoreboard;
             verify_read_response(trans);
         end else if (!trans.is_read && !trans.is_reset && !trans.is_response) begin
             // This is a write transaction (exclude WRITE_ACK which has is_response=1)
+            `uvm_info("SCOREBOARD", 
+                $sformatf("Processing WRITE: ADDR=0x%08X DATA=0x%08X", 
+                          trans.address, trans.data), 
+                UVM_HIGH)
             track_write_transaction(trans);
         end
     endfunction
@@ -123,10 +127,11 @@ class axiuart_scoreboard extends uvm_scoreboard;
     virtual function void track_write_transaction(uart_transaction trans);
         // Track CPU memory debug operations
         if (trans.address == axiuart_reg_pkg::REG_CPU_MEM_ADDR) begin
-            pending_cpu_mem_addr = trans.data[10:0];  // Extract 11-bit word address
+            pending_cpu_mem_addr = trans.data[12:2];  // Convert byte address to word address
             `uvm_info("SCOREBOARD", 
-                $sformatf("CPU_MEM_ADDR set: 0x%03X (word address)", pending_cpu_mem_addr), 
-                UVM_HIGH)
+                $sformatf("CPU_MEM_ADDR set: 0x%03X (word address from byte address 0x%08X)", 
+                          pending_cpu_mem_addr, trans.data), 
+                UVM_MEDIUM)
         end else if (trans.address == axiuart_reg_pkg::REG_CPU_MEM_WDATA) begin
             cpu_memory_shadow[pending_cpu_mem_addr] = trans.data;  // Full 32-bit data
             cpu_memory_write_count++;
@@ -141,7 +146,7 @@ class axiuart_scoreboard extends uvm_scoreboard;
                 `uvm_info("SCOREBOARD", 
                     $sformatf("CPU_MEM read request queued: ADDR=0x%03X (queue size: %0d)", 
                               pending_cpu_mem_addr, cpu_mem_read_queue.size()), 
-                    UVM_HIGH)
+                    UVM_MEDIUM)
             end
         end
         

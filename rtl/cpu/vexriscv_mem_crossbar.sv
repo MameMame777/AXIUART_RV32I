@@ -361,8 +361,8 @@ module vexriscv_mem_crossbar (
     //=================================================================
     
     always_comb begin
-        if (cpu_halted && (dbg_state != DBG_IDLE)) begin
-            // Debug access
+        if (cpu_halted && (dbg_mem_re || (|dbg_mem_we))) begin
+            // Debug access (active check, not state-based)
             ram_a_en        = 1'b1;
             ram_a_addr      = dbg_mem_addr;
             ram_a_we        = dbg_mem_we;
