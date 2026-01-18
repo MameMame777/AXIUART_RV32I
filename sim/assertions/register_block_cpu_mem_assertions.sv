@@ -327,6 +327,60 @@ module register_block_cpu_mem_assertions #(
             end
         end
     end
+    
+    //==========================================================================
+    // Hardware Address Logging - Evidence Collection
+    //==========================================================================
+    // Log actual hardware addresses at the moment of operation
+    // This provides concrete evidence of what addresses hardware actually uses
+    logic prev_rv32i_mem_re;
+    logic [3:0] prev_rv32i_mem_we;
+    
+    always @(posedge clk) begin
+        if (!rst_n) begin
+            prev_rv32i_mem_re <= 1'b0;
+            prev_rv32i_mem_we <= 4'b0000;
+        end else begin
+            prev_rv32i_mem_re <= rv32i_mem_re;
+            prev_rv32i_mem_we <= rv32i_mem_we;
+            
+            // Log when read enable transitions from 0→1 (read operation starts)
+            if (rv32i_mem_re && !prev_rv32i_mem_re) begin
+                $display("[HW_READ] Time=%0t rv32i_mem_addr=0x%03X cpu_mem_addr_reg=0x%08X latched_expected=0x%03X", 
+                         $time, rv32i_mem_addr, cpu_mem_addr_reg, expected_addr);
+            end
+            
+            // Log when write enable transitions from 0000→non-zero (write operation starts)
+            if ((rv32i_mem_we != 4'b0000) && (prev_rv32i_mem_we == 4'b0000)) begin
+                $display("[HW_WRITE] Time=%0t rv32i_mem_addr=0x%03X rv32i_mem_wdata=0x%08X cpu_mem_addr_reg=0x%08X latched_expected=0x%03X", 
+                         $time, rv32i_mem_addr, rv32i_mem_wdata, cpu_mem_addr_reg, expected_addr);
+            end
+        end
+    end
+    
+    always @(posedge clk) begin
+        if (rst_n) begin
+            // Log when CPU_MEM_CTRL write request occurs (scoreboard queue insertion point)
+            if (is_write_to_reg(REG_CPU_MEM_CTRL) && axi_wvalid && axi_wready && axi_wstrb[0]) begin
+                if (axi_wdata[5]) begin
+                    $display("[HW_CTRL_WRITE_REQ] Time=%0t cpu_mem_addr_reg=0x%08X (word_addr=0x%03X) cpu_mem_wdata_reg=0x%08X", 
+                             $time, cpu_mem_addr_reg, cpu_mem_addr_reg[12:2], cpu_mem_wdata_reg);
+                end
+                if (axi_wdata[4]) begin
+                    $display("[HW_CTRL_READ_REQ] Time=%0t cpu_mem_addr_reg=0x%08X (word_addr=0x%03X)", 
+                             $time, cpu_mem_addr_reg, cpu_mem_addr_reg[12:2]);
+                end
+            end
+            
+            // Log when CPU_MEM_ADDR register is written (address update point)
+            if (is_write_to_reg(REG_CPU_MEM_ADDR) && axi_wvalid && axi_wready) begin
+                logic [31:0] new_addr;
+                new_addr = apply_wstrb(cpu_mem_addr_reg, axi_wdata, axi_wstrb);
+                $display("[HW_ADDR_WRITE] Time=%0t new_cpu_mem_addr=0x%08X (word_addr=0x%03X) old=0x%08X", 
+                         $time, new_addr, new_addr[12:2], cpu_mem_addr_reg);
+            end
+        end
+    end
 
 endmodule
 
