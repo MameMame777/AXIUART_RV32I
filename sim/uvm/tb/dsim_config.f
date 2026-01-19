@@ -59,7 +59,7 @@
 ../../../rtl/cpu/vexriscv_branch.sv
 ../../../rtl/cpu/vexriscv_csr.sv
 ../../../rtl/cpu/vexriscv_execute.sv
-../../../rtl/cpu/vexriscv_decoder.sv
+../../../rtl/cpu/vexriscv_decoder_unoptimized.sv
 ../../../rtl/cpu/vexriscv_top.sv
 
 # RTL Design Files - VexRiscv UART Integration
