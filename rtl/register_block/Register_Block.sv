@@ -128,7 +128,6 @@ module Register_Block #(
     // RV32I CPU memory access registers
     logic [31:0] cpu_mem_addr_reg;     // RV32I memory address (byte address)
     logic [31:0] cpu_mem_wdata_reg;    // RV32I memory write data
-    logic [31:0] cpu_mem_rdata_reg;    // RV32I memory read data
     logic [31:0] cpu_mem_ctrl_reg;     // RV32I memory control
     
     // RV32I Debug Registers
@@ -444,8 +443,7 @@ module Register_Block #(
             // RV32I CPU memory access registers
             cpu_mem_addr_reg <= 32'h0000_0000;
             cpu_mem_wdata_reg <= 32'h0000_0000;
-            cpu_mem_rdata_reg <= 32'h0000_0000;
-            cpu_mem_ctrl_reg <= 32'h0000_0000;
+            cpu_mem_ctrl_reg <= 32'h0000_0000;  // All bits=0 - CPU starts in HALTED (controlled by state machine)
             latched_mem_addr <= 32'h0000_0000;
             latched_mem_wdata <= 32'h0000_0000;
             
@@ -478,16 +476,13 @@ module Register_Block #(
             end else if (rv32i_mem_busy) begin
                 // For reads: keep busy for 2 cycles (BRAM latency)
                 // For writes: 1 cycle is sufficient
-                if (rv32i_mem_last_was_read && rv32i_mem_busy_q) begin
-                    rv32i_mem_busy <= 1'b1;  // Stay busy 1 more cycle for read
+                // Logic: Stay busy only on FIRST cycle after RE (busy_q was 0)
+                //        On SECOND cycle (busy_q now 1), clear busy
+                if (rv32i_mem_last_was_read && !rv32i_mem_busy_q) begin
+                    rv32i_mem_busy <= 1'b1;  // Stay busy 1 more cycle for read (1st→2nd)
                 end else begin
-                    rv32i_mem_busy <= 1'b0;  // Operation complete
+                    rv32i_mem_busy <= 1'b0;  // Operation complete (2nd→done or write→done)
                 end
-            end
-            
-            // Capture RV32I read data when busy completes (data now valid)
-            if (rv32i_mem_busy_q && !rv32i_mem_busy && rv32i_mem_last_was_read) begin
-                cpu_mem_rdata_reg <= rv32i_mem_rdata;
             end
             
             // Clear RV32I control signals after operation starts
@@ -704,24 +699,10 @@ module Register_Block #(
                 end
             end
             
-            // RV32I memory busy tracking (1-cycle registered RAM)
-            rv32i_mem_busy_q <= rv32i_mem_busy;
-            if (rv32i_mem_busy) begin
-                // Clear control signals after 1 cycle
-                rv32i_mem_we <= 4'b0000;
-                rv32i_mem_re <= 1'b0;
-                rv32i_mem_busy <= 1'b0;
-            end
-            
             // Clear W1P (Write-1-Pulse) bits after one cycle
             // These bits pulse high for one cycle then auto-clear
             dbg_reset_ctrl_reg[0] <= 1'b0;  // soft_reset (W1P)
             dbg_reset_ctrl_reg[2] <= 1'b0;  // single_step (W1P)
-            
-            // Capture RV32I read data when busy completes and was a read operation
-            if (!rv32i_mem_busy && rv32i_mem_busy_q && rv32i_mem_last_was_read) begin
-                cpu_mem_rdata_reg <= rv32i_mem_rdata;
-            end
         end
     end
     
@@ -812,7 +793,7 @@ module Register_Block #(
                 end
 
                 REG_CPU_MEM_RDATA: begin
-                    read_data = cpu_mem_rdata_reg;
+                    read_data = rv32i_mem_rdata;  // Direct connection to BRAM output
                 end
 
                 REG_CPU_MEM_CTRL: begin

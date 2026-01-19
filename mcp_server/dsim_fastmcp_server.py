@@ -248,6 +248,106 @@ def _analyze_simulation_output(output: str, waves: bool) -> Dict[str, Union[bool
     return result
 
 # ===============================================================================
+# VexRiscv Helper Functions
+# ===============================================================================
+
+def _parse_vexriscv_hex(hex_file: Path, address_offset: int = -0x80000000) -> Dict[str, Any]:
+    """
+    Parse Intel HEX file with address translation for VexRiscv tests.
+    
+    Args:
+        hex_file: Path to .hex file
+        address_offset: Translation offset (default -0x80000000 for VexRiscv→bare-metal)
+        
+    Returns:
+        Dictionary with memory_data, word_data, and special_addresses
+    """
+    # Import hex loader - find mcp_server/tools relative to this file
+    current_dir = Path(__file__).parent
+    tools_path = current_dir / "tools"
+    
+    if str(tools_path) not in sys.path:
+        sys.path.insert(0, str(tools_path))
+    
+    try:
+        from vexriscv_hex_loader import VexRiscvHexLoader
+        
+        loader = VexRiscvHexLoader(str(hex_file), address_offset=address_offset)
+        memory_data = loader.parse_hex()
+        word_data = loader.get_word_aligned_data()
+        special_addrs = loader.translate_special_addresses()
+        
+        return {
+            'memory_data': memory_data,
+            'word_data': word_data,
+            'special_addresses': special_addrs
+        }
+    finally:
+        # Remove from path to avoid pollution
+        if str(tools_path) in sys.path:
+            sys.path.remove(str(tools_path))
+
+def _classify_vexriscv_test(test_name: str) -> str:
+    """Classify VexRiscv test by pattern matching."""
+    if test_name.startswith('rv32ui-p-'):
+        return 'isa'
+    elif test_name.startswith('I-'):
+        return 'compliance'
+    elif 'dhrystone' in test_name or 'coremark' in test_name:
+        return 'benchmark'
+    else:
+        return 'custom'
+
+def _extract_tohost_value(output: str) -> int:
+    """Extract tohost value from simulation output."""
+    # Look for tohost write patterns in UVM output
+    patterns = [
+        r'tohost.*?(?:=|:)\s*(?:0x)?([0-9a-fA-F]+)',
+        r'TEST\s+(?:PASSED|FAILED).*?tohost.*?(?:0x)?([0-9a-fA-F]+)',
+        r'tohost_value\s*(?:=|:)\s*(?:0x)?([0-9a-fA-F]+)'
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, output, re.IGNORECASE)
+        if match:
+            return int(match.group(1), 16)
+    
+    # Default: assume pass if "TEST PASSED" present
+    if "TEST PASSED" in output:
+        return 1
+    
+    return 0
+
+def _extract_cycle_count(output: str) -> int:
+    """Extract total cycle count from simulation output."""
+    patterns = [
+        r'(\d+)\s+cycles',
+        r'cycle\s+count:\s*(\d+)',
+        r'total\s+cycles:\s*(\d+)'
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, output, re.IGNORECASE)
+        if match:
+            return int(match.group(1))
+    
+    return 0
+
+def _find_latest_mxd(workspace: Path) -> str:
+    """Find most recent MXD waveform file."""
+    wave_dir = workspace / "sim" / "exec" / "wave"
+    
+    if not wave_dir.exists():
+        return ""
+    
+    mxd_files = list(wave_dir.glob("*.mxd"))
+    if not mxd_files:
+        return ""
+    
+    latest = max(mxd_files, key=lambda p: p.stat().st_mtime)
+    return str(latest)
+
+# ===============================================================================
 # FastMCP Server and Tools Setup
 # ===============================================================================
 
@@ -719,6 +819,143 @@ def create_fastmcp_server() -> FastMCP:
         return logs_data
 
     @mcp.tool
+    def compile_rtl_modules(
+        file_list: str,
+        top_module: Optional[str] = None,
+        work_lib: str = "work",
+        image_name: str = "rtl_compile",
+        timeout: int = 120
+    ) -> Dict[str, Any]:
+        """
+        Compile standalone RTL modules using DSIM (non-UVM)
+        
+        Args:
+            file_list: Path to file list (.f file) relative to workspace
+            top_module: Optional top module name
+            work_lib: Work library name (default: work)
+            image_name: Output image name
+            timeout: Compilation timeout in seconds
+            
+        Returns:
+            Compilation results with status and diagnostics
+        """
+        import subprocess
+        
+        workspace = get_workspace_path()
+        file_list_path = workspace / file_list
+        
+        if not file_list_path.exists():
+            return {
+                "status": "error",
+                "message": f"File list not found: {file_list_path}",
+                "file_list": str(file_list_path)
+            }
+        
+        # Get DSIM executable
+        dsim_home = os.environ.get("DSIM_HOME")
+        if not dsim_home:
+            return {
+                "status": "error",
+                "message": "DSIM_HOME environment variable not set"
+            }
+        
+        dsim_exe = Path(dsim_home) / "bin" / "dsim.exe"
+        if not dsim_exe.exists():
+            return {
+                "status": "error",
+                "message": f"DSIM executable not found: {dsim_exe}"
+            }
+        
+        # Build DSIM command
+        cmd = [
+            str(dsim_exe),
+            "-timescale", "1ns/1ps",
+            "+define+DEFINE_SIM",
+            "-work", work_lib,
+            "-genimage", image_name,
+            "-f", str(file_list_path)
+        ]
+        
+        if top_module:
+            cmd.extend(["-top", top_module])
+        
+        logger.info(f"Compiling RTL modules from {file_list}")
+        logger.info(f"Command: {' '.join(cmd)}")
+        
+        # Prepare environment with DSIM paths
+        env = os.environ.copy()
+        if dsim_home:
+            env["DSIM_HOME"] = dsim_home
+            env["DSIM_ROOT"] = dsim_home
+            env["DSIM_LIB_PATH"] = str(Path(dsim_home) / "lib")
+            # Add DSIM bin to PATH
+            env["PATH"] = str(Path(dsim_home) / "bin") + os.pathsep + env.get("PATH", "")
+        
+        try:
+            # Run compilation (synchronous)
+            result = subprocess.run(
+                cmd,
+                cwd=str(workspace),
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                env=env
+            )
+            
+            stdout_text = result.stdout
+            stderr_text = result.stderr
+            
+            # Analyze output
+            errors = []
+            warnings = []
+            
+            for line in stdout_text.split('\n') + stderr_text.split('\n'):
+                if 'error' in line.lower() and line.strip():
+                    errors.append(line.strip())
+                elif 'warning' in line.lower() and line.strip():
+                    warnings.append(line.strip())
+            
+            # Check for successful compilation
+            if result.returncode == 0:
+                return {
+                    "status": "success",
+                    "message": "RTL modules compiled successfully",
+                    "file_list": file_list,
+                    "work_lib": work_lib,
+                    "image_name": image_name,
+                    "warnings": warnings,
+                    "stdout": stdout_text,
+                    "exit_code": result.returncode
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": "Compilation failed",
+                    "file_list": file_list,
+                    "errors": errors,
+                    "warnings": warnings,
+                    "stdout": stdout_text,
+                    "stderr": stderr_text,
+                    "exit_code": result.returncode
+                }
+                
+        except subprocess.TimeoutExpired:
+            return {
+                "status": "timeout",
+                "message": f"Compilation exceeded {timeout}s timeout",
+                "command": ' '.join(cmd),
+                "file_list": file_list
+            }
+        except Exception as e:
+            logger.error(f"RTL compilation error: {e}", exc_info=True)
+            return {
+                "status": "error",
+                "message": f"Compilation exception: {str(e)}",
+                "error_type": type(e).__name__,
+                "file_list": file_list
+            }
+
+    @mcp.tool
     def run_regression_suite(
         suite: str = "smoke",
         stop_on_failure: bool = False,
@@ -803,6 +1040,151 @@ def create_fastmcp_server() -> FastMCP:
                 "status": "error",
                 "error": str(e),
                 "suite": suite
+            }
+
+    # ===============================================================================
+    # VexRiscv Test Tools
+    # ===============================================================================
+
+    @mcp.tool
+    def list_vexriscv_tests(
+        category: Literal["isa", "compliance", "benchmark", "all"] = "all"
+    ) -> Dict[str, Any]:
+        """
+        List available VexRiscv test programs from upstream test suite.
+        
+        Args:
+            category: Filter by test type (isa, compliance, benchmark, all)
+            
+        Returns:
+            Dictionary with test list and metadata
+        """
+        test_dir = workspace / "vexriscv_reference" / "source" / "src" / "test" / "resources" / "hex"
+        
+        if not test_dir.exists():
+            return {
+                "status": "error",
+                "message": f"VexRiscv test directory not found: {test_dir}",
+                "tests": [],
+                "total_count": 0
+            }
+        
+        # Category filters
+        patterns = {
+            "isa": "rv32ui-p-*.hex",
+            "compliance": "I-*.hex",
+            "benchmark": "*dhrystone*.hex"
+        }
+        
+        pattern = patterns.get(category, "*.hex") if category != "all" else "*.hex"
+        hex_files = list(test_dir.glob(pattern))
+        
+        tests = []
+        for hex_file in sorted(hex_files):
+            test_name = hex_file.stem
+            tests.append({
+                "name": test_name,
+                "file": str(hex_file),
+                "category": _classify_vexriscv_test(test_name),
+                "size": hex_file.stat().st_size
+            })
+        
+        return {
+            "status": "success",
+            "tests": tests,
+            "total_count": len(tests),
+            "test_directory": str(test_dir),
+            "category_filter": category
+        }
+
+    @mcp.tool
+    async def run_vexriscv_isa_test(
+        test_name: str,
+        timeout_cycles: int = 10000,
+        waves: bool = False,
+        verbosity: Literal["UVM_NONE", "UVM_LOW", "UVM_MEDIUM", "UVM_HIGH", "UVM_FULL", "UVM_DEBUG"] = "UVM_MEDIUM"
+    ) -> Dict[str, Any]:
+        """
+        Run VexRiscv ISA test with automatic hex loading and tohost monitoring.
+        
+        Args:
+            test_name: Test name without .hex extension (e.g., "rv32ui-p-add")
+            timeout_cycles: Maximum simulation cycles
+            waves: Enable waveform generation
+            verbosity: UVM verbosity level
+            
+        Returns:
+            Test results with pass/fail status and tohost value
+        """
+        # Locate hex file
+        hex_file = workspace / "vexriscv_reference" / "source" / "src" / "test" / "resources" / "hex" / f"{test_name}.hex"
+        
+        if not hex_file.exists():
+            return {
+                "status": "error",
+                "message": f"Hex file not found: {hex_file}",
+                "test_name": test_name
+            }
+        
+        # Parse hex file to get special addresses
+        try:
+            hex_data = _parse_vexriscv_hex(hex_file, address_offset=-0x80000000)
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"Failed to parse hex file: {str(e)}",
+                "test_name": test_name
+            }
+        
+        # Build plusargs for hex data injection and tohost config
+        plusargs = [
+            f"+HEX_FILE={hex_file}",
+            f"+TOHOST_ADDR={hex_data['special_addresses']['tohost']:08x}",
+            f"+TIMEOUT_CYCLES={timeout_cycles}",
+            "+USE_TOHOST_CHECKING=1"
+        ]
+        
+        # Execute simulation using existing run_uvm_simulation
+        try:
+            result = await _execute_simulation(
+                test_name="vexriscv_isa_test",
+                mode="run",
+                verbosity=verbosity,
+                waves=waves,
+                coverage=False,
+                seed=1,
+                timeout=None,  # Use cycle-based timeout
+                plusargs=plusargs
+            )
+            
+            # Parse tohost value from simulation output
+            if result.get("success"):
+                tohost_value = _extract_tohost_value(result.get("output", ""))
+                test_status = "pass" if tohost_value == 1 else "fail"
+                
+                return {
+                    "status": test_status,
+                    "tohost_value": tohost_value,
+                    "test_name": test_name,
+                    "cycles": _extract_cycle_count(result.get("output", "")),
+                    "waves_file": _find_latest_mxd(workspace) if waves else None,
+                    "test_output": result.get("output", ""),
+                    "hex_file": str(hex_file)
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": result.get("error", "Simulation failed"),
+                    "test_name": test_name,
+                    "test_output": result.get("output", "")
+                }
+                
+        except Exception as e:
+            logger.error(f"VexRiscv ISA test execution failed: {e}")
+            return {
+                "status": "error",
+                "message": str(e),
+                "test_name": test_name
             }
 
     return mcp

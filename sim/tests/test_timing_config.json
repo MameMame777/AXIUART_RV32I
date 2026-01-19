@@ -229,6 +229,96 @@
       "description": "Full phase tracing",
       "log_size": "very_large",
       "performance_impact": "~30%"
+    },
+    "vexriscv_regfile_test": {
+      "timeout": null,
+      "operations": 5,
+      "measured_time_ms": 100,
+      "recommended_verbosity": "UVM_LOW",
+      "description": "VexRiscv register file + x0 hardwiring test",
+      "category": "fast",
+      "waves_recommended": false,
+      "notes": "Stage 1.1 - Basic register operations"
+    },
+    "vexriscv_pipeline_flow_test": {
+      "timeout": null,
+      "operations": 8,
+      "measured_time_ms": 100,
+      "recommended_verbosity": "UVM_LOW",
+      "description": "VexRiscv 4-stage pipeline flow test",
+      "category": "fast",
+      "waves_recommended": false,
+      "notes": "Stage 1.2 - Pipeline progression validation"
+    },
+    "vexriscv_memory_access_test": {
+      "timeout": null,
+      "operations": 7,
+      "measured_time_ms": 150,
+      "recommended_verbosity": "UVM_LOW",
+      "description": "VexRiscv LW/SW operations test",
+      "category": "fast",
+      "waves_recommended": false,
+      "notes": "Stage 1.3 - Memory access + load-use stall"
+    },
+    "vexriscv_ex_bypass_test": {
+      "timeout": null,
+      "operations": 3,
+      "measured_time_ms": 80,
+      "recommended_verbosity": "UVM_LOW",
+      "description": "VexRiscv EX→EX data forwarding test",
+      "category": "fast",
+      "waves_recommended": false,
+      "notes": "Stage 1.4 - RAW hazard EX bypass"
+    },
+    "vexriscv_mem_bypass_test": {
+      "timeout": null,
+      "operations": 4,
+      "measured_time_ms": 80,
+      "recommended_verbosity": "UVM_LOW",
+      "description": "VexRiscv MEM→EX data forwarding test",
+      "category": "fast",
+      "waves_recommended": false,
+      "notes": "Stage 1.5 - RAW hazard MEM bypass"
+    },
+    "vexriscv_wb_bypass_test": {
+      "timeout": null,
+      "operations": 5,
+      "measured_time_ms": 80,
+      "recommended_verbosity": "UVM_LOW",
+      "description": "VexRiscv WB→EX forwarding test (bypassWriteBackBuffer)",
+      "category": "fast",
+      "waves_recommended": false,
+      "notes": "Stage 1.6 - CRITICAL: bypassWriteBackBuffer validation"
+    },
+    "vexriscv_load_use_stall_test": {
+      "timeout": null,
+      "operations": 3,
+      "measured_time_ms": 120,
+      "recommended_verbosity": "UVM_LOW",
+      "description": "VexRiscv load-use hazard stall test",
+      "category": "fast",
+      "waves_recommended": false,
+      "notes": "Stage 1.7 - Mandatory 1-cycle stall validation"
+    },
+    "vexriscv_ibus_fetch_test": {
+      "timeout": null,
+      "operations": 8,
+      "measured_time_ms": 150,
+      "recommended_verbosity": "UVM_LOW",
+      "description": "VexRiscv IBus instruction fetch protocol test",
+      "category": "fast",
+      "waves_recommended": false,
+      "notes": "Stage 1.8 - IBus valid/ready handshake"
+    },
+    "vexriscv_dbus_access_test": {
+      "timeout": null,
+      "operations": 9,
+      "measured_time_ms": 200,
+      "recommended_verbosity": "UVM_LOW",
+      "description": "VexRiscv DBus data access protocol test",
+      "category": "fast",
+      "waves_recommended": false,
+      "notes": "Stage 1.9 - Byte/halfword/word accesses"
     }
   },
   "usage_notes": [
@@ -236,6 +326,7 @@
     "Measured times are in milliseconds",
     "Times based on 115200 baud UART communication",
     "Debug timeouts (timeout_debug) should be used with UVM_DEBUG verbosity",
-    "Wave dumping adds ~5-10% overhead"
+    "Wave dumping adds ~5-10% overhead",
+    "VexRiscv tests: Stage 1 foundation tests (9 total), <70s combined"
   ]
 }

@@ -22,6 +22,12 @@
 // Test classes (base first, then derived)
 `include "rv32i_base_test.sv"
 `include "rv32i_basic_test.sv"
+`include "rv32i_basic_imm_test.sv"  // Test 1.1: Basic immediate instructions (2026-01-14)
+`include "rv32i_upper_imm_test.sv"  // Test 1.2: Upper immediate instructions (2026-01-15)
+`include "rv32i_imm_logic_test.sv"  // Test 1.3: Immediate arithmetic/logic (2026-01-16)
+`include "rv32i_shift_imm_test.sv"  // Test 1.4: Shift immediate (2026-01-16)
+`include "rv32i_reg_alu_test.sv"    // Test 2.1: R-type register ALU (2026-01-16)
+`include "rv32i_reg_shift_test.sv"   // Test 2.3: R-type register shift (2026-01-17)
 // `include "rv32i_hazard_test.sv"          // File not present
 // `include "rv32i_load_store_test.sv"      // File not present
 // `include "rv32i_branch_test.sv"          // File not present
@@ -51,5 +57,6 @@
 
 // Simple isolated instruction tests (2026-01-12)
 `include "rv32i_store_simple_test.sv"
+`include "rv32i_load_simple_test.sv"
 
 `endif // RV32I_TEST_PKG_SV
