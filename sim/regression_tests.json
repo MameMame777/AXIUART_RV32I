@@ -46,9 +46,185 @@
         }
       ]
     },
+    "vexriscv_smoke": {
+      "description": "VexRiscv Stage 1 smoke tests (3 tests, <20s)",
+      "tests": [
+        {
+          "name": "vexriscv_regfile_test",
+          "description": "Register file + x0 hardwiring",
+          "timeout": 120,
+          "expected_duration": 5
+        },
+        {
+          "name": "vexriscv_pipeline_flow_test",
+          "description": "4-stage pipeline flow with NOPs",
+          "timeout": 120,
+          "expected_duration": 5
+        },
+        {
+          "name": "vexriscv_memory_access_test",
+          "description": "LW/SW operations + load-use stall",
+          "timeout": 120,
+          "expected_duration": 8
+        }
+      ]
+    },
+    "vexriscv_hazard": {
+      "description": "VexRiscv hazard handling tests (4 tests, <30s)",
+      "tests": [
+        {
+          "name": "vexriscv_ex_bypass_test",
+          "description": "EX→EX data forwarding",
+          "timeout": 60,
+          "expected_duration": 5
+        },
+        {
+          "name": "vexriscv_mem_bypass_test",
+          "description": "MEM→EX data forwarding",
+          "timeout": 60,
+          "expected_duration": 5
+        },
+        {
+          "name": "vexriscv_wb_bypass_test",
+          "description": "WB→EX forwarding (bypassWriteBackBuffer validation)",
+          "timeout": 60,
+          "expected_duration": 5
+        },
+        {
+          "name": "vexriscv_load_use_stall_test",
+          "description": "Load-use hazard with mandatory stall",
+          "timeout": 60,
+          "expected_duration": 8
+        }
+      ]
+    },
+    "vexriscv_bus": {
+      "description": "VexRiscv bus protocol tests (2 tests, <20s)",
+      "tests": [
+        {
+          "name": "vexriscv_ibus_fetch_test",
+          "description": "IBus instruction fetch protocol",
+          "timeout": 120,
+          "expected_duration": 8
+        },
+        {
+          "name": "vexriscv_dbus_access_test",
+          "description": "DBus byte/halfword/word accesses",
+          "timeout": 120,
+          "expected_duration": 10
+        }
+      ]
+    },
+    "vexriscv_stage1": {
+      "description": "VexRiscv complete Stage 1 (all 9 tests, <70s)",
+      "tests": [
+        {
+          "name": "vexriscv_regfile_test",
+          "description": "Register file + x0 hardwiring",
+          "timeout": 120,
+          "expected_duration": 5
+        },
+        {
+          "name": "vexriscv_pipeline_flow_test",
+          "description": "4-stage pipeline flow",
+          "timeout": 120,
+          "expected_duration": 5
+        },
+        {
+          "name": "vexriscv_memory_access_test",
+          "description": "Memory operations",
+          "timeout": 120,
+          "expected_duration": 8
+        },
+        {
+          "name": "vexriscv_ex_bypass_test",
+          "description": "EX bypass",
+          "timeout": 60,
+          "expected_duration": 5
+        },
+        {
+          "name": "vexriscv_mem_bypass_test",
+          "description": "MEM bypass",
+          "timeout": 60,
+          "expected_duration": 5
+        },
+        {
+          "name": "vexriscv_wb_bypass_test",
+          "description": "WB bypass (bypassWriteBackBuffer)",
+          "timeout": 60,
+          "expected_duration": 5
+        },
+        {
+          "name": "vexriscv_load_use_stall_test",
+          "description": "Load-use stall",
+          "timeout": 60,
+          "expected_duration": 8
+        },
+        {
+          "name": "vexriscv_ibus_fetch_test",
+          "description": "IBus protocol",
+          "timeout": 120,
+          "expected_duration": 8
+        },
+        {
+          "name": "vexriscv_dbus_access_test",
+          "description": "DBus protocol",
+          "timeout": 120,
+          "expected_duration": 10
+        }
+      ]
+    },
     "cpu_basic": {
       "description": "RV32I CPU basic verification",
       "tests": [
+        {
+          "name": "rv32i_basic_imm_test",
+          "description": "Test 1.1: Basic immediate instructions (ADDI) - Issue #1 validation",
+          "timeout": 60,
+          "expected_duration": 15,
+          "notes": "Critical test validating ADDI rd field decoding fix"
+        },
+        {
+          "name": "rv32i_upper_imm_test",
+          "description": "Test 1.2: Upper immediate instructions (LUI/AUIPC)",
+          "timeout": 60,
+          "expected_duration": 15,
+          "notes": "Tests LUI and AUIPC with various immediate values and PC-relative addressing"
+        },
+        {
+          "name": "rv32i_imm_logic_test",
+          "description": "Test 1.3: Immediate arithmetic/logic (SLTI/SLTIU/XORI/ORI/ANDI)",
+          "timeout": 60,
+          "expected_duration": 15,
+          "notes": "Tests comparison and bitwise immediate instructions"
+        },
+        {
+          "name": "rv32i_shift_imm_test",
+          "description": "Test 1.4: Shift immediate (SLLI/SRLI/SRAI) with edge cases",
+          "timeout": 60,
+          "expected_duration": 15,
+          "notes": "Critical: Verifies SRLI/SRAI distinction on negative operands"
+        },        {
+            "name": "rv32i_reg_alu_test",
+            "description": "Test 2.1: R-type register ALU (ADD/SUB/SLT/SLTU/XOR/OR/AND)",
+            "timeout": 60,
+            "expected_duration": 20,
+            "notes": "Phase 2 start: Register operations with overflow/underflow, signed vs unsigned"
+        },
+        {
+            "name": "rv32i_reg_shift_test",
+            "description": "Test 2.3: R-type register shift (SLL/SRL/SRA) with register amounts",
+            "timeout": 60,
+            "expected_duration": 18,
+            "notes": "Phase 2 complete: Register shift vs immediate shift, SRL/SRA distinction"
+        },
+        {
+            "name": "rv32i_load_simple_test",
+            "description": "Test 3.2/3.3: LOAD instructions (LW/LH/LHU/LB/LBU) + load-use hazard",
+            "timeout": 60,
+            "expected_duration": 20,
+            "notes": "Phase 3 complete: All LOAD variants with sign/zero extension + load-use stall verification (Test 3.3 integrated)"
+        },
         {
           "name": "rv32i_basic_test",
           "description": "RV32I basic instruction execution (ADD, ADDI, LW, SW, EBREAK)",

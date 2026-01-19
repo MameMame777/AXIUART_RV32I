@@ -502,15 +502,11 @@ async def run_uvm_simulation(
     # Use simplified environment (only environment available)
     uvm_dir = workspace_root / "sim" / "uvm" / "tb"
     
-    # Detect RV32I tests and use appropriate config
-    if test_name and "rv32i" in test_name.lower():
-        config_file = uvm_dir / "dsim_config_rv32i.f"
-        top_module = "rv32i_tb_top"
-        config_relative = "dsim_config_rv32i.f"
-    else:
-        config_file = uvm_dir / "dsim_config.f"
-        top_module = "axiuart_tb_top"
-        config_relative = "dsim_config.f"
+    # Use rv32i_tb_top for all tests (VexRiscv + old rv32i tests)
+    # axiuart_tb_top was legacy TD4 CPU testbench (deprecated)
+    config_file = uvm_dir / "dsim_config.f"
+    top_module = "rv32i_tb_top"
+    config_relative = "dsim_config.f"
 
     if not config_file.exists():
         raise DSIMError(

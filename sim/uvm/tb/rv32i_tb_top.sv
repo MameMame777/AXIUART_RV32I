@@ -1,170 +1,25 @@
 `timescale 1ns / 1ps
 
 //==============================================================================
-// RV32I CPU Testbench Top Module - UVM Compatible
+// VexRiscv CPU Testbench Top Module - UVM Compatible
 //==============================================================================
-// UVM-based testbench for RV32I core verification
-// Provides interface to DUT and launches UVM test
+// Full system testbench for VexRiscv CPU via UART interface
+// Uses complete AXIUART_Top (UART→AXI4→Register_Block→VexRiscv)
 //
-// Author: GitHub Copilot (RV32I Migration)
-// Date: 2026-01-02
-//==============================================================================
-
-// Import UVM
-import uvm_pkg::*;
-`include "uvm_macros.svh"
-
-// Include RV32I test package (AXIUART style)
-`include "rv32i_test_pkg.sv"
-
-//==============================================================================
-// Interface Definition
-//==============================================================================
-
-interface rv32i_tb_if (input logic clk);
-    
-    // Reset
-    logic        rst;
-    
-    // CPU control
-    logic        cpu_run;
-    logic        cpu_halt;
-    logic        cpu_step;
-    logic        cpu_halted;
-    logic        cpu_break;
-    
-    // Hardware breakpoint interface
-    logic [3:0]  dbg_bp_enable;
-    logic [31:0] dbg_bp_addr[0:3];
-    logic [3:0]  dbg_bp_hit;
-    
-    // Performance counters
-    logic [31:0] perf_cycle_count;
-    logic [31:0] perf_insn_count;
-    logic [31:0] perf_stall_count;
-    logic [31:0] perf_flush_count;
-    
-    // Register file snapshot
-    logic [4:0]  dbg_rf_addr;
-    logic [31:0] dbg_rf_rdata;
-    
-    // Trace buffer interface
-    logic [5:0]  dbg_trace_addr;
-    logic [191:0] dbg_trace_data;  // Extended to 192 bits
-    logic [5:0]  dbg_trace_wptr;
-    logic [5:0]  dbg_trace_count;
-    
-    // Software reset
-    logic        dbg_soft_reset;
-    logic        dbg_reset_done;
-    
-    // LED output
-    logic [3:0]  led_reg;
-    
-    // Trace buffer interface (UVM direct access) - Extended for debug
-    logic        trace_valid;
-    logic [31:0] trace_pc;
-    logic [31:0] trace_insn;
-    logic [4:0]  trace_rd_addr;
-    logic [31:0] trace_rd_data;
-    // Extended trace fields
-    logic [31:0] trace_rs1_value;
-    logic [31:0] trace_rs2_value;
-    logic [4:0]  trace_rs1_addr;
-    logic [4:0]  trace_rs2_addr;
-    logic [1:0]  trace_forward_rs1;
-    logic [1:0]  trace_forward_rs2;
-    logic        trace_stall;
-    logic        trace_flush;
-    logic        trace_branch_taken;
-    
-    // Debug memory interface (for test program loading)
-    logic [10:0] dbg_mem_addr;
-    logic [31:0] dbg_mem_wdata;
-    logic [31:0] dbg_mem_rdata;
-    logic [3:0]  dbg_mem_we;
-    logic        dbg_mem_re;
-    
-    // Internal PC signal (for verification)
-    logic [31:0] pc_if;
-    
-    // Clocking block with explicit timing to avoid X-value propagation
-    clocking cb @(posedge clk);
-        default input #1step output #0;
-        output rst;
-        output cpu_run;
-        output cpu_halt;
-        output cpu_step;
-        output dbg_bp_enable;
-        output dbg_bp_addr;
-        output dbg_rf_addr;
-        output dbg_trace_addr;
-        output dbg_soft_reset;
-        output dbg_mem_addr;
-        output dbg_mem_wdata;
-        output dbg_mem_we;
-        output dbg_mem_re;
-        input  cpu_halted;
-        input  cpu_break;
-        input  dbg_bp_hit;
-        input  perf_cycle_count;
-        input  perf_insn_count;
-        input  perf_stall_count;
-        input  perf_flush_count;
-        input  dbg_rf_rdata;
-        input  dbg_trace_data;
-        input  dbg_trace_wptr;
-        input  dbg_trace_count;
-        input  dbg_reset_done;
-        input  led_reg;
-        input  trace_valid;
-        input  trace_pc;
-        input  trace_insn;
-        input  trace_rd_addr;
-        input  trace_rd_data;
-        input  trace_rs1_value;
-        input  trace_rs2_value;
-        input  trace_rs1_addr;
-        input  trace_rs2_addr;
-        input  trace_forward_rs1;
-        input  trace_forward_rs2;
-        input  trace_stall;
-        input  trace_flush;
-        input  trace_branch_taken;
-        input  dbg_mem_rdata;
-        input  pc_if;
-    endclocking
-    
-    // Initial block to prevent X-value propagation
-    // All output signals must have defined values before first clock edge
-    initial begin
-        rst = 1;
-        cpu_run = 0;
-        cpu_halt = 0;
-        cpu_step = 0;
-        dbg_bp_enable = 4'b0000;
-        dbg_bp_addr[0] = 32'h0;
-        dbg_bp_addr[1] = 32'h0;
-        dbg_bp_addr[2] = 32'h0;
-        dbg_bp_addr[3] = 32'h0;
-        dbg_rf_addr = 5'h0;
-        dbg_trace_addr = 6'h0;
-        dbg_soft_reset = 1'b0;
-        dbg_mem_addr = 11'h0;
-        dbg_mem_wdata = 32'h0;
-        dbg_mem_we = 4'b0;
-        dbg_mem_re = 1'b0;
-    end
-    
-endinterface
-
-//==============================================================================
-// Testbench Top Module
+// Author: GitHub Copilot
+// Date: 2026-01-18
 //==============================================================================
 
 module rv32i_tb_top;
+    import uvm_pkg::*;
+    import axiuart_pkg::*;
+    `include "uvm_macros.svh"
     
-    parameter CLK_PERIOD = 10;  // 100 MHz
+    // Include base test class
+    `include "axiuart_base_test.sv"
+    
+    // Include VexRiscv tests
+    `include "vexriscv_smoke_test.sv"
     
     //==========================================================================
     // CLOCK GENERATION
@@ -172,151 +27,73 @@ module rv32i_tb_top;
     
     logic clk;
     
+    // 125MHz clock (matches AXIUART_Top CLK_FREQ_HZ parameter)
     initial begin
         clk = 0;
-        forever #(CLK_PERIOD/2) clk = ~clk;
+        forever #4 clk = ~clk;  // 8ns period = 125MHz
     end
     
     //==========================================================================
     // INTERFACE INSTANTIATION
     //==========================================================================
     
-    rv32i_tb_if tb_if(clk);
+    uart_if uart_vif(clk);
     
     //==========================================================================
-    // DUT INSTANTIATION - RV32I TOP (Modular Pipeline Architecture)
+    // LED OUTPUTS
     //==========================================================================
     
-    rv32i_top dut (
+    logic [3:0] led;        // 4-bit LED from CPU memory-mapped I/O
+    logic led5_r;           // RGB LED Red (CPU halted indicator)
+    logic led5_g;           // RGB LED Green (CPU running indicator)
+    logic led5_b;           // RGB LED Blue (EBREAK indicator)
+    
+    //==========================================================================
+    // DUT INSTANTIATION - Complete AXIUART System
+    //==========================================================================
+    
+    AXIUART_Top #(
+        .CLK_FREQ_HZ(125_000_000),  // 125MHz
+        .BAUD_RATE(115200),
+        .UART_OVERSAMPLE(16),
+        .AXI_TIMEOUT(2500),
+        .RX_FIFO_DEPTH(64),
+        .TX_FIFO_DEPTH(64),
+        .MAX_LEN(16),
+        .REG_BASE_ADDR(32'h0000_1000)
+    ) dut (
         .clk(clk),
-        .rst(tb_if.rst),
+        .rst(uart_vif.rst),
         
-        // Control
-        .cpu_run(tb_if.cpu_run),
-        .cpu_halt(tb_if.cpu_halt),
-        .cpu_step(tb_if.cpu_step),
-        .cpu_halted(tb_if.cpu_halted),
-        .cpu_break(tb_if.cpu_break),
+        // UART interface
+        .uart_rx(uart_vif.uart_rx),
+        .uart_tx(uart_vif.uart_tx),
+        .uart_rts_n(uart_vif.uart_rts_n),
+        .uart_cts_n(uart_vif.uart_cts_n),
         
-        // Debug memory interface
-        .dbg_mem_addr(tb_if.dbg_mem_addr),
-        .dbg_mem_wdata(tb_if.dbg_mem_wdata),
-        .dbg_mem_rdata(tb_if.dbg_mem_rdata),
-        .dbg_mem_we(tb_if.dbg_mem_we),
-        .dbg_mem_re(tb_if.dbg_mem_re),
-        
-        // Hardware breakpoints
-        .dbg_bp_enable(tb_if.dbg_bp_enable),
-        .dbg_bp_addr(tb_if.dbg_bp_addr),
-        .dbg_bp_hit(tb_if.dbg_bp_hit),
-        
-        // Performance counters
-        .perf_cycle_count(tb_if.perf_cycle_count),
-        .perf_insn_count(tb_if.perf_insn_count),
-        .perf_stall_count(tb_if.perf_stall_count),
-        .perf_flush_count(tb_if.perf_flush_count),
-        
-        // Register file snapshot
-        .dbg_rf_addr(tb_if.dbg_rf_addr),
-        .dbg_rf_rdata(tb_if.dbg_rf_rdata),
-        
-        // Trace buffer
-        .dbg_trace_addr(tb_if.dbg_trace_addr),
-        .dbg_trace_data(tb_if.dbg_trace_data),
-        .dbg_trace_wptr(tb_if.dbg_trace_wptr),
-        .dbg_trace_count(tb_if.dbg_trace_count),
-        
-        // Software reset
-        .dbg_soft_reset(tb_if.dbg_soft_reset),
-        .dbg_reset_done(tb_if.dbg_reset_done),
-        
-        // LED output
-        .led_out(tb_if.led_reg),
-        
-        // Trace outputs (UVM direct access)
-        .trace_valid(tb_if.trace_valid),
-        .trace_pc(tb_if.trace_pc),
-        .trace_insn(tb_if.trace_insn),
-        .trace_rd_addr(tb_if.trace_rd_addr),
-        .trace_rd_data(tb_if.trace_rd_data)
+        // LED outputs
+        .led(led),
+        .led5_r(led5_r),
+        .led5_g(led5_g),
+        .led5_b(led5_b)
     );
     
-    // Expose internal PC for verification
-    assign tb_if.pc_if = dut.if_pc_current;
-    
-    // Expose extended trace signals from DUT internal signals (hierarchical access)
-    assign tb_if.trace_rs1_value     = dut.trace_rs1_value;
-    assign tb_if.trace_rs2_value     = dut.trace_rs2_value;
-    assign tb_if.trace_rs1_addr      = dut.trace_rs1_addr;
-    assign tb_if.trace_rs2_addr      = dut.trace_rs2_addr;
-    assign tb_if.trace_forward_rs1   = dut.trace_forward_rs1;
-    assign tb_if.trace_forward_rs2   = dut.trace_forward_rs2;
-    assign tb_if.trace_stall         = dut.trace_stall;
-    assign tb_if.trace_flush         = dut.trace_flush;
-    assign tb_if.trace_branch_taken  = dut.trace_branch_taken;
-    
     //==========================================================================
-    // UVM CONFIGURATION AND TEST START
+    // UVM INITIALIZATION
     //==========================================================================
     
     initial begin
-        string test_name;
-        string hex_file;
+        // Display test banner
+        $display("========================================");
+        $display("[TB] VexRiscv UVM Testbench");
+        $display("[TB] Full system: UART → AXI4 → Register_Block → VexRiscv");
+        $display("[TB] Clock: 125MHz, UART: 115200 baud");
+        $display("========================================");
         
-        // Set virtual interface in config DB
-        uvm_config_db#(virtual rv32i_tb_if)::set(null, "*", "vif", tb_if);
+        // Set virtual interface in config_db
+        uvm_config_db#(virtual uart_if)::set(null, "*", "uart_vif", uart_vif);
         
-        // Load CPU test program from hex file ONLY if test doesn't use debug writes
-        // Tests that load code via debug interface (exception handler, minimal tests) skip this
-        if ($value$plusargs("UVM_TESTNAME=%s", test_name)) begin
-            if (test_name != "rv32i_exception_handler_test" && 
-                test_name != "rv32i_minimal_led_test" &&
-                test_name != "rv32i_bne_loop_test") begin
-                // Try to load test-specific hex file first
-                hex_file = {"../../tests/", test_name, ".hex"};
-                if ($fopen(hex_file, "r")) begin
-                    $readmemh(hex_file, dut.ram);
-                    $display("[TB] Loaded %s for test: %s", hex_file, test_name);
-                    $display("========================================");
-                    $display("[RAM_DIAG] RAM contents after $readmemh:");
-                    $display("  ram[0] = 0x%08h (expect 0x20000f93)", dut.ram[0]);
-                    $display("  ram[1] = 0x%08h (expect 0x305f9073)", dut.ram[1]);
-                    $display("  ram[2] = 0x%08h (expect 0x00a00093)", dut.ram[2]);
-                    $display("  ram[3] = 0x%08h", dut.ram[3]);
-                    $display("========================================");
-                end else begin
-                    // Fall back to default
-                    $readmemh("../../tests/rv32i_ram_init.hex", dut.ram);
-                    $display("[TB] Loaded rv32i_ram_init.hex for test: %s (test-specific hex not found)", test_name);
-                    $display("========================================");
-                    $display("[RAM_DIAG] RAM contents after $readmemh:");
-                    $display("  ram[0] = 0x%08h", dut.ram[0]);
-                    $display("  ram[1] = 0x%08h", dut.ram[1]);
-                    $display("  ram[2] = 0x%08h", dut.ram[2]);
-                    $display("  ram[3] = 0x%08h", dut.ram[3]);
-                    $display("========================================");
-                end
-            end else begin
-                $display("[TB] Skipping readmemh - test %s uses debug writes", test_name);
-            end
-        end else begin
-            // Default: load hex file
-            $readmemh("../../tests/rv32i_ram_init.hex", dut.ram);
-            $display("[TB] Loaded rv32i_ram_init.hex (no UVM_TESTNAME)");
-            $display("========================================");
-            $display("[RAM_DIAG] RAM contents after $readmemh:");
-            $display("  ram[0] = 0x%08h", dut.ram[0]);
-            $display("  ram[1] = 0x%08h", dut.ram[1]);
-            $display("  ram[2] = 0x%08h", dut.ram[2]);
-            $display("  ram[3] = 0x%08h", dut.ram[3]);
-            $display("========================================");
-        end
-        
-        // Enable waveform dumping
-        $dumpfile("rv32i_test.mxd");
-        $dumpvars(0, rv32i_tb_top);
-        
-        // Start UVM test
+        // Run test (test name specified via +UVM_TESTNAME= command line argument)
         run_test();
     end
     
@@ -325,9 +102,21 @@ module rv32i_tb_top;
     //==========================================================================
     
     initial begin
-        #1ms;
-        $display("*** FATAL: Simulation timeout after 1ms ***");
+        #100ms;  // 100ms timeout (much longer for UART-based tests)
+        $display("========================================");
+        $display("*** FATAL: Simulation timeout after 100ms ***");
+        $display("========================================");
         $finish;
+    end
+    
+    //==========================================================================
+    // LED MONITORING (optional debug)
+    //==========================================================================
+    
+    always @(posedge clk) begin
+        if (led !== 4'b0000) begin
+            $display("[TB] LED output changed: 0x%h", led);
+        end
     end
     
 endmodule
