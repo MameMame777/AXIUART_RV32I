@@ -599,6 +599,7 @@ module vexriscv_top
         .execute_arbitration_haltItself_shifter (execute_arbitration_haltItself_shifter)
     );
     
+`ifdef DEBUG
     // Debug: Monitor decode stage control signals
     always @(posedge clk) begin
         if (decode_arbitration_isValid) begin
@@ -607,6 +608,7 @@ module vexriscv_top
                      decode_RS1_USE, decode_RS2_USE);
         end
     end
+`endif
     
     //==========================================================================
     // Execute Stage ALU Result Mux (From original VexRiscv lines 2678-2690)
@@ -949,6 +951,7 @@ module vexriscv_top
     assign RegFilePlugin_regFileWrite_payload_address = writeBack_INSTRUCTION[11:7];
     assign RegFilePlugin_regFileWrite_payload_data = writeBack_REGFILE_WRITE_DATA;
     
+`ifdef DEBUG
     // Debug: Monitor register writes
     always @(posedge clk) begin
         if (writeBack_arbitration_isValid) begin
@@ -962,6 +965,7 @@ module vexriscv_top
                      RegFilePlugin_regFileWrite_payload_data, writeBack_INSTRUCTION);
         end
     end
+`endif
     
     // Additional decode stage signal assignments
     assign decode_FORMAL_PC_NEXT = (decode_PC + 32'h00000004);
@@ -1032,15 +1036,21 @@ module vexriscv_top
             end
             if(when_Pipeline_l124_17) begin
                 decode_to_execute_REGFILE_WRITE_VALID <= decode_REGFILE_WRITE_VALID_corrected;
+`ifdef DEBUG
                 if (decode_REGFILE_WRITE_VALID_corrected) $display("[%0t] PIPE_REG: decode→execute REGFILE_WRITE_VALID=1 (inst=0x%08x)", $time, decode_INSTRUCTION);
+`endif
             end
             if(when_Pipeline_l124_18) begin
                 execute_to_memory_REGFILE_WRITE_VALID <= execute_REGFILE_WRITE_VALID;
+`ifdef DEBUG
                 if (execute_REGFILE_WRITE_VALID) $display("[%0t] PIPE_REG: execute→memory REGFILE_WRITE_VALID=1 (inst=0x%08x)", $time, execute_INSTRUCTION);
+`endif
             end
             if(when_Pipeline_l124_19) begin
                 memory_to_writeBack_REGFILE_WRITE_VALID <= memory_REGFILE_WRITE_VALID;
+`ifdef DEBUG
                 if (memory_REGFILE_WRITE_VALID) $display("[%0t] PIPE_REG: memory→writeBack REGFILE_WRITE_VALID=1 (inst=0x%08x)", $time, memory_INSTRUCTION);
+`endif
             end
             if(when_Pipeline_l124_20) begin
                 decode_to_execute_BYPASSABLE_EXECUTE_STAGE <= decode_BYPASSABLE_EXECUTE_STAGE;
@@ -1115,36 +1125,48 @@ module vexriscv_top
             // Valid propagation
             if(when_Pipeline_l151) begin
                 execute_arbitration_isValid <= 1'b0;
+`ifdef DEBUG
                 if (execute_arbitration_isValid) $display("[%0t] PIPELINE: Execute cleared (removeIt or !isStuck)", $time);
+`endif
             end
             if(when_Pipeline_l154) begin
                 execute_arbitration_isValid <= decode_arbitration_isValid;
+`ifdef DEBUG
                 if (decode_arbitration_isValid) begin
                     $display("[%0t] PIPELINE: Execute gets valid from Decode (inst=0x%08x, pc=0x%08x)", 
                              $time, decode_INSTRUCTION, decode_PC);
                 end
+`endif
             end
             if(when_Pipeline_l151_1) begin
                 memory_arbitration_isValid <= 1'b0;
+`ifdef DEBUG
                 if (memory_arbitration_isValid) $display("[%0t] PIPELINE: Memory cleared", $time);
+`endif
             end
             if(when_Pipeline_l154_1) begin
                 memory_arbitration_isValid <= execute_arbitration_isValid;
+`ifdef DEBUG
                 if (execute_arbitration_isValid) begin
                     $display("[%0t] PIPELINE: Memory gets valid from Execute (inst=0x%08x)", 
                              $time, execute_INSTRUCTION);
                 end
+`endif
             end
             if(when_Pipeline_l151_2) begin
                 writeBack_arbitration_isValid <= 1'b0;
+`ifdef DEBUG
                 if (writeBack_arbitration_isValid) $display("[%0t] PIPELINE: WriteBack cleared", $time);
+`endif
             end
             if(when_Pipeline_l154_2) begin
                 writeBack_arbitration_isValid <= memory_arbitration_isValid;
+`ifdef DEBUG
                 if (memory_arbitration_isValid) begin
                     $display("[%0t] PIPELINE: WriteBack gets valid from Memory (inst=0x%08x)", 
                              $time, memory_INSTRUCTION);
                 end
+`endif
             end
         end
     end
