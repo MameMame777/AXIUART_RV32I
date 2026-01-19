@@ -342,6 +342,7 @@ module vexriscv_ibus_simple
         end
     end
     
+`ifdef DEBUG
     // Expose decoder outputs for debugging
     always @(posedge clk) begin
         if (decode_arbitration_isValid) begin
@@ -349,6 +350,7 @@ module vexriscv_ibus_simple
                      $time, 1'bx, 1'bx, 1'bx, 1'bx);  // Will be driven by top-level
         end
     end
+`endif
     
     assign decode_instruction = injector_decodeInput_payload_rsp_inst;
     assign decode_pc = injector_decodeInput_payload_pc;

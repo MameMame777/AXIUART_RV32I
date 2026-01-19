@@ -138,6 +138,7 @@ module vexriscv_execute
         end
     end
     
+`ifdef DEBUG
     // Debug: Monitor ALU computation
     always @(posedge clk) begin
         if (execute_arbitration_isValid && !execute_arbitration_isStuck) begin
@@ -145,6 +146,7 @@ module vexriscv_execute
                      $time, execute_INSTRUCTION, execute_RS1, execute_RS2, src1_muxed, src2_muxed, execute_SRC_ADD_SUB, execute_SRC2_CTRL);
         end
     end
+`endif
     
     //==========================================================================
     // ALU - Less Than Comparison
