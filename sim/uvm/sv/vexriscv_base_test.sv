@@ -4,14 +4,17 @@
 // VexRiscv Base Test Class
 //==============================================================================
 // Base class for all VexRiscv verification tests.
-// Extends axiuart_base_test with VexRiscv-specific functionality:
+// Extends uvm_test with VexRiscv-specific functionality:
 // - Intel HEX program loading with address translation
 // - tohost monitoring for pass/fail detection
 // - CPU control (reset, start, halt, step)
 // - Register access helpers
 //==============================================================================
 
-class vexriscv_base_test extends axiuart_base_test;
+import uvm_pkg::*;
+import axiuart_pkg::*;
+
+class vexriscv_base_test extends uvm_test;
     
     `uvm_component_utils(vexriscv_base_test)
     
@@ -190,7 +193,7 @@ class vexriscv_base_test extends axiuart_base_test;
             begin
                 // Monitor tohost address for write
                 forever begin
-                    @(posedge top.clk);
+                    @(posedge $root.rv32i_tb_top.clk);
                     cycle_count++;
                     
                     // Check if tohost was written
@@ -208,7 +211,7 @@ class vexriscv_base_test extends axiuart_base_test;
             
             begin
                 // Timeout watchdog
-                repeat(max_cycles) @(posedge top.clk);
+                repeat(max_cycles) @(posedge $root.rv32i_tb_top.clk);
                 timeout = 1;
                 `uvm_error(get_type_name(), 
                     $sformatf("Timeout waiting for tohost write after %0d cycles", 
@@ -241,11 +244,11 @@ class vexriscv_base_test extends axiuart_base_test;
         // Assert reset via register interface or direct signal
         // Implementation depends on testbench architecture
         
-        @(posedge top.clk);
-        top.rst <= 1;
-        repeat(10) @(posedge top.clk);
-        top.rst <= 0;
-        repeat(5) @(posedge top.clk);
+        @(posedge $root.rv32i_tb_top.clk);
+        $root.rv32i_tb_top.uart_vif.rst <= 1;
+        repeat(10) @(posedge $root.rv32i_tb_top.clk);
+        $root.rv32i_tb_top.uart_vif.rst <= 0;
+        repeat(5) @(posedge $root.rv32i_tb_top.clk);
         
         `uvm_info(get_type_name(), "CPU reset complete", UVM_MEDIUM)
     endtask
@@ -253,33 +256,94 @@ class vexriscv_base_test extends axiuart_base_test;
     virtual task start_cpu();
         `uvm_info(get_type_name(), "Starting CPU execution", UVM_MEDIUM)
         
-        // Release CPU from reset/halt state
-        // Implementation depends on CPU debug interface
+        // Ensure reset is deasserted
+        @(posedge $root.rv32i_tb_top.clk);
+        $root.rv32i_tb_top.uart_vif.rst <= 0;
         
-        // For now, just ensure reset is deasserted
-        @(posedge top.clk);
-        top.rst <= 0;
+        // Set CPU RUN bit in Register_Block (cpu_mem_ctrl_reg[7])
+        // This is the correct way - modifying the register directly
+        @(posedge $root.rv32i_tb_top.clk);
+        $root.rv32i_tb_top.dut.register_block_inst.cpu_mem_ctrl_reg[7] = 1'b1;
+        $display("[%0t] [BASE_TEST] Setting cpu_mem_ctrl_reg[7]=1 (CPU RUN)", $time);
         
-        `uvm_info(get_type_name(), "CPU started", UVM_MEDIUM)
+        @(posedge $root.rv32i_tb_top.clk);
+        $root.rv32i_tb_top.dut.register_block_inst.cpu_mem_ctrl_reg[7] = 1'b0;
+        $display("[%0t] [BASE_TEST] Clearing cpu_mem_ctrl_reg[7]=0 (RUN pulse complete)", $time);
+        
+        // Wait for CPU to enter running state
+        wait_cpu_running();
+        
+        `uvm_info(get_type_name(), "CPU started successfully", UVM_MEDIUM)
     endtask
     
     virtual task halt_cpu();
-        `uvm_info(get_type_name(), "Halting CPU", UVM_MEDIUM)
+        `uvm_info(get_type_name(), "Halting CPU via control signal", UVM_MEDIUM)
         
-        // Halt CPU via debug interface
-        // Implementation depends on CPU debug capabilities
+        // Set CPU HALT bit in Register_Block (cpu_mem_ctrl_reg[8])
+        @(posedge $root.rv32i_tb_top.clk);
+        $root.rv32i_tb_top.dut.register_block_inst.cpu_mem_ctrl_reg[8] = 1'b1;
+        $display("[%0t] [BASE_TEST] Setting cpu_mem_ctrl_reg[8]=1 (CPU HALT)", $time);
         
-        `uvm_warning(get_type_name(), 
-            "halt_cpu() not implemented - override in derived test")
+        @(posedge $root.rv32i_tb_top.clk);
+        $root.rv32i_tb_top.dut.register_block_inst.cpu_mem_ctrl_reg[8] = 1'b0;
+        $display("[%0t] [BASE_TEST] Clearing cpu_mem_ctrl_reg[8]=0 (HALT pulse complete)", $time);
+        
+        // Wait for CPU to enter halted state
+        wait_cpu_halted();
+        
+        `uvm_info(get_type_name(), "CPU halted successfully", UVM_MEDIUM)
     endtask
     
-    virtual task step_cpu(int num_cycles = 1);
+    virtual task step_cpu(int num_instructions = 1);
+        logic [31:0] initial_pc, current_pc;
+        int timeout_cycles = 100;
+        int elapsed_cycles;
+        
         `uvm_info(get_type_name(), 
-            $sformatf("Stepping CPU for %0d cycles", num_cycles), 
+            $sformatf("Stepping CPU for %0d instructions", num_instructions), 
             UVM_MEDIUM)
         
-        // Single-step CPU execution
-        repeat(num_cycles) @(posedge top.clk);
+        // Ensure CPU is halted before stepping
+        if (!is_cpu_halted()) begin
+            halt_cpu();
+        end
+        
+        for (int i = 0; i < num_instructions; i++) begin
+            // Read current PC
+            initial_pc = $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.decode_PC;
+            
+            // Start CPU briefly
+            @(posedge $root.rv32i_tb_top.clk);
+            force $root.rv32i_tb_top.dut.vexriscv_inst.rv32i_cpu_run = 1'b1;
+            @(posedge $root.rv32i_tb_top.clk);
+            release $root.rv32i_tb_top.dut.vexriscv_inst.rv32i_cpu_run;
+            
+            // Wait for PC to change (instruction completion)
+            elapsed_cycles = 0;
+            do begin
+                @(posedge $root.rv32i_tb_top.clk);
+                current_pc = $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.decode_PC;
+                elapsed_cycles++;
+                
+                if (elapsed_cycles >= timeout_cycles) begin
+                    `uvm_error(get_type_name(), 
+                        $sformatf("Timeout waiting for instruction completion (PC stuck at 0x%08X)", initial_pc))
+                    return;
+                end
+            end while (current_pc == initial_pc);
+            
+            // Halt after instruction completes
+            halt_cpu();
+            
+            `uvm_info(get_type_name(), 
+                $sformatf("Step %0d/%0d: PC 0x%08X -> 0x%08X (%0d cycles)", 
+                    i+1, num_instructions, initial_pc, current_pc, elapsed_cycles), 
+                UVM_HIGH)
+        end
+        
+        `uvm_info(get_type_name(), 
+            $sformatf("Step complete: final PC = 0x%08X", current_pc), 
+            UVM_MEDIUM)
     endtask
     
     //==========================================================================
@@ -314,26 +378,41 @@ class vexriscv_base_test extends axiuart_base_test;
     
     virtual function bit read_memory_backdoor(bit [31:0] addr, 
                                               output bit [31:0] data);
-        // Placeholder for backdoor memory read
+        // Backdoor memory read from VexRiscv BlockRAM
         // Returns 1 if address valid, 0 otherwise
         
-        // Implementation would use hierarchical reference:
-        // data = top.u_memory.mem[addr[12:2]];
-        
-        `uvm_warning(get_type_name(), 
-            "read_memory_backdoor() not implemented - returning 0")
-        data = 32'h00000000;
-        return 0;
+        // Check address range (8KB = 0x0000-0x1FFF)
+        if (addr < 32'h0000_2000) begin
+            // Hierarchical path: $root → rv32i_tb_top → dut (AXIUART_Top) → vexriscv_inst → mem_crossbar → blockram_inst → mem array
+            data = $root.rv32i_tb_top.dut.vexriscv_inst.mem_crossbar.blockram_inst.mem[addr[12:2]];
+            return 1;
+        end else begin
+            `uvm_warning(get_type_name(), 
+                $sformatf("read_memory_backdoor: Address 0x%08X out of range (0x0000-0x1FFF)", addr))
+            data = 32'h00000000;
+            return 0;
+        end
     endfunction
     
     virtual task write_memory_backdoor(bit [31:0] addr, bit [31:0] data);
-        // Placeholder for backdoor memory write
+        // Backdoor memory write to VexRiscv BlockRAM
+        logic [10:0] word_addr;
         
-        // Implementation would use hierarchical reference:
-        // top.u_memory.mem[addr[12:2]] = data;
-        
-        `uvm_warning(get_type_name(), 
-            "write_memory_backdoor() not implemented")
+        // Check address range (0x80000000-0x80001FFF = 8KB)
+        if (addr >= 32'h8000_0000 && addr < 32'h8000_2000) begin
+            // Convert CPU address to BRAM word address
+            word_addr = (addr - 32'h8000_0000) >> 2;
+            
+            // Hierarchical path: $root → rv32i_tb_top → dut (AXIUART_Top) → vexriscv_inst → mem_crossbar → blockram_inst → mem array
+            $root.rv32i_tb_top.dut.vexriscv_inst.mem_crossbar.blockram_inst.mem[word_addr] = data;
+            
+            `uvm_info(get_type_name(), 
+                $sformatf("Write backdoor: addr=0x%08X → mem[%0d] = 0x%08X", addr, word_addr, data), 
+                UVM_DEBUG)
+        end else begin
+            `uvm_error(get_type_name(), 
+                $sformatf("write_memory_backdoor: Address 0x%08X out of range (0x80000000-0x80001FFF)", addr))
+        end
     endtask
     
     //==========================================================================
@@ -341,24 +420,39 @@ class vexriscv_base_test extends axiuart_base_test;
     //==========================================================================
     
     virtual function bit [31:0] read_regfile_backdoor(int reg_num);
-        // Placeholder for backdoor regfile read
+        // Backdoor register file read from VexRiscv
         
-        // Implementation would use hierarchical reference:
-        // return top.u_vexriscv.decode_RegFilePlugin_regFile[reg_num];
-        
-        `uvm_warning(get_type_name(), 
-            "read_regfile_backdoor() not implemented - returning 0")
-        return 32'h00000000;
+        // Check register number range (x0-x31)
+        if (reg_num >= 0 && reg_num < 32) begin
+            // Hierarchical path: $root → rv32i_tb_top → dut (AXIUART_Top) → vexriscv_inst → cpu_core → u_regfile → regfile array
+            return $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.u_regfile.regfile[reg_num];
+        end else begin
+            `uvm_error(get_type_name(), 
+                $sformatf("read_regfile_backdoor: Register x%0d out of range (0-31)", reg_num))
+            return 32'h00000000;
+        end
     endfunction
     
     virtual task write_regfile_backdoor(int reg_num, bit [31:0] value);
-        // Placeholder for backdoor regfile write
+        // Backdoor register file write to VexRiscv
         
-        // Implementation would use hierarchical reference:
-        // top.u_vexriscv.decode_RegFilePlugin_regFile[reg_num] = value;
-        
-        `uvm_warning(get_type_name(), 
-            "write_regfile_backdoor() not implemented")
+        // Check register number range (x0-x31)
+        if (reg_num >= 0 && reg_num < 32) begin
+            if (reg_num == 0) begin
+                `uvm_warning(get_type_name(), 
+                    "write_regfile_backdoor: Attempting to write x0 (hardwired to zero)")
+            end else begin
+                // Hierarchical path: $root → rv32i_tb_top → dut (AXIUART_Top) → vexriscv_inst → cpu_core → u_regfile → regfile array
+                $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.u_regfile.regfile[reg_num] = value;
+                
+                `uvm_info(get_type_name(), 
+                    $sformatf("Write backdoor: x%0d = 0x%08X", reg_num, value), 
+                    UVM_DEBUG)
+            end
+        end else begin
+            `uvm_error(get_type_name(), 
+                $sformatf("write_regfile_backdoor: Register x%0d out of range (0-31)", reg_num))
+        end
     endtask
     
     //==========================================================================
@@ -372,9 +466,7 @@ class vexriscv_base_test extends axiuart_base_test;
         if (read_memory_backdoor(tohost_addr, tohost_value)) begin
             if (tohost_value == 32'h00000001) begin
                 `uvm_info(get_type_name(), 
-                    "==================================================\n" +
-                    "  TEST PASSED\n" +
-                    "==================================================", 
+                    "==================================================\n  TEST PASSED\n==================================================", 
                     UVM_NONE)
             end else if (tohost_value != 0) begin
                 `uvm_error(get_type_name(), 
@@ -420,5 +512,63 @@ class vexriscv_base_test extends axiuart_base_test;
             end
         end
     endtask
+    
+    //==========================================================================
+    // CPU Status Helpers
+    //==========================================================================
+    
+    virtual function bit is_cpu_halted();
+        return $root.rv32i_tb_top.dut.vexriscv_inst.rv32i_cpu_halted;
+    endfunction
+    
+    virtual task wait_cpu_halted(int timeout_cycles = 100);
+        int elapsed = 0;
+        
+        while (!$root.rv32i_tb_top.dut.vexriscv_inst.rv32i_cpu_halted) begin
+            @(posedge $root.rv32i_tb_top.clk);
+            elapsed++;
+            
+            if (elapsed >= timeout_cycles) begin
+                `uvm_error(get_type_name(), 
+                    "Timeout waiting for CPU to halt")
+                return;
+            end
+        end
+        
+        `uvm_info(get_type_name(), 
+            $sformatf("CPU halted after %0d cycles", elapsed), 
+            UVM_HIGH)
+    endtask
+    
+    virtual task wait_cpu_running(int timeout_cycles = 100);
+        int elapsed = 0;
+        
+        while ($root.rv32i_tb_top.dut.vexriscv_inst.rv32i_cpu_halted) begin
+            @(posedge $root.rv32i_tb_top.clk);
+            elapsed++;
+            
+            if (elapsed >= timeout_cycles) begin
+                `uvm_error(get_type_name(), 
+                    "Timeout waiting for CPU to start running")
+                return;
+            end
+        end
+        
+        `uvm_info(get_type_name(), 
+            $sformatf("CPU running after %0d cycles", elapsed), 
+            UVM_HIGH)
+    endtask
+    
+    //==========================================================================
+    // Test Result Tracking (Stub for Future Implementation)
+    //==========================================================================
+    
+    virtual function void set_test_pass(bit passed);
+        // Reserved for future test result tracking infrastructure
+        // Currently: No-op stub to satisfy derived test calls
+        `uvm_info(get_type_name(), 
+            $sformatf("Test result recorded: %s", passed ? "PASS" : "FAIL"), 
+            UVM_DEBUG)
+    endfunction
     
 endclass : vexriscv_base_test

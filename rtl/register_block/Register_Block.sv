@@ -443,7 +443,7 @@ module Register_Block #(
             // RV32I CPU memory access registers
             cpu_mem_addr_reg <= 32'h0000_0000;
             cpu_mem_wdata_reg <= 32'h0000_0000;
-            cpu_mem_ctrl_reg <= 32'h0000_0100;  // Bit[8]=1 (HALT) - Start with CPU halted
+            cpu_mem_ctrl_reg <= 32'h0000_0000;  // All bits=0 - CPU starts in HALTED (controlled by state machine)
             latched_mem_addr <= 32'h0000_0000;
             latched_mem_wdata <= 32'h0000_0000;
             

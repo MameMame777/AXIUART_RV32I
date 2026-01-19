@@ -82,6 +82,7 @@ module vexriscv_wrapper (
     // CPU control
     logic        cpu_reset;
     logic        cpu_running;
+    logic        fetcher_halt_req;  // Halt fetcher until CPU_RUN command
     
     // EBREAK monitor
     logic        ebreak_detected;
@@ -101,6 +102,23 @@ module vexriscv_wrapper (
     assign timerInterrupt    = 1'b0;
     assign externalInterrupt = 1'b0;
     assign softwareInterrupt = 1'b0;
+    
+    // Fetcher halt control: prevent PC advancement until CPU_RUN asserted
+    assign fetcher_halt_req = !cpu_running;
+    
+    //=================================================================
+    // Debug: Execution trace
+    //=================================================================
+    
+    // Trace instruction fetch
+    always_ff @(posedge clk) begin
+        if (iBus_cmd_valid && iBus_cmd_ready) begin
+            $display("[%0t] [VexRiscv] IBus CMD: PC=0x%08X", $time, iBus_cmd_payload_pc);
+        end
+        if (iBus_rsp_valid) begin
+            $display("[%0t] [VexRiscv] IBus RSP: INST=0x%08X", $time, iBus_rsp_payload_inst);
+        end
+    end
     
     //=================================================================
     // VexRiscv CPU Core
@@ -133,7 +151,10 @@ module vexriscv_wrapper (
         // Interrupts
         .timerInterrupt(timerInterrupt),
         .externalInterrupt(externalInterrupt),
-        .softwareInterrupt(softwareInterrupt)
+        .softwareInterrupt(softwareInterrupt),
+        
+        // Fetcher control (UART system specific)
+        .fetcher_halt(fetcher_halt_req)
     );
     
     //=================================================================
@@ -142,7 +163,7 @@ module vexriscv_wrapper (
     
     vexriscv_mem_crossbar mem_crossbar (
         .clk(clk),
-        .rst(rst),
+        .rst(cpu_reset || rst),  // Use same reset signal as CPU core
         
         // VexRiscv IBus
         .iBus_cmd_valid(iBus_cmd_valid),

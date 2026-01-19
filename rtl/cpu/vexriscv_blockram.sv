@@ -11,8 +11,8 @@
 //   - Read-First mode for Xilinx RAMB36E1 inference
 //
 // Memory Map:
-//   0x0000-0x1FFF: Block RAM (8KB, word-addressed internally)
-//   0x4000-0x7FFF: MMIO region (LED register at 0x407C)
+//   0x80000000-0x80001FFF: Block RAM (8KB, word-addressed internally)
+//   0x80004000-0x80007FFF: MMIO region (LED register at 0x8000407C)
 //
 // Timing:
 //   - Read latency: 1 cycle (registered output)
@@ -26,8 +26,8 @@
 module vexriscv_blockram #(
     parameter int ADDR_WIDTH = 11,  // 2^11 = 2048 words = 8KB
     parameter int DATA_WIDTH = 32,
-    parameter int MMIO_BASE  = 32'h0000_4000,  // MMIO region start
-    parameter int LED_ADDR   = 32'h0000_407C   // LED register address
+    parameter int MMIO_BASE  = 32'h8000_4000,  // MMIO region start (VexRiscv 0x80000000 base)
+    parameter int LED_ADDR   = 32'h8000_407C   // LED register address
 )(
     input  logic        clk,
     input  logic        rst,

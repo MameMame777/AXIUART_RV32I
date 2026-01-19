@@ -42,11 +42,11 @@ module vexriscv_execute
     input  logic [31:0] memory_REGFILE_WRITE_DATA,
     
     // Outputs
-    output logic [31:0] execute_REGFILE_WRITE_DATA,
     output logic [31:0] execute_SRC1,
     output logic [31:0] execute_SRC2,
     output logic [31:0] execute_SRC_ADD_SUB,
     output logic        execute_SRC_LESS,
+    output logic [31:0] execute_IntAluPlugin_bitwise,
     output logic        execute_arbitration_haltItself_shifter
 );
 
@@ -54,7 +54,6 @@ module vexriscv_execute
     // Internal Signals
     //==========================================================================
     
-    logic [31:0] execute_IntAluPlugin_bitwise;
     logic [31:0] alu_result;
     logic [31:0] src1_muxed;
     logic [31:0] src2_muxed;
@@ -129,13 +128,21 @@ module vexriscv_execute
     
     always_comb begin
         if (execute_SRC_USE_SUB_LESS) begin
-            execute_SRC_ADD_SUB = execute_SRC1 - execute_SRC2;
+            execute_SRC_ADD_SUB = src1_muxed - src2_muxed;
         end else begin
-            execute_SRC_ADD_SUB = execute_SRC1 + execute_SRC2;
+            execute_SRC_ADD_SUB = src1_muxed + src2_muxed;
         end
         
         if (execute_SRC2_FORCE_ZERO) begin
-            execute_SRC_ADD_SUB = execute_SRC1;
+            execute_SRC_ADD_SUB = src1_muxed;
+        end
+    end
+    
+    // Debug: Monitor ALU computation
+    always @(posedge clk) begin
+        if (execute_arbitration_isValid && !execute_arbitration_isStuck) begin
+            $display("[%0t] [EXECUTE_ALU] inst=0x%08x RS1=0x%08x RS2=0x%08x src1=0x%08x src2=0x%08x ADD_SUB=0x%08x SRC2_CTRL=%0d",
+                     $time, execute_INSTRUCTION, execute_RS1, execute_RS2, src1_muxed, src2_muxed, execute_SRC_ADD_SUB, execute_SRC2_CTRL);
         end
     end
     
@@ -143,9 +150,9 @@ module vexriscv_execute
     // ALU - Less Than Comparison
     //==========================================================================
     
-    assign execute_SRC_LESS = ((execute_SRC1[31] == execute_SRC2[31]) ? 
+    assign execute_SRC_LESS = ((src1_muxed[31] == src2_muxed[31]) ? 
                                 execute_SRC_ADD_SUB[31] : 
-                                (execute_SRC_LESS_UNSIGNED ? execute_SRC2[31] : execute_SRC1[31]));
+                                (execute_SRC_LESS_UNSIGNED ? src2_muxed[31] : src1_muxed[31]));
     
     //==========================================================================
     // ALU - Bitwise Operations
@@ -154,13 +161,13 @@ module vexriscv_execute
     always_comb begin
         case (execute_ALU_BITWISE_CTRL)
             2'b00: begin // XOR
-                execute_IntAluPlugin_bitwise = execute_SRC1 ^ execute_SRC2;
+                execute_IntAluPlugin_bitwise = src1_muxed ^ src2_muxed;
             end
             2'b01: begin // OR
-                execute_IntAluPlugin_bitwise = execute_SRC1 | execute_SRC2;
+                execute_IntAluPlugin_bitwise = src1_muxed | src2_muxed;
             end
             default: begin // AND
-                execute_IntAluPlugin_bitwise = execute_SRC1 & execute_SRC2;
+                execute_IntAluPlugin_bitwise = src1_muxed & src2_muxed;
             end
         endcase
     end
@@ -190,10 +197,10 @@ module vexriscv_execute
     assign execute_LightShifterPlugin_isShift = (execute_SHIFT_CTRL != 2'b00); // Not DISABLE
     assign execute_LightShifterPlugin_amplitude = execute_LightShifterPlugin_isActive ? 
                                                    execute_LightShifterPlugin_amplitudeReg : 
-                                                   execute_SRC2[4:0];
+                                                   src2_muxed[4:0];
     assign execute_LightShifterPlugin_shiftInput = execute_LightShifterPlugin_isActive ? 
                                                     memory_REGFILE_WRITE_DATA : 
-                                                    execute_SRC1;
+                                                    src1_muxed;
     assign execute_LightShifterPlugin_done = (execute_LightShifterPlugin_amplitude[4:1] == 4'b0000);
     
     always_comb begin
@@ -222,18 +229,6 @@ module vexriscv_execute
                                                       (execute_SRC2[4:0] != 5'h0) &&
                                                       (!execute_LightShifterPlugin_done) &&
                                                       (!execute_arbitration_isStuckByOthers));
-    
-    //==========================================================================
-    // Execute Result Selection
-    //==========================================================================
-    
-    always_comb begin
-        if (execute_LightShifterPlugin_isShift && execute_LightShifterPlugin_isActive) begin
-            execute_REGFILE_WRITE_DATA = shifter_result;
-        end else begin
-            execute_REGFILE_WRITE_DATA = alu_result;
-        end
-    end
     
     //==========================================================================
     // Sequential Logic - Shifter State
