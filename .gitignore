@@ -172,3 +172,5 @@ vexriscv_reference/config/GenSmallOptimized.scala
 vexriscv_reference/generated/cpu.yaml
 vexriscv_reference/generated/VexRiscv_GenSmallAndProductive.v
 vexriscv_reference/generated/VexRiscv.v
+
+vexriscv_reference/
