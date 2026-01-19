@@ -624,12 +624,14 @@ module vexriscv_top
     end
     
     //==========================================================================
-    // Instruction Decoder Module Instantiation
+    // Instruction Decoder Module Instantiation (Unoptimized)
     //==========================================================================
+    // Using unoptimized decoder generated from SpinalHDL with stupidDecoder=true
+    // This fixes I-type ALU instruction decoding (REGFILE_WRITE_VALID and SRC2_CTRL)
+    // Workarounds are no longer needed!
     
-    vexriscv_decoder u_decoder (
+    vexriscv_decoder_unoptimized u_decoder (
         .decode_INSTRUCTION              (decode_INSTRUCTION),
-        .decoder_output                  (/* unused packed output */),
         .decode_SRC1_CTRL                (decode_SRC1_CTRL),
         .decode_SRC_USE_SUB_LESS         (decode_SRC_USE_SUB_LESS),
         .decode_MEMORY_ENABLE            (decode_MEMORY_ENABLE),
@@ -651,29 +653,13 @@ module vexriscv_top
     );
     
     //==========================================================================
-    // TEMPORARY FIX: Decoder ROM Bug Workaround
+    // Decoder ROM Workarounds REMOVED
     //==========================================================================
-    // The decoder ROM incorrectly outputs REGFILE_WRITE_VALID=0 for I-type ALU instructions
-    // This workaround overrides the decoder output to set the flag correctly.
-    // TODO: Regenerate decoder ROM table from SpinalHDL with correct settings
-    
-    logic decode_REGFILE_WRITE_VALID_rom_output;
-    logic decode_REGFILE_WRITE_VALID_corrected;
-    logic [1:0] decode_SRC2_CTRL_rom_output;
-    logic [1:0] decode_SRC2_CTRL_corrected;
-    
-    assign decode_REGFILE_WRITE_VALID_rom_output = decode_REGFILE_WRITE_VALID;
-    assign decode_SRC2_CTRL_rom_output = decode_SRC2_CTRL;
-    
-    // Override for I-type ALU instructions (opcode=0010011) with non-zero rd
-    assign decode_REGFILE_WRITE_VALID_corrected = 
-        ((decode_INSTRUCTION[6:0] == 7'b0010011) && (decode_INSTRUCTION[11:7] != 5'h0)) ? 1'b1 :
-        decode_REGFILE_WRITE_VALID_rom_output;
-    
-    // Override SRC2_CTRL for I-type ALU instructions (should select IMI=0x01 for immediate)
-    assign decode_SRC2_CTRL_corrected = 
-        (decode_INSTRUCTION[6:0] == 7'b0010011) ? 2'b01 :  // I-type ALU: use immediate (IMI)
-        decode_SRC2_CTRL_rom_output;
+    // Previous workarounds for I-type ALU instruction decoding have been removed.
+    // The unoptimized decoder correctly sets:
+    //   - REGFILE_WRITE_VALID=1 for ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI
+    //   - SRC2_CTRL=IMI (immediate) for all I-type ALU instructions
+    // No longer needed as of 2026-01-19 (decoder ROM regeneration)
     
     // Decode stage control signal assignments
     // Decode stage control signal pass-through assignments
@@ -694,7 +680,7 @@ module vexriscv_top
     // Stage signal pass-through helpers (simplified - decoder provides direct outputs)
     assign _zz_decode_to_execute_SRC1_CTRL_1 = decode_SRC1_CTRL;
     assign _zz_execute_SRC1_CTRL = decode_to_execute_SRC1_CTRL;
-    assign _zz_decode_to_execute_SRC2_CTRL_1 = decode_SRC2_CTRL_corrected;  // Use corrected SRC2_CTRL
+    assign _zz_decode_to_execute_SRC2_CTRL_1 = decode_SRC2_CTRL;  // Direct from decoder
     assign _zz_execute_SRC2_CTRL = decode_to_execute_SRC2_CTRL;
     assign _zz_decode_to_execute_ENV_CTRL_1 = decode_ENV_CTRL;
     assign _zz_execute_to_memory_ENV_CTRL_1 = execute_ENV_CTRL;
@@ -1035,9 +1021,9 @@ module vexriscv_top
                 decode_to_execute_SRC2_CTRL <= _zz_decode_to_execute_SRC2_CTRL;
             end
             if(when_Pipeline_l124_17) begin
-                decode_to_execute_REGFILE_WRITE_VALID <= decode_REGFILE_WRITE_VALID_corrected;
+                decode_to_execute_REGFILE_WRITE_VALID <= decode_REGFILE_WRITE_VALID;
 `ifdef DEBUG
-                if (decode_REGFILE_WRITE_VALID_corrected) $display("[%0t] PIPE_REG: decode→execute REGFILE_WRITE_VALID=1 (inst=0x%08x)", $time, decode_INSTRUCTION);
+                if (decode_REGFILE_WRITE_VALID) $display("[%0t] PIPE_REG: decode→execute REGFILE_WRITE_VALID=1 (inst=0x%08x)", $time, decode_INSTRUCTION);
 `endif
             end
             if(when_Pipeline_l124_18) begin

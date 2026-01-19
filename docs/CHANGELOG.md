@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- **VexRiscv Hazard Module Bug** (2026-01-20)
+  - **Issue**: Pipeline stalls indefinitely on first instruction (ADDI x1, x0, 1)
+  - **Root cause**: Hazard detection used flat conditions instead of nested structure, causing false hazards when x0 register used as source operand
+  - **Discovery**: Bug exposed by unoptimized decoder but pre-existed in hazard module extraction from VexRiscv
+  - **Solution**: Replaced flat hazard conditions with 3-level nested structure matching VexRiscv reference
+  - **Files modified**:
+    - `rtl/cpu/vexriscv_hazard_simple.sv` (lines 148-186): Added proper nesting for WriteBack/Memory/Execute stage hazards, added RS1_USE/RS2_USE override logic
+  - **Impact**: vexriscv_regfile_test now PASS (x1=1, x2=1, x3=3), pipeline advances correctly
+  - **Verification**: Test completed in 420ns (previously stalled indefinitely at 196ns)
+
+### Changed
+- **VexRiscv Decoder Migration: ROM → Unoptimized Case-Statement** (2026-01-20)
+  - **Decision**: Keep unoptimized decoder (+4% area acceptable for explicit logic and no workarounds)
+  - **Motivation**: ROM decoder required 4 workarounds for I-type instruction bugs, opaque logic difficult to modify
+  - **Implementation**: Generated unoptimized decoder from SpinalHDL (stupidDecoder=true), implemented all 18 control signals
+  - **Files added**:
+    - `rtl/cpu/vexriscv_decoder_unoptimized.sv` (520 lines): Complete case-statement decoder with explicit control signal logic
+  - **Files modified**:
+    - `rtl/cpu/vexriscv_top.sv` (lines 633-676): Switched to unoptimized decoder instantiation, removed 4 workarounds
+  - **Workarounds removed**:
+    1. decode_REGFILE_WRITE_VALID_corrected (I-type ALU instructions)
+    2. decode_SRC2_CTRL_corrected (I-type immediate source)
+    3. decode_IS_CSR_corrected (CSR instruction detection)
+    4. decode_ENV_CTRL_corrected (ECALL/EBREAK detection)
+  - **Performance impact**: +85 LUTs (+4.1% CPU area), +0.8ns timing (negligible, doesn't affect 150MHz Fmax)
+  - **Benefits**: No workarounds, explicit control signals, easier debugging, future-proof for modifications
+  - **Verification**: All tests PASS with cleaner codebase
+
 ### Optimization
 - **RV32I Pipeline Timing Optimization** (2026-01-05)
   - **Issue**: PandR timing violation (WNS = -0.472ns, TNS = -0.509ns, 2/9633 failing endpoints)

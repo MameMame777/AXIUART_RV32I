@@ -150,35 +150,53 @@ module vexriscv_hazard_simple
     
     always_comb begin
         src0Hazard = 1'b0;
-        if (when_HazardSimplePlugin_l57) begin
-            src0Hazard = 1'b1;
+        // WriteBack buffer hazard for RS1
+        if (when_HazardSimplePlugin_l47) begin
+            if (when_HazardSimplePlugin_l48) begin
+                src0Hazard = 1'b1;
+            end
         end
+        // Memory stage hazard for RS1
         if (when_HazardSimplePlugin_l45_1) begin
             if (when_HazardSimplePlugin_l57_1) begin
                 src0Hazard = 1'b1;
             end
         end
+        // Execute stage hazard for RS1
         if (when_HazardSimplePlugin_l45_2) begin
             if (when_HazardSimplePlugin_l57_2) begin
                 src0Hazard = 1'b1;
             end
         end
+        // Override: no hazard if RS1 not used
+        if (when_HazardSimplePlugin_l105) begin
+            src0Hazard = 1'b0;
+        end
     end
     
     always_comb begin
         src1Hazard = 1'b0;
-        if (when_HazardSimplePlugin_l58) begin
-            src1Hazard = 1'b1;
+        // WriteBack buffer hazard for RS2
+        if (when_HazardSimplePlugin_l47) begin
+            if (when_HazardSimplePlugin_l51) begin
+                src1Hazard = 1'b1;
+            end
         end
+        // Memory stage hazard for RS2
         if (when_HazardSimplePlugin_l45_1) begin
             if (when_HazardSimplePlugin_l58_1) begin
                 src1Hazard = 1'b1;
             end
         end
+        // Execute stage hazard for RS2
         if (when_HazardSimplePlugin_l45_2) begin
             if (when_HazardSimplePlugin_l58_2) begin
                 src1Hazard = 1'b1;
             end
+        end
+        // Override: no hazard if RS2 not used
+        if (when_HazardSimplePlugin_l108) begin
+            src1Hazard = 1'b0;
         end
     end
     
