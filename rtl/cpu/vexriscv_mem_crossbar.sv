@@ -7,8 +7,13 @@
 //   - IBus: 7-deep FIFO for pending instruction fetches (matches VexRiscv max)
 //   - DBus: 2-deep FIFO for load/store transactions
 //   - Debug: Direct access when CPU halted (takes over both ports)
-//   - MMIO decode: Routes LED register access (0x407C) to separate interface
+//   - MMIO decode: Routes LED register access (0x8000407C) to separate interface
 //   - Waveform logging: $display transactions for debugging
+//
+// Memory Map (VexRiscv standard 0x80000000 base):
+//   0x80000000-0x80001FFF: Block RAM (8KB)
+//   0x8000407C:            LED register (MMIO)
+//   Debug interface uses word addresses (0-2047) independent of CPU address space
 //
 // Port Allocation:
 //   - Port A: IBus (instruction fetch) or Debug (when halted)
@@ -126,13 +131,18 @@ module vexriscv_mem_crossbar (
     assign ibus_fifo_full  = (ibus_fifo_count == 3'b111);
     
     // IBus command handshake: Accept when FIFO not full
-    assign iBus_cmd_ready = !ibus_fifo_full && !cpu_halted;
+    // Remove cpu_halted gating - VexRiscv handles halt internally via fetcher_halt
+    assign iBus_cmd_ready = !ibus_fifo_full;
     assign ibus_fifo_push = iBus_cmd_valid && iBus_cmd_ready;
     assign ibus_fifo_din  = '{pc: iBus_cmd_payload_pc};
     
     always_ff @(posedge clk) begin
         if (rst) begin
             ibus_wr_ptr <= 3'b000;
+            // Initialize FIFO to prevent X propagation
+            for (int i = 0; i < 7; i++) begin
+                ibus_fifo[i] <= '0;
+            end
         end else if (ibus_fifo_push) begin
             ibus_fifo[ibus_wr_ptr] <= ibus_fifo_din;
             ibus_wr_ptr <= ibus_wr_ptr + 1'b1;
@@ -181,6 +191,10 @@ module vexriscv_mem_crossbar (
     always_ff @(posedge clk) begin
         if (rst) begin
             dbus_wr_ptr <= 1'b0;
+            // Initialize FIFO to prevent X propagation
+            for (int i = 0; i < 2; i++) begin
+                dbus_fifo[i] <= '0;
+            end
         end else if (dbus_fifo_push) begin
             dbus_fifo[dbus_wr_ptr] <= dbus_fifo_din;
             dbus_wr_ptr <= ~dbus_wr_ptr;
@@ -202,7 +216,9 @@ module vexriscv_mem_crossbar (
     ibus_state_t ibus_state;
     logic [31:0] ibus_rdata_buf;
     
-    assign ibus_fifo_pop = (ibus_state == IBUS_IDLE) && !ibus_fifo_empty && !cpu_halted;
+    // Remove cpu_halted gating - VexRiscv won't issue commands when halted anyway
+    // The cpu_halted check was preventing FIFO from being serviced, causing pipeline starvation
+    assign ibus_fifo_pop = (ibus_state == IBUS_IDLE) && !ibus_fifo_empty;
     
     always_ff @(posedge clk) begin
         if (rst) begin
@@ -371,7 +387,7 @@ module vexriscv_mem_crossbar (
         end else if (ibus_state == IBUS_IDLE && ibus_fifo_pop) begin
             // IBus read
             ram_a_en        = 1'b1;
-            ram_a_addr      = ibus_fifo_dout.pc[12:2];  // Convert byte addr to word addr
+            ram_a_addr      = 11'((ibus_fifo_dout.pc - 32'h80000000) >> 2);  // Subtract base, convert to word addr, mask to 11-bit
             ram_a_we        = 4'b0000;
             ram_a_wdata     = 32'h0;
             ram_a_byte_addr = ibus_fifo_dout.pc;
@@ -400,7 +416,7 @@ module vexriscv_mem_crossbar (
         end else if (dbus_state == DBUS_IDLE && dbus_fifo_pop) begin
             // DBus access
             ram_b_en        = 1'b1;
-            ram_b_addr      = dbus_fifo_dout.address[12:2];
+            ram_b_addr      = 11'((dbus_fifo_dout.address - 32'h80000000) >> 2);  // Subtract base, convert to word addr, mask to 11-bit
             ram_b_we        = dbus_fifo_dout.wr ? dbus_fifo_dout.mask : 4'b0000;
             ram_b_wdata     = dbus_fifo_dout.data;
             ram_b_byte_addr = dbus_fifo_dout.address;

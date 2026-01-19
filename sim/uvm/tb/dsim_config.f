@@ -59,6 +59,7 @@
 ../../../rtl/cpu/vexriscv_branch.sv
 ../../../rtl/cpu/vexriscv_csr.sv
 ../../../rtl/cpu/vexriscv_execute.sv
+../../../rtl/cpu/vexriscv_decoder.sv
 ../../../rtl/cpu/vexriscv_top.sv
 
 # RTL Design Files - VexRiscv UART Integration
@@ -73,6 +74,9 @@
 
 # Assertions - Debug Port (compatible with VexRiscv wrapper)
 ../../assertions/rv32i_debug_port_assertions.sv
+
+# VexRiscv tohost Monitor (ISA test pass/fail detection)
+../../assertions/bind_vexriscv_tohost_monitor.sv
 
 # Assertions - RV32I Pipeline Stages (legacy - commented out for VexRiscv)
 # ../../assertions/rv32i_if_timing_spec.sv
@@ -92,6 +96,25 @@
 # Assertions - Register Block CPU Memory Interface (compatible with VexRiscv)
 ../../assertions/register_block_cpu_mem_assertions.sv
 ../../assertions/bind_register_block_cpu_mem.sv
+
+# VexRiscv Fetch Verification Assertions (debugging fetch cycle issues)
+../../assertions/spec/vexriscv_fetch_verification.sv
+../../assertions/bind_vexriscv_fetch_verification.sv
+
+# VexRiscv Base Test and Monitor
+../sv/vexriscv_base_test.sv
+../sv/vexriscv_tohost_monitor.sv
+
+# VexRiscv Stage 1 Tests
+../../tests/vexriscv_regfile_test.sv
+../../tests/vexriscv_pipeline_flow_test.sv
+../../tests/vexriscv_memory_access_test.sv
+../../tests/vexriscv_ex_bypass_test.sv
+../../tests/vexriscv_mem_bypass_test.sv
+../../tests/vexriscv_wb_bypass_test.sv
+../../tests/vexriscv_load_use_stall_test.sv
+../../tests/vexriscv_ibus_fetch_test.sv
+../../tests/vexriscv_dbus_access_test.sv
 
 # Testbench Top Module (includes package and test_lib)
 +incdir+.

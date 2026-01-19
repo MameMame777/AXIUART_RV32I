@@ -334,6 +334,22 @@ module vexriscv_ibus_simple
         end
     end
     
+    // Debug: Log decode arbitration changes
+    always @(posedge clk) begin
+        if (decode_arbitration_isValid && (!$past(decode_arbitration_isValid))) begin
+            $display("[%0t] DECODE: decode_arbitration_isValid asserted (inst=0x%08x, pc=0x%08x)", 
+                     $time, decode_instruction, decode_pc);
+        end
+    end
+    
+    // Expose decoder outputs for debugging
+    always @(posedge clk) begin
+        if (decode_arbitration_isValid) begin
+            $display("[%0t] DECODE_CTRL: REGFILE_WR=%0b RS1_USE=%0b RS2_USE=%0b MEM_EN=%0b", 
+                     $time, 1'bx, 1'bx, 1'bx, 1'bx);  // Will be driven by top-level
+        end
+    end
+    
     assign decode_instruction = injector_decodeInput_payload_rsp_inst;
     assign decode_pc = injector_decodeInput_payload_pc;
     
@@ -433,9 +449,17 @@ module vexriscv_ibus_simple
         end else begin
             if (decode_arbitration_removeIt) begin
                 injector_decodeInput_valid <= 1'b0;
+                $display("[%0t] INJECTOR: Clearing injector_decodeInput_valid due to removeIt", $time);
             end
             if (iBusRsp_stages_1_output_ready) begin
                 injector_decodeInput_valid <= (rspBuffer_pop_valid && (!externalFlush));
+                if (rspBuffer_pop_valid && (!externalFlush)) begin
+                    $display("[%0t] INJECTOR: Setting injector_decodeInput_valid=1 (inst=0x%08x, pc=0x%08x)", 
+                             $time, rspBuffer_pop_payload_inst, iBusRsp_stages_1_output_payload);
+                end else begin
+                    $display("[%0t] INJECTOR: Clearing injector_decodeInput_valid (rspValid=%0b, flush=%0b)", 
+                             $time, rspBuffer_pop_valid, externalFlush);
+                end
             end
             
             if (fetchPc_flushed) begin
@@ -477,7 +501,7 @@ module vexriscv_ibus_simple
     
     always_ff @(posedge clk) begin
         if (iBusRsp_stages_1_output_ready) begin
-            injector_decodeInput_payload_pc <= rspBuffer_pop_payload_inst; // Placeholder - actual maps to PC
+            injector_decodeInput_payload_pc <= iBusRsp_stages_1_output_payload;  // PC from stage 1
             injector_decodeInput_payload_rsp_error <= rspBuffer_pop_payload_error;
             injector_decodeInput_payload_rsp_inst <= rspBuffer_pop_payload_inst;
             injector_decodeInput_payload_isRvc <= 1'b0;

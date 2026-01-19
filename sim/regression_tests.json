@@ -46,6 +46,134 @@
         }
       ]
     },
+    "vexriscv_smoke": {
+      "description": "VexRiscv Stage 1 smoke tests (3 tests, <20s)",
+      "tests": [
+        {
+          "name": "vexriscv_regfile_test",
+          "description": "Register file + x0 hardwiring",
+          "timeout": 120,
+          "expected_duration": 5
+        },
+        {
+          "name": "vexriscv_pipeline_flow_test",
+          "description": "4-stage pipeline flow with NOPs",
+          "timeout": 120,
+          "expected_duration": 5
+        },
+        {
+          "name": "vexriscv_memory_access_test",
+          "description": "LW/SW operations + load-use stall",
+          "timeout": 120,
+          "expected_duration": 8
+        }
+      ]
+    },
+    "vexriscv_hazard": {
+      "description": "VexRiscv hazard handling tests (4 tests, <30s)",
+      "tests": [
+        {
+          "name": "vexriscv_ex_bypass_test",
+          "description": "EX→EX data forwarding",
+          "timeout": 60,
+          "expected_duration": 5
+        },
+        {
+          "name": "vexriscv_mem_bypass_test",
+          "description": "MEM→EX data forwarding",
+          "timeout": 60,
+          "expected_duration": 5
+        },
+        {
+          "name": "vexriscv_wb_bypass_test",
+          "description": "WB→EX forwarding (bypassWriteBackBuffer validation)",
+          "timeout": 60,
+          "expected_duration": 5
+        },
+        {
+          "name": "vexriscv_load_use_stall_test",
+          "description": "Load-use hazard with mandatory stall",
+          "timeout": 60,
+          "expected_duration": 8
+        }
+      ]
+    },
+    "vexriscv_bus": {
+      "description": "VexRiscv bus protocol tests (2 tests, <20s)",
+      "tests": [
+        {
+          "name": "vexriscv_ibus_fetch_test",
+          "description": "IBus instruction fetch protocol",
+          "timeout": 120,
+          "expected_duration": 8
+        },
+        {
+          "name": "vexriscv_dbus_access_test",
+          "description": "DBus byte/halfword/word accesses",
+          "timeout": 120,
+          "expected_duration": 10
+        }
+      ]
+    },
+    "vexriscv_stage1": {
+      "description": "VexRiscv complete Stage 1 (all 9 tests, <70s)",
+      "tests": [
+        {
+          "name": "vexriscv_regfile_test",
+          "description": "Register file + x0 hardwiring",
+          "timeout": 120,
+          "expected_duration": 5
+        },
+        {
+          "name": "vexriscv_pipeline_flow_test",
+          "description": "4-stage pipeline flow",
+          "timeout": 120,
+          "expected_duration": 5
+        },
+        {
+          "name": "vexriscv_memory_access_test",
+          "description": "Memory operations",
+          "timeout": 120,
+          "expected_duration": 8
+        },
+        {
+          "name": "vexriscv_ex_bypass_test",
+          "description": "EX bypass",
+          "timeout": 60,
+          "expected_duration": 5
+        },
+        {
+          "name": "vexriscv_mem_bypass_test",
+          "description": "MEM bypass",
+          "timeout": 60,
+          "expected_duration": 5
+        },
+        {
+          "name": "vexriscv_wb_bypass_test",
+          "description": "WB bypass (bypassWriteBackBuffer)",
+          "timeout": 60,
+          "expected_duration": 5
+        },
+        {
+          "name": "vexriscv_load_use_stall_test",
+          "description": "Load-use stall",
+          "timeout": 60,
+          "expected_duration": 8
+        },
+        {
+          "name": "vexriscv_ibus_fetch_test",
+          "description": "IBus protocol",
+          "timeout": 120,
+          "expected_duration": 8
+        },
+        {
+          "name": "vexriscv_dbus_access_test",
+          "description": "DBus protocol",
+          "timeout": 120,
+          "expected_duration": 10
+        }
+      ]
+    },
     "cpu_basic": {
       "description": "RV32I CPU basic verification",
       "tests": [

@@ -18,6 +18,8 @@
 //   if (monitor.test_passed) $display("PASS");
 //==============================================================================
 
+import uvm_pkg::*;
+
 class vexriscv_tohost_monitor extends uvm_monitor;
     
     `uvm_component_utils(vexriscv_tohost_monitor)
@@ -132,7 +134,7 @@ class vexriscv_tohost_monitor extends uvm_monitor;
             UVM_LOW)
         
         forever begin
-            @(posedge top.clk);
+            @(posedge $root.rv32i_tb_top.clk);
             cycle++;
             
             // Read tohost address via backdoor
@@ -238,7 +240,7 @@ class vexriscv_tohost_monitor extends uvm_monitor;
             
             begin
                 // Timeout watchdog
-                repeat(timeout_cycles) @(posedge top.clk);
+                repeat(timeout_cycles) @(posedge $root.rv32i_tb_top.clk);
                 timeout = 1;
             end
         join_any
@@ -321,7 +323,7 @@ class vexriscv_tohost_monitor_blockram extends vexriscv_tohost_monitor;
     `uvm_component_utils(vexriscv_tohost_monitor_blockram)
     
     // Hierarchical path to BlockRAM
-    string blockram_path = "top.u_blockram.mem";
+    string blockram_path = "mem_crossbar.blockram_inst.mem";
     
     function new(string name = "vexriscv_tohost_monitor_blockram", 
                  uvm_component parent = null);
@@ -332,7 +334,7 @@ class vexriscv_tohost_monitor_blockram extends vexriscv_tohost_monitor;
         super.build_phase(phase);
         
         if (!uvm_config_db#(string)::get(this, "", "blockram_path", blockram_path)) begin
-            blockram_path = "top.u_blockram.mem";
+            blockram_path = "mem_crossbar.blockram_inst.mem";
         end
         
         `uvm_info(get_type_name(), 
@@ -345,15 +347,10 @@ class vexriscv_tohost_monitor_blockram extends vexriscv_tohost_monitor;
         // Word address = byte address / 4
         int word_addr = tohost_addr >> 2;
         
-        // Hierarchical reference (must be adapted to actual testbench)
-        // data = top.u_blockram.mem[word_addr];
+        // Hierarchical reference: $root → rv32i_tb_top → dut (AXIUART_Top) → vexriscv_inst → mem_crossbar → blockram_inst
+        data = $root.rv32i_tb_top.dut.vexriscv_inst.mem_crossbar.blockram_inst.mem[word_addr];
         
-        // For now, placeholder
-        `uvm_warning(get_type_name(), 
-            "read_tohost_backdoor() using BlockRAM not yet connected - " +
-            "update hierarchical path")
-        data = 32'h00000000;
-        return 0;
+        return 1;  // Success
     endfunction
     
 endclass : vexriscv_tohost_monitor_blockram

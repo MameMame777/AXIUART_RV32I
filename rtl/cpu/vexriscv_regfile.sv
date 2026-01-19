@@ -59,27 +59,24 @@ module vexriscv_regfile
     end
     
     //==========================================================================
-    // Synchronous Write Port
-    // Original: lines 1065-1068
-    // Note: write_valid corresponds to _zz_1 in original
-    //==========================================================================
-    
-    always_ff @(posedge clk) begin
-        if (write_valid && (write_addr != 5'b00000)) begin
-            regfile[write_addr] <= write_data;
-        end
-    end
-    
-    //==========================================================================
-    // x0 Hardwired to Zero
-    // Ensures x0 always reads as zero
+    // Register File Reset and Write
+    // x0 is hardwired to zero, x1-x31 are initialized to zero on reset
     //==========================================================================
     
     always_ff @(posedge clk) begin
         if (reset) begin
-            regfile[0] <= 32'h00000000;
+            // Initialize all registers to zero on reset
+            for (int i = 0; i < 32; i++) begin
+                regfile[i] <= 32'h00000000;
+            end
         end else begin
-            regfile[0] <= 32'h00000000;  // Always force x0 to zero
+            // x0 always hardwired to zero
+            regfile[0] <= 32'h00000000;
+            
+            // Write to x1-x31 when write_valid is asserted
+            if (write_valid && (write_addr != 5'b00000)) begin
+                regfile[write_addr] <= write_data;
+            end
         end
     end
     
@@ -88,5 +85,47 @@ module vexriscv_regfile
     //==========================================================================
     
     assign debug_regfile = regfile;
+    // Individual register debug visibility
+    logic [31:0] debug_x0,  debug_x1,  debug_x2,  debug_x3;
+    logic [31:0] debug_x4,  debug_x5,  debug_x6,  debug_x7;
+    logic [31:0] debug_x8,  debug_x9,  debug_x10, debug_x11;
+    logic [31:0] debug_x12, debug_x13, debug_x14, debug_x15;
+    logic [31:0] debug_x16, debug_x17, debug_x18, debug_x19;
+    logic [31:0] debug_x20, debug_x21, debug_x22, debug_x23;
+    logic [31:0] debug_x24, debug_x25, debug_x26, debug_x27;
+    logic [31:0] debug_x28, debug_x29, debug_x30, debug_x31;
+
+    assign debug_x0  = regfile[0];
+    assign debug_x1  = regfile[1];
+    assign debug_x2  = regfile[2];
+    assign debug_x3  = regfile[3];
+    assign debug_x4  = regfile[4];
+    assign debug_x5  = regfile[5];
+    assign debug_x6  = regfile[6];
+    assign debug_x7  = regfile[7];
+    assign debug_x8  = regfile[8];
+    assign debug_x9  = regfile[9];
+    assign debug_x10 = regfile[10];
+    assign debug_x11 = regfile[11];
+    assign debug_x12 = regfile[12];
+    assign debug_x13 = regfile[13];
+    assign debug_x14 = regfile[14];
+    assign debug_x15 = regfile[15];
+    assign debug_x16 = regfile[16];
+    assign debug_x17 = regfile[17];
+    assign debug_x18 = regfile[18];
+    assign debug_x19 = regfile[19];
+    assign debug_x20 = regfile[20];
+    assign debug_x21 = regfile[21];
+    assign debug_x22 = regfile[22];
+    assign debug_x23 = regfile[23];
+    assign debug_x24 = regfile[24];
+    assign debug_x25 = regfile[25];
+    assign debug_x26 = regfile[26];
+    assign debug_x27 = regfile[27];
+    assign debug_x28 = regfile[28];
+    assign debug_x29 = regfile[29];
+    assign debug_x30 = regfile[30];
+    assign debug_x31 = regfile[31];
 
 endmodule : vexriscv_regfile
