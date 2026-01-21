@@ -151,6 +151,7 @@ module vexriscv_top
     logic [31:0] execute_SRC_ADD_SUB;
     logic        execute_SRC_LESS;
     logic [31:0] execute_IntAluPlugin_bitwise;
+    logic [31:0] execute_shifter_result;
     logic [31:0] execute_REGFILE_WRITE_DATA;
     logic        execute_REGFILE_WRITE_VALID;
     logic        execute_BYPASSABLE_EXECUTE_STAGE;
@@ -512,6 +513,8 @@ module vexriscv_top
         .writeBack_REGFILE_WRITE_VALID  (writeBack_REGFILE_WRITE_VALID),
         .writeBack_INSTRUCTION_rd       (writeBack_INSTRUCTION[11:7]),
         .writeBack_REGFILE_WRITE_DATA   (writeBack_REGFILE_WRITE_DATA),
+        .writeBack_MEMORY_ENABLE        (writeBack_MEMORY_ENABLE),
+        .writeBack_DBusSimplePlugin_rspFormated (writeBack_DBusSimplePlugin_rspFormated),
         .decode_RS1                     (decode_RS1),
         .decode_RS2                     (decode_RS2),
         .decode_arbitration_haltByOther_hazard (decode_arbitration_haltByOther_hazard)
@@ -578,6 +581,7 @@ module vexriscv_top
         .execute_arbitration_isValid    (execute_arbitration_isValid),
         .execute_arbitration_isStuck    (execute_arbitration_isStuck),
         .execute_arbitration_isStuckByOthers (execute_arbitration_isStuckByOthers),
+        .execute_arbitration_removeIt   (execute_arbitration_removeIt),
         .execute_PC                     (execute_PC),
         .execute_INSTRUCTION            (execute_INSTRUCTION),
         .execute_RS1                    (execute_RS1),
@@ -596,6 +600,7 @@ module vexriscv_top
         .execute_SRC_ADD_SUB            (execute_SRC_ADD_SUB),
         .execute_SRC_LESS               (execute_SRC_LESS),
         .execute_IntAluPlugin_bitwise   (execute_IntAluPlugin_bitwise),
+        .execute_shifter_result         (execute_shifter_result),
         .execute_arbitration_haltItself_shifter (execute_arbitration_haltItself_shifter)
     );
     
@@ -615,12 +620,19 @@ module vexriscv_top
     //==========================================================================
     
     // Execute register write data mux
+    // Priority: Shift operations override ALU_CTRL-based selection
     always_comb begin
-        case(execute_ALU_CTRL)
-            2'd2:     execute_REGFILE_WRITE_DATA = execute_IntAluPlugin_bitwise;  // BITWISE
-            2'd1:     execute_REGFILE_WRITE_DATA = {31'd0, execute_SRC_LESS};     // SLT_SLTU
-            default:  execute_REGFILE_WRITE_DATA = execute_SRC_ADD_SUB;           // ADD_SUB
-        endcase
+        if (execute_arbitration_isValid && (execute_SHIFT_CTRL != 2'b00) && (execute_SRC2[4:0] != 5'h0)) begin
+            // Shift operation active (non-zero shift amount)
+            execute_REGFILE_WRITE_DATA = execute_shifter_result;
+        end else begin
+            // Standard ALU operations
+            case(execute_ALU_CTRL)
+                2'd2:     execute_REGFILE_WRITE_DATA = execute_IntAluPlugin_bitwise;  // BITWISE
+                2'd1:     execute_REGFILE_WRITE_DATA = {31'd0, execute_SRC_LESS};     // SLT_SLTU
+                default:  execute_REGFILE_WRITE_DATA = execute_SRC_ADD_SUB;           // ADD_SUB
+            endcase
+        end
     end
     
     //==========================================================================

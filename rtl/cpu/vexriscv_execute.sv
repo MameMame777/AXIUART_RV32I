@@ -1,4 +1,5 @@
 `timescale 1ns/1ps
+`define DEBUG
 //==============================================================================
 // VexRiscv Execute Stage Module
 //
@@ -23,6 +24,7 @@ module vexriscv_execute
     input  logic        execute_arbitration_isValid,
     input  logic        execute_arbitration_isStuck,
     input  logic        execute_arbitration_isStuckByOthers,
+    input  logic        execute_arbitration_removeIt,
     input  logic [31:0] execute_PC,
     input  logic [31:0] execute_INSTRUCTION,
     input  logic [31:0] execute_RS1,
@@ -47,6 +49,7 @@ module vexriscv_execute
     output logic [31:0] execute_SRC_ADD_SUB,
     output logic        execute_SRC_LESS,
     output logic [31:0] execute_IntAluPlugin_bitwise,
+    output logic [31:0] execute_shifter_result,
     output logic        execute_arbitration_haltItself_shifter
 );
 
@@ -180,7 +183,7 @@ module vexriscv_execute
     
     always_comb begin
         case (execute_ALU_CTRL)
-            2'b00: begin // ADD_SUB
+            2'b00: begin // ADD_SUB (also used for shifts but overridden by shift path)
                 alu_result = execute_SRC_ADD_SUB;
             end
             2'b01: begin // SLT_SLTU
@@ -191,6 +194,9 @@ module vexriscv_execute
             end
         endcase
     end
+    
+    // Export shifter result for writeback mux
+    assign execute_shifter_result = shifter_result;
     
     //==========================================================================
     // Light Shifter Plugin (Multi-cycle)
@@ -250,7 +256,30 @@ module vexriscv_execute
             if (execute_LightShifterPlugin_done && (!execute_arbitration_isStuck)) begin
                 execute_LightShifterPlugin_isActive <= 1'b0;
             end
+
+            if (execute_arbitration_removeIt) begin
+                execute_LightShifterPlugin_isActive <= 1'b0;
+            end
         end
     end
-
+    
+`ifdef DEBUG
+    always @(posedge clk) begin
+        if (execute_arbitration_isValid && execute_LightShifterPlugin_isShift) begin
+            $display("[%0t] SHIFTER: active=%b inst=%x src1=%x src2=%x shiftInput=%x mem_feedback=%x result=%x amp=%d done=%b stuck=%b",
+                $time,
+                execute_LightShifterPlugin_isActive,
+                execute_INSTRUCTION,
+                src1_muxed,
+                src2_muxed,
+                execute_LightShifterPlugin_shiftInput,
+                memory_REGFILE_WRITE_DATA,
+                shifter_result,
+                execute_LightShifterPlugin_amplitude,
+                execute_LightShifterPlugin_done,
+                execute_arbitration_isStuck
+            );
+        end
+    end
+`endif
 endmodule : vexriscv_execute

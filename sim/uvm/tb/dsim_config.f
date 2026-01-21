@@ -107,6 +107,7 @@
 
 # VexRiscv Stage 1 Tests
 ../../tests/vexriscv_regfile_test.sv
+../../tests/vexriscv_alu_test.sv
 ../../tests/vexriscv_pipeline_flow_test.sv
 ../../tests/vexriscv_memory_access_test.sv
 ../../tests/vexriscv_ex_bypass_test.sv
