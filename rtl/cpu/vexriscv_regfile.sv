@@ -41,21 +41,21 @@ module vexriscv_regfile
     logic [31:0] regfile [0:31];
     
     //==========================================================================
-    // Synchronous Read Port 1
-    // Original: lines 1053-1056
+    // Asynchronous Read Port 1
+    // Changed to async read to match VexRiscv Decode stage timing
     //==========================================================================
     
-    always_ff @(posedge clk) begin
-        read_data1 <= regfile[read_addr1];
+    always_comb begin
+        read_data1 = regfile[read_addr1];
     end
     
     //==========================================================================
-    // Synchronous Read Port 2
-    // Original: lines 1059-1062
+    // Asynchronous Read Port 2
+    // Changed to async read to match VexRiscv Decode stage timing
     //==========================================================================
     
-    always_ff @(posedge clk) begin
-        read_data2 <= regfile[read_addr2];
+    always_comb begin
+        read_data2 = regfile[read_addr2];
     end
     
     //==========================================================================

@@ -46,6 +46,8 @@ module vexriscv_hazard_simple
     input  logic        writeBack_REGFILE_WRITE_VALID,
     input  logic [4:0]  writeBack_INSTRUCTION_rd,
     input  logic [31:0] writeBack_REGFILE_WRITE_DATA,
+    input  logic        writeBack_MEMORY_ENABLE,
+    input  logic [31:0] writeBack_DBusSimplePlugin_rspFormated,
     
     // Hazard outputs
     output logic [31:0] decode_RS1,
@@ -70,6 +72,8 @@ module vexriscv_hazard_simple
     
     logic        addr0Match;
     logic        addr1Match;
+
+    logic [31:0] writeBack_forward_data;
     
     // Condition signals for each stage
     logic        when_HazardSimplePlugin_l47;
@@ -101,7 +105,8 @@ module vexriscv_hazard_simple
     
     assign writeBackWrites_valid = writeBack_arbitration_isValid && writeBack_REGFILE_WRITE_VALID;
     assign writeBackWrites_payload_address = writeBack_INSTRUCTION_rd;
-    assign writeBackWrites_payload_data = writeBack_REGFILE_WRITE_DATA;
+    assign writeBack_forward_data = writeBack_MEMORY_ENABLE ? writeBack_DBusSimplePlugin_rspFormated : writeBack_REGFILE_WRITE_DATA;
+    assign writeBackWrites_payload_data = writeBack_forward_data;
     
     //==========================================================================
     // Address Match Detection (for WriteBack buffer forwarding)
@@ -228,7 +233,7 @@ module vexriscv_hazard_simple
         if (when_HazardSimplePlugin_l45) begin
             if (when_HazardSimplePlugin_l47) begin
                 if (when_HazardSimplePlugin_l48) begin
-                    decode_RS1 = writeBack_REGFILE_WRITE_DATA;
+                    decode_RS1 = writeBack_forward_data;
                 end
             end
         end
@@ -270,7 +275,7 @@ module vexriscv_hazard_simple
         if (when_HazardSimplePlugin_l45) begin
             if (when_HazardSimplePlugin_l47) begin
                 if (when_HazardSimplePlugin_l51) begin
-                    decode_RS2 = writeBack_REGFILE_WRITE_DATA;
+                    decode_RS2 = writeBack_forward_data;
                 end
             end
         end
