@@ -288,7 +288,7 @@ module vexriscv_ibus_simple
     //==========================================================================
     
     assign pending_inc = (iBus_cmd_valid && iBus_cmd_ready);
-    assign pending_dec = (rspBuffer_pop_valid && (rspJoin_rspBuffer_discardCounter == 3'b000));
+    assign pending_dec = (rspBuffer_pop_valid && rspBuffer_pop_ready && (rspJoin_rspBuffer_discardCounter == 3'b000));
     assign pending_next = (pending_value + {2'b00, pending_inc}) - {2'b00, pending_dec};
     
     //==========================================================================
@@ -302,7 +302,7 @@ module vexriscv_ibus_simple
     // Response Join & Injector
     //==========================================================================
     
-    assign rspBuffer_pop_ready = 1'b1;
+    assign rspBuffer_pop_ready = injector_decodeInput_ready;
     
     always_comb begin
         iBusRsp_readyForError = 1'b1;
