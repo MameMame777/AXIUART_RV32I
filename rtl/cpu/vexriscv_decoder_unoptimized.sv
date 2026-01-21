@@ -162,6 +162,7 @@ module vexriscv_decoder_unoptimized
         if (when_Decoder_l112_26) decode_SRC2_CTRL = SRC2_IMI;   // XORI ← KEY FIX!
         if (when_Decoder_l112_27) decode_SRC2_CTRL = SRC2_IMI;   // ORI ← KEY FIX!
         if (when_Decoder_l112_28) decode_SRC2_CTRL = SRC2_IMI;   // ANDI ← KEY FIX!
+        if (when_Decoder_l112_29) decode_SRC2_CTRL = SRC2_IMI;   // LUI
         if (when_Decoder_l112_30) decode_SRC2_CTRL = SRC2_PC;    // AUIPC
         if (when_Decoder_l112_31) decode_SRC2_CTRL = SRC2_RS;    // SLL
         if (when_Decoder_l112_32) decode_SRC2_CTRL = SRC2_RS;    // SRL
@@ -290,7 +291,7 @@ module vexriscv_decoder_unoptimized
     always_comb begin
         decode_SRC1_CTRL = 2'b00;  // Default: RS (register source)
         if (when_Decoder_l112_29) decode_SRC1_CTRL = 2'b01;  // LUI: IMU (upper immediate)
-        if (when_Decoder_l112_30) decode_SRC1_CTRL = 2'b10;  // AUIPC: PC_INCREMENT
+        if (when_Decoder_l112_30) decode_SRC1_CTRL = 2'b01;  // AUIPC: IMU (was PC_INCREMENT)
         if (when_Decoder_l112_37) decode_SRC1_CTRL = 2'b10;  // JAL: PC_INCREMENT
         if (when_Decoder_l112_38) decode_SRC1_CTRL = 2'b10;  // JALR: PC_INCREMENT
     end
