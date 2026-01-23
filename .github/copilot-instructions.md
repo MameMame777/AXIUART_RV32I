@@ -16,24 +16,9 @@ be very in-depth and continue interviewing me continually until it's complete.
 - Operate as a senior SystemVerilog and logic verification engineer; never ship stopgaps or placeholder code.
 - Reference material in `docs/` before making design decisions; escalate if requirements conflict with quality.
 - Protect confidential data; review security and performance routinely and recommend improvements when needed.
-- Create assersion in aseertion module　in sim/assertions directory. when you want to check Timing, sequence, transaction, protocol;
-- if you plan to debug, you can enable assertion with MCP script.
-- assertion MUST NOT writtein DUT module. This is very important.
-- assertion must be in separate module and bind to DUT. follow the rule that is written in "forCopilot-assertions.md" file.
-define **design specifications using SystemVerilog Assertions (SVA)**.
-Assertions are treated as **executable specifications**, not as testbench utilities.
-You must prioritize correctness, completeness, and unambiguous temporal behavior.
----
-
-# Core Principle for specification writing (MANDATORY)
-- Specifications SHALL be written **as SystemVerilog Assertions**
-- Natural language explanations are secondary and optional
-- RTL implementation details MUST NOT be referenced unless unavoidable
-- The written assertions MUST be sufficient to understand the intended behavior without reading RTL
----
-# Directory and File Policy (MANDATORY)
-
-- **All timing-related specifications MUST be written as SVA files under:sim/assertions/spec/
+- Create assertions in assertion modules in sim/assertions directory when checking timing, sequence, transaction, or protocol.
+- Assertions MUST NOT be written in DUT module. Use separate module and bind to DUT.
+- See `assertion-design` skill for detailed SVA specification methodology.
 
 # reference
   E:\Nautilus\workspace\fpgawork\AXIUART_\reference\Accellera\uvm\distrib\examples\integrated\ubus
@@ -44,33 +29,17 @@ You must prioritize correctness, completeness, and unambiguous temporal behavior
 - Prefer ASCII in new edits unless the file already uses other characters for justified reasons.
 - Never undo user changes or existing diffs unless explicitly instructed.
 
-# Tooling Workflow (FastMCP First)
-- Primary workflow: use FastMCP + VS Code MCP integration already configured in `.vscode/mcp.json`.　do not violate this rule. 
-- Standard sequence for any UVM test:
-  1. `python mcp_server/mcp_client.py --workspace e:\\Nautilus\\workspace\\fpgawork\\AXIUART_ --tool check_dsim_environment`
-  2. `python mcp_server/mcp_client.py --workspace e:\\Nautilus\\workspace\\fpgawork\\AXIUART_ --tool list_available_tests`
-  3. `python mcp_server/mcp_client.py --workspace e:\\Nautilus\\workspace\\fpgawork\\AXIUART_ --tool run_uvm_simulation --test-name <test> --mode compile --verbosity UVM_LOW`
-  4. `python mcp_server/mcp_client.py --workspace e:\\Nautilus\\workspace\\fpgawork\\AXIUART_ --tool run_uvm_simulation --test-name <test> --mode run --verbosity UVM_MEDIUM --waves`
-- **CRITICAL**: NEVER specify `--timeout` parameter. MCP server auto-selects timeout from `test_timing_config.json` or uses null (no timeout) by default.
-- Regression testing:
-  - `python mcp_server/run_regression.py --suite smoke` - Quick validation (2 tests, ~40s)
-  - `python mcp_server/run_regression.py --suite full --format html` - Complete regression with HTML report
-  - `python mcp_server/mcp_client.py --workspace . --tool run_regression_suite --suite smoke` - Via MCP tool
-- Prefer VS Code tasks (`DSIM: Run Basic Test (Compile Only - MCP)`, then `DSIM: Run Basic Test (Full Simulation - MCP)`) which wrap the same calls.
-- Consume JSON outputs (logs, coverage, telemetry) instead of raw text whenever possible; store results under `sim/logs/` or `sim/reports/`.
-- Start the MCP server with the background task `🚀 Start Enhanced MCP Server (FastMCP Edition)` when required; do not launch alternate servers.
-
-## Fallback Path (Only if MCP Unavailable)
-- Initialize legacy PowerShell environment:
-  1. `cd e:\\Nautilus\\workspace\\fpgawork\\AXIUART_`
-  2. `./workspace_init.ps1`
-  3. `Test-WorkspaceMCPUVM`
-- Execute `sim/exec/run_uvm.ps1` with explicit parameters (waves on, coverage as needed). Document the reason for fallback in the development diary.
-- Never call archived scripts or `archive/legacy_mcp_files/` assets.
+# Tooling Workflow (FastMCP First - MANDATORY)
+- Primary workflow: use FastMCP + VS Code MCP integration already configured in `.vscode/mcp.json`. Do not violate this rule.
+- **CRITICAL**: NEVER specify `--timeout` parameter. MCP server auto-selects timeout from `test_timing_config.json`.
+- See `mcp-workflow` skill for detailed command sequences, regression testing, and VS Code task integration.
 
 # Coding Standards (SystemVerilog)
 
-**Agent Skill**: The `systemverilog-coding` skill in `.github/skills/systemverilog-coding/SKILL.md` provides comprehensive coding standards. Copilot will automatically load this skill when generating SystemVerilog code.
+**Agent Skills**: Specialized skills provide comprehensive coding standards:
+- `rtl-coding-standards` - RTL modules, interfaces, state machines
+- `uvm-verification` - UVM testbench components
+- `assertion-design` - SVA specifications and properties
 
 **Quick references**:
 - **Full standards**: [docs/systemverilog_coding_standards.md](../docs/systemverilog_coding_standards.md)  
@@ -85,19 +54,9 @@ You must prioritize correctness, completeness, and unambiguous temporal behavior
 
 # Verification Requirements
 - Use actual RTL modules from `rtl/` as DUTs; mocks are prohibited.
-- Follow UVM architecture naming: `<module>_tb`, `<module>_agent`, `<module>_driver`, `<module>_monitor`, `<module>_sequence`, `<module>_scoreboard`.
-- Maintain clean separation between RTL and assertions. Create dedicated assertion modules (e.g., `Frame_Parser_Assertions`) and bind them; never embed assertions directly in RTL.
-- Enable MXD waveform dumping by default; avoid VCD.
-- Assertions drive debugging priority. Investigate assertion failures before waveform inspection.
-- Verify environment variables (`DSIM_HOME`, `DSIM_ROOT`, `DSIM_LIB_PATH`, `DSIM_LICENSE`) before simulation; error out clearly if missing.
-- For each issue, review `sim/logs/` outputs, DSIM telemetry, and coverage data before concluding.
-
-# Troubleshooting Checklist
-1. Confirm DSIM environment variables.
-2. Inspect `dsim_config.f` path list and ordering.
-3. Ensure timescales match across files.
-4. Verify structural alignment between interfaces and RTL (bit widths, directions).
-5. Analyze DSIM log output and assertion reports; escalate critical findings.
+- See `uvm-verification` skill for UVM architecture naming and patterns.
+- See `assertion-design` skill for assertion separation rules.
+- See `dsim-debugging` skill for troubleshooting checklist and environment verification.
 
 # Documentation & Knowledge Share
 - Document purpose, scope, and results for each task in English.
@@ -113,3 +72,22 @@ You must prioritize correctness, completeness, and unambiguous temporal behavior
 - Do not suppress or ignore compilation/simulation errors; resolve root causes.
 - Do not generate placeholder code, simplified prototypes, or unverifiable logic.
 - Do not expose sensitive information in conversation or artifacts.
+
+# Agent Skills
+
+Domain-specific knowledge is organized in specialized skills that Copilot loads automatically:
+
+## rtl-coding-standards
+SystemVerilog RTL coding standards for FPGA/ASIC design. Use when generating RTL modules, interfaces, state machines, or reviewing RTL code structure.
+
+## uvm-verification  
+UVM testbench architecture and verification methodology for SystemVerilog. Use when creating UVM tests, agents, drivers, monitors, sequences, or scoreboards.
+
+## assertion-design
+SystemVerilog Assertions (SVA) as executable specifications. Use when defining timing requirements, protocol specifications, or formal properties for RTL verification.
+
+## mcp-workflow
+FastMCP + DSIM workflow for UVM test execution. Use when compiling tests, running simulations, executing regression suites, or troubleshooting MCP integration.
+
+## dsim-debugging
+DSIM simulator debugging and troubleshooting. Use when investigating compilation errors, runtime failures, waveform analysis, or DSIM environment issues.
