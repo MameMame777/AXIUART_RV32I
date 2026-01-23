@@ -69,16 +69,19 @@ You must prioritize correctness, completeness, and unambiguous temporal behavior
 - Never call archived scripts or `archive/legacy_mcp_files/` assets.
 
 # Coding Standards (SystemVerilog)
-- declaration of variables should be placed at the beginning of a module or block
-- Timescale: `timescale 1ns / 1ps` at the top of every RTL, interface, or testbench file.
-- Naming:
-  - Modules: Capitalized words with underscores (e.g., `My_Module`).
-  - Signals: lowercase_with_underscores.
-  - Parameters and constants: ALL_CAPS_WITH_UNDERSCORES.
-- Indentation: 4 spaces. Comments must be in English and limited to non-obvious logic.
-- FIFO/counter widths must match implementation (e.g., 64-entry FIFO uses `[6:0]`).
-- Reset is synchronous and active-high; invert logic explicitly for any active-low usage.
-- Avoid temporary throwaway modules; implement only production-quality RTL or verification components.
+
+**Agent Skill**: The `systemverilog-coding` skill in `.github/skills/systemverilog-coding/SKILL.md` provides comprehensive coding standards. Copilot will automatically load this skill when generating SystemVerilog code.
+
+**Quick references**:
+- **Full standards**: [docs/systemverilog_coding_standards.md](../docs/systemverilog_coding_standards.md)  
+- **Naming lookup**: [docs/sv_naming_quick_ref.md](../docs/sv_naming_quick_ref.md)
+
+**Critical rules (never violate)**:
+- **Timescale**: `` `timescale 1ns / 1ps`` at top of every file
+- **Assertion separation**: NEVER embed assertions in DUT modules; use separate assertion modules with `bind`
+- **Production quality**: No placeholder code
+- **Reset**: Synchronous, active-high (default)
+- **Always blocks**: `always_ff` for sequential, `always_comb` for combinational
 
 # Verification Requirements
 - Use actual RTL modules from `rtl/` as DUTs; mocks are prohibited.
