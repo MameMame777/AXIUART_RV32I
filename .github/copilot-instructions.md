@@ -89,3 +89,9 @@ FastMCP + DSIM workflow for UVM test execution. Use when compiling tests, runnin
 
 ## dsim-debugging
 DSIM simulator debugging and troubleshooting. Use when investigating compilation errors, runtime failures, waveform analysis, or DSIM environment issues.
+
+## rtl-debugging
+RTL design debugging methodology and reasoning process. Use when investigating test failures, assertion violations, scoreboard mismatches, or analyzing verification results to identify RTL bugs.
+
+## python-debugging
+Python debugging methodology and problem-solving framework. Use when investigating exceptions, async issues, logging problems, or MCP integration failures in Python code.
