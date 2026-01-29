@@ -52,11 +52,11 @@ class vexriscv_ibus_fetch_test extends vexriscv_base_test;
         
         reset_cpu();
         
-        // Load test program
+        // Load test program (VexRiscv memory base is 0x80000000)
         for (int i = 0; i < 8; i++) begin
-            write_memory_backdoor(i * 4, 32'h00000013);  // NOPs
+            write_memory_backdoor(32'h80000000 + i * 4, 32'h00000013);  // NOPs
         end
-        write_memory_backdoor(32'h20, 32'h00100073);  // EBREAK at end
+        write_memory_backdoor(32'h80000020, 32'h00100073);  // EBREAK at end
         
         start_cpu();
         
