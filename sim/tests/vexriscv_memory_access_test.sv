@@ -13,12 +13,12 @@
 //   - Load-use hazard detection (1-cycle stall)
 //
 // Test Sequence:
-//   LUI x15, 0x10000     // x15 = 0x10000000 (target address)
-//   SW x0, 0(x15)        // mem[0x10000000] = 0
+//   LUI x15, 0x80001     // x15 = 0x80001000 (target address in BlockRAM)
+//   SW x0, 0(x15)        // mem[0x80001000] = 0
 //   LUI x10, 0x12345     // x10 = 0x12345000
 //   ADDI x10, x10, 0x678 // x10 = 0x12345678
-//   SW x10, 0(x15)       // mem[0x10000000] = 0x12345678
-//   LW x11, 0(x15)       // x11 = mem[0x10000000] (load-use stall)
+//   SW x10, 0(x15)       // mem[0x80001000] = 0x12345678
+//   LW x11, 0(x15)       // x11 = mem[0x80001000] (load-use stall)
 //   EBREAK
 //
 // Expected Results:
@@ -81,7 +81,7 @@ class vexriscv_memory_access_test extends vexriscv_base_test;
     virtual task load_memory_test_program();
         `uvm_info(get_type_name(), "Loading memory test program...", UVM_MEDIUM)
         // VexRiscv memory base is 0x80000000
-        write_memory_backdoor(32'h80000000, 32'h10000FB7);  // LUI x15, 0x10000
+        write_memory_backdoor(32'h80000000, 32'h80001FB7);  // LUI x15, 0x80001
         write_memory_backdoor(32'h80000004, 32'h00072023);  // SW x0, 0(x15)
         write_memory_backdoor(32'h80000008, 32'h12345537);  // LUI x10, 0x12345
         write_memory_backdoor(32'h8000000C, 32'h67850513);  // ADDI x10, x10, 0x678
