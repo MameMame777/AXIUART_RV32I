@@ -58,16 +58,16 @@ class vexriscv_dbus_access_test extends vexriscv_base_test;
         
         reset_cpu();
         
-        // Load test program with various store/load operations
-        write_memory_backdoor(32'h00, 32'h10000537);  // LUI x10, 0x10000 (base addr)
-        write_memory_backdoor(32'h04, 32'h0FF00593);  // LI x11, 0xFF
-        write_memory_backdoor(32'h08, 32'h00B50023);  // SB x11, 0(x10) - byte store
-        write_memory_backdoor(32'h0C, 32'h00B51023);  // SH x11, 0(x10) - halfword store
-        write_memory_backdoor(32'h10, 32'h00B52023);  // SW x11, 0(x10) - word store
-        write_memory_backdoor(32'h14, 32'h00050603);  // LB x12, 0(x10) - byte load
-        write_memory_backdoor(32'h18, 32'h00051683);  // LH x13, 0(x10) - halfword load
-        write_memory_backdoor(32'h1C, 32'h00052703);  // LW x14, 0(x10) - word load
-        write_memory_backdoor(32'h20, 32'h00100073);  // EBREAK
+        // Load test program with various store/load operations (VexRiscv memory base is 0x80000000)
+        write_memory_backdoor(32'h80000000, 32'h10000537);  // LUI x10, 0x10000 (base addr)
+        write_memory_backdoor(32'h80000004, 32'h0FF00593);  // LI x11, 0xFF
+        write_memory_backdoor(32'h80000008, 32'h00B50023);  // SB x11, 0(x10) - byte store
+        write_memory_backdoor(32'h8000000C, 32'h00B51023);  // SH x11, 0(x10) - halfword store
+        write_memory_backdoor(32'h80000010, 32'h00B52023);  // SW x11, 0(x10) - word store
+        write_memory_backdoor(32'h80000014, 32'h00050603);  // LB x12, 0(x10) - byte load
+        write_memory_backdoor(32'h80000018, 32'h00051683);  // LH x13, 0(x10) - halfword load
+        write_memory_backdoor(32'h8000001C, 32'h00052703);  // LW x14, 0(x10) - word load
+        write_memory_backdoor(32'h80000020, 32'h00100073);  // EBREAK
         
         start_cpu();
         

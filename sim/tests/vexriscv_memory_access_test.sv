@@ -80,13 +80,14 @@ class vexriscv_memory_access_test extends vexriscv_base_test;
     
     virtual task load_memory_test_program();
         `uvm_info(get_type_name(), "Loading memory test program...", UVM_MEDIUM)
-        write_memory_backdoor(32'h00, 32'h10000FB7);  // LUI x15, 0x10000
-        write_memory_backdoor(32'h04, 32'h00072023);  // SW x0, 0(x15)
-        write_memory_backdoor(32'h08, 32'h12345537);  // LUI x10, 0x12345
-        write_memory_backdoor(32'h0C, 32'h67850513);  // ADDI x10, x10, 0x678
-        write_memory_backdoor(32'h10, 32'h00A72023);  // SW x10, 0(x15)
-        write_memory_backdoor(32'h14, 32'h00072583);  // LW x11, 0(x15)
-        write_memory_backdoor(32'h18, 32'h00100073);  // EBREAK
+        // VexRiscv memory base is 0x80000000
+        write_memory_backdoor(32'h80000000, 32'h10000FB7);  // LUI x15, 0x10000
+        write_memory_backdoor(32'h80000004, 32'h00072023);  // SW x0, 0(x15)
+        write_memory_backdoor(32'h80000008, 32'h12345537);  // LUI x10, 0x12345
+        write_memory_backdoor(32'h8000000C, 32'h67850513);  // ADDI x10, x10, 0x678
+        write_memory_backdoor(32'h80000010, 32'h00A72023);  // SW x10, 0(x15)
+        write_memory_backdoor(32'h80000014, 32'h00072583);  // LW x11, 0(x15)
+        write_memory_backdoor(32'h80000018, 32'h00100073);  // EBREAK
     endtask
     
 endclass : vexriscv_memory_access_test
