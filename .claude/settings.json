@@ -1,0 +1,25 @@
+{
+  "project": "AXIUART_RV32I",
+  "description": "VexRiscv RV32I CPU with AXI UART integration",
+  "permissions": {
+    "allow": [
+      "Bash(git checkout:*)"
+    ]
+  },
+  "workspace_rules": {
+    "assertion_location": "sim/assertions/",
+    "assertion_style": "bind_only",
+    "no_dut_modification_for_assertions": true,
+    "prioritize_docs": ["docs/", "sim/logs/"]
+  },
+  "test_config": {
+    "default_timeout": 300,
+    "default_verbosity": "UVM_LOW",
+    "mcp_client_path": "mcp_server/mcp_client.py"
+  },
+  "git_config": {
+    "work_branch_prefix": ["fix/", "feature/", "chore/"],
+    "target_branch": "main",
+    "commit_co_author": "Claude Opus 4.5 <noreply@anthropic.com>"
+  }
+}
