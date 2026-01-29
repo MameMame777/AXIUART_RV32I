@@ -49,10 +49,11 @@ class vexriscv_mem_bypass_test extends vexriscv_base_test;
         
         reset_cpu();
         
-        write_memory_backdoor(32'h00, 32'h00500093);  // ADDI x1, x0, 5
-        write_memory_backdoor(32'h04, 32'h00000013);  // NOP
-        write_memory_backdoor(32'h08, 32'h00108113);  // ADDI x2, x1, 1
-        write_memory_backdoor(32'h0C, 32'h00100073);  // EBREAK
+        // VexRiscv memory base is 0x80000000
+        write_memory_backdoor(32'h80000000, 32'h00500093);  // ADDI x1, x0, 5
+        write_memory_backdoor(32'h80000004, 32'h00000013);  // NOP
+        write_memory_backdoor(32'h80000008, 32'h00108113);  // ADDI x2, x1, 1
+        write_memory_backdoor(32'h8000000C, 32'h00100073);  // EBREAK
         
         start_cpu();
         repeat(20) @(posedge $root.rv32i_tb_top.clk);

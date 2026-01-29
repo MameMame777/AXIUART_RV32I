@@ -51,13 +51,14 @@ class vexriscv_load_use_stall_test extends vexriscv_base_test;
         
         reset_cpu();
         
-        // Prepare memory with test value
-        write_memory_backdoor(32'h00, 32'h00000005);  // Data: 5 at address 0
-        
-        // Load test program at offset
-        write_memory_backdoor(32'h100, 32'h00002083);  // LW x1, 0(x0)
-        write_memory_backdoor(32'h104, 32'h00108113);  // ADDI x2, x1, 1
-        write_memory_backdoor(32'h108, 32'h00100073);  // EBREAK
+        // Prepare memory with test value (VexRiscv memory base is 0x80000000)
+        write_memory_backdoor(32'h80001000, 32'h00000005);  // Data: 5 at address 0x80001000
+
+        // Load test program (CPU resets to 0x80000000)
+        write_memory_backdoor(32'h80000000, 32'h80001537);  // LUI x10, 0x80001 (load base addr)
+        write_memory_backdoor(32'h80000004, 32'h00052083);  // LW x1, 0(x10)
+        write_memory_backdoor(32'h80000008, 32'h00108113);  // ADDI x2, x1, 1
+        write_memory_backdoor(32'h8000000C, 32'h00100073);  // EBREAK
         
         start_cpu();
         
