@@ -174,3 +174,6 @@ vexriscv_reference/generated/VexRiscv_GenSmallAndProductive.v
 vexriscv_reference/generated/VexRiscv.v
 
 vexriscv_reference/
+
+# Claude Code local settings (personal permissions - do not commit)
+.claude/settings.local.json
