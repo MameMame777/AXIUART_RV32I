@@ -75,6 +75,42 @@
 - Production RTL in `rtl/`, verification in `sim/uvm/` and `sim/tests/`, documentation in `docs/`, ad-hoc experiments in `temporary/`.
 - Do not relocate or duplicate files outside the defined structure.
 
+## Mandatory Rules for Claude Code
+
+- Do NOT modify any files unless explicitly instructed.
+- Do NOT refactor existing code unless clearly requested.
+- Prefer minimal, localized changes over large improvements.
+- Stability and existing behavior are more important than code cleanliness.
+
+## Change Proposal Requirement
+
+Before making any code changes:
+
+- Explain what will be changed
+- Explain why it is necessary
+- Describe potential risks or side effects
+
+Wait for explicit approval before proceeding.
+
+## Cost Awareness
+
+- Keep responses concise.
+- Avoid repeating large code blocks unless necessary.
+- Prefer explanation over full implementation when possible.
+- Use the TodoWrite tool to track progress instead of verbose status updates.
+
+## Model Usage Policy
+
+- Use the Default (recommended) model for all tasks.
+- Do NOT switch to Opus unless explicitly instructed by the user.
+- Prefer lower-cost models (Haiku) for simple tasks like file search or quick lookups.
+
+## Security Rules
+
+- Never request or output secrets, API keys, or credentials.
+- Do not log or print personal data.
+- Assume production-like constraints even in development.
+
 ## Prohibited Actions
 
 - Do not execute `mcp_server/run_uvm_simulation.py` or other legacy Python/PowerShell wrappers except the sanctioned fallback path.
