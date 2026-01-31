@@ -164,7 +164,7 @@ docs/local/
 docs/comprehensive_work_instructions.md
 reference/SyIEEyuIzFWdpNCM.pdf
 PandR/cpu/cpu.xpr
-sim/exec/logs/*csv
+sim/exec/logs/
 sim/exec/reports/
 PandR/axi4_rv32i/*.xpr
 sim/regression_tests.json

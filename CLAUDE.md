@@ -28,11 +28,13 @@ E:\Nautilus\workspace\fpgawork\AXIUART_\reference\Accellera\uvm\distrib\examples
 - Prefer ASCII in new edits unless the file already uses other characters for justified reasons.
 - Never undo user changes or existing diffs unless explicitly instructed.
 
-## Tooling Workflow (FastMCP First - MANDATORY)
+## Tooling Workflow (PowerShell Scripts - MANDATORY)
 
-- Primary workflow: use FastMCP + VS Code MCP integration already configured in `.vscode/mcp.json`. Do not violate this rule.
-- **CRITICAL**: NEVER specify `--timeout` parameter. MCP server auto-selects timeout from `test_timing_config.json`.
-- See `/mcp-workflow` skill for detailed command sequences, regression testing, and VS Code task integration.
+- Primary workflow: use PowerShell scripts in `scripts/` directory.
+- **Single test**: `.\scripts\run_test.ps1 <test_name> [-Verbosity UVM_LOW] [-Waves]`
+- **Regression**: `.\scripts\run_regression.ps1 [-Stage 1] [-Tests test1,test2]`
+- See `/dsim-workflow` skill for detailed command sequences and VS Code task integration.
+- **Note**: MCP-based execution has been deprecated. Files in `deprecated_mcp_server/` are for reference only.
 
 ## Coding Standards (SystemVerilog)
 
@@ -113,7 +115,7 @@ Wait for explicit approval before proceeding.
 
 ## Prohibited Actions
 
-- Do not execute `mcp_server/run_uvm_simulation.py` or other legacy Python/PowerShell wrappers except the sanctioned fallback path.
+- Do not execute scripts from `deprecated_mcp_server/` directory. Use `scripts/run_test.ps1` and `scripts/run_regression.ps1` instead.
 - Do not suppress or ignore compilation/simulation errors; resolve root causes.
 - Do not generate placeholder code, simplified prototypes, or unverifiable logic.
 - Do not expose sensitive information in conversation or artifacts.
@@ -127,7 +129,7 @@ Domain-specific knowledge is organized in specialized skills in `.claude/skills/
 | `/rtl-coding-standards` | RTL modules, interfaces, state machines |
 | `/uvm-verification` | UVM tests, agents, drivers, monitors, sequences, scoreboards |
 | `/assertion-design` | SVA timing requirements, protocol specifications, formal properties |
-| `/mcp-workflow` | FastMCP + DSIM workflow for test execution |
+| `/dsim-workflow` | DSIM test execution with PowerShell scripts |
 | `/dsim-debugging` | DSIM compilation errors, runtime failures, waveform analysis |
 | `/rtl-debugging` | Test failures, assertion violations, scoreboard mismatches |
 | `/python-debugging` | Python exceptions, async issues, MCP integration failures |

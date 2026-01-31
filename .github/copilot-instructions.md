@@ -27,10 +27,12 @@ be very in-depth and continue interviewing me continually until it's complete.
 - Prefer ASCII in new edits unless the file already uses other characters for justified reasons.
 - Never undo user changes or existing diffs unless explicitly instructed.
 
-# Tooling Workflow (FastMCP First - MANDATORY)
-- Primary workflow: use FastMCP + VS Code MCP integration already configured in `.vscode/mcp.json`. Do not violate this rule.
-- **CRITICAL**: NEVER specify `--timeout` parameter. MCP server auto-selects timeout from `test_timing_config.json`.
-- See `mcp-workflow` skill for detailed command sequences, regression testing, and VS Code task integration.
+# Tooling Workflow (PowerShell Scripts - MANDATORY)
+- Primary workflow: use PowerShell scripts in `scripts/` directory.
+- **Single test**: `.\scripts\run_test.ps1 <test_name> [-Verbosity UVM_LOW] [-Waves]`
+- **Regression**: `.\scripts\run_regression.ps1 [-Stage 1] [-Tests test1,test2]`
+- See `dsim-workflow` skill for detailed command sequences and VS Code task integration.
+- **Note**: MCP-based execution has been deprecated. Files in `deprecated_mcp_server/` are for reference only.
 
 # Coding Standards (SystemVerilog)
 
@@ -40,8 +42,8 @@ be very in-depth and continue interviewing me continually until it's complete.
 - `assertion-design` - SVA specifications and properties
 
 **Quick references**:
-- **Full standards**: [docs/systemverilog_coding_standards.md](../docs/systemverilog_coding_standards.md)  
-- **Naming lookup**: [docs/sv_naming_quick_ref.md](../docs/sv_naming_quick_ref.md)
+- **Agent Skills**: See sections below for specialized knowledge (rtl-coding-standards, uvm-verification, assertion-design)
+- **Project-specific**: See docs/ directory for architecture, specifications, and implementation guides
 
 **Critical rules (never violate)**:
 - **Timescale**: `` `timescale 1ns / 1ps`` at top of every file
@@ -66,7 +68,7 @@ be very in-depth and continue interviewing me continually until it's complete.
 - Do not relocate or duplicate files outside the defined structure.
 
 # Prohibited Actions
-- Do not execute `mcp_server/run_uvm_simulation.py` or other legacy Python/PowerShell wrappers except the sanctioned fallback path.
+- Do not execute scripts from `deprecated_mcp_server/` directory. Use `scripts/run_test.ps1` and `scripts/run_regression.ps1` instead.
 - Do not suppress or ignore compilation/simulation errors; resolve root causes.
 - Do not generate placeholder code, simplified prototypes, or unverifiable logic.
 - Do not expose sensitive information in conversation or artifacts.
@@ -84,8 +86,8 @@ UVM testbench architecture and verification methodology for SystemVerilog. Use w
 ## assertion-design
 SystemVerilog Assertions (SVA) as executable specifications. Use when defining timing requirements, protocol specifications, or formal properties for RTL verification.
 
-## mcp-workflow
-FastMCP + DSIM workflow for UVM test execution. Use when compiling tests, running simulations, executing regression suites, or troubleshooting MCP integration.
+## dsim-workflow
+DSIM UVM test execution workflow using PowerShell scripts. Use when compiling tests, running simulations, executing regression suites, or troubleshooting DSIM issues.
 
 ## dsim-debugging
 DSIM simulator debugging and troubleshooting. Use when investigating compilation errors, runtime failures, waveform analysis, or DSIM environment issues.
