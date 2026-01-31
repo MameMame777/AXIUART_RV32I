@@ -9,6 +9,7 @@
 #   -Verbosity LVL    UVM verbosity (UVM_LOW, UVM_MEDIUM, UVM_DEBUG)
 #   -StopOnFail       Stop regression on first failure
 #   -ReportFile FILE  Output report file
+#   -CleanupDays N    Auto-delete logs older than N days before run (0=disable)
 #==============================================================================
 
 param(
@@ -24,6 +25,8 @@ param(
     [switch]$StopOnFail,
 
     [string]$ReportFile = "",
+
+    [int]$CleanupDays = 0,
 
     [switch]$Help
 )
@@ -65,6 +68,7 @@ Options:
   -Verbosity LVL    UVM verbosity (UVM_LOW, UVM_MEDIUM, UVM_DEBUG)
   -StopOnFail       Stop on first failure
   -ReportFile FILE  Output report file
+  -CleanupDays N    Auto-delete logs older than N days (0=disable)
   -Help             Show this help
 
 Available Stage 1 tests:
@@ -93,9 +97,55 @@ if ($Tests.Count -gt 0) {
     $TestsToRun = $Stage1Tests
 }
 
+# Directories
+$LogDir = Join-Path $Workspace "sim\exec\logs"
+$WaveDir = Join-Path $Workspace "sim\exec\wave"
+
+# Cleanup old log files
+function Cleanup-OldLogs {
+    param([int]$Days)
+
+    $cutoffDate = (Get-Date).AddDays(-$Days)
+    $deletedCount = 0
+    $totalSize = 0
+
+    # Cleanup log files
+    if (Test-Path $LogDir) {
+        $oldFiles = Get-ChildItem -Path $LogDir -File -Recurse |
+            Where-Object { $_.LastWriteTime -lt $cutoffDate }
+
+        foreach ($file in $oldFiles) {
+            $totalSize += $file.Length
+            Remove-Item -Path $file.FullName -Force -ErrorAction SilentlyContinue
+            $deletedCount++
+        }
+    }
+
+    # Cleanup wave files
+    if (Test-Path $WaveDir) {
+        $oldWaves = Get-ChildItem -Path $WaveDir -File -Recurse |
+            Where-Object { $_.LastWriteTime -lt $cutoffDate }
+
+        foreach ($file in $oldWaves) {
+            $totalSize += $file.Length
+            Remove-Item -Path $file.FullName -Force -ErrorAction SilentlyContinue
+            $deletedCount++
+        }
+    }
+
+    if ($deletedCount -gt 0) {
+        $sizeMB = [math]::Round($totalSize / 1MB, 2)
+        Write-Host "[Cleanup] Deleted $deletedCount files older than $Days days ($sizeMB MB)"
+    }
+}
+
+# Auto-cleanup if requested
+if ($CleanupDays -gt 0) {
+    Cleanup-OldLogs -Days $CleanupDays
+}
+
 # Setup report file
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-$LogDir = Join-Path $Workspace "sim\exec\logs"
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 
 if (-not $ReportFile) {
