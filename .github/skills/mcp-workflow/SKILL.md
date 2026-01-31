@@ -237,13 +237,117 @@ The MCP server has been deprecated. Files are retained in `deprecated_mcp_server
 - `deprecated_mcp_server/dsim_fastmcp_server.py`
 - `deprecated_mcp_server/run_regression.py`
 
+## Adding a New Test
+
+Use `add_test.ps1` to scaffold a new test. The script handles all registration automatically.
+
+### Command
+
+```powershell
+.\scripts\add_test.ps1 -TestName <name> [-Description <desc>] [-Category <cat>] [-Stage <n>]
+```
+
+### Parameters
+
+| Parameter | Values | Description |
+|-----------|--------|-------------|
+| `-TestName` | `*_test` | Test class name (must end with `_test`) |
+| `-Description` | string | Purpose of the test |
+| `-Category` | smoke, hazard, bus, memory, custom | Test classification |
+| `-Stage` | 0, 1 | 0 = no stage, 1 = add to Stage 1 list |
+| `-TimeoutCycles` | int | Cycle-based timeout (default: 200) |
+| `-ExpectedDurationSec` | int | Expected run time in seconds |
+
+### Examples
+
+```powershell
+# New hazard test, added to Stage 1
+.\scripts\add_test.ps1 -TestName vexriscv_branch_test `
+    -Description "Branch instruction verification" `
+    -Category hazard -Stage 1
+
+# New custom test, not added to any stage
+.\scripts\add_test.ps1 -TestName vexriscv_csr_test `
+    -Description "CSR read/write operations" `
+    -Category custom
+```
+
+### What the Script Does
+
+The script modifies 4 files automatically:
+
+| File | Action |
+|------|--------|
+| `sim/tests/<name>.sv` | Creates test from template |
+| `sim/uvm/tb/dsim_config.f` | Adds compilation entry |
+| `sim/regression_tests.json` | Adds to regression suite |
+| `scripts/run_regression.ps1` | Adds to stage list (if `-Stage 1`) |
+
+### After Scaffolding
+
+The generated test file (`sim/tests/<name>.sv`) has two TODO sections to complete:
+
+**1. `load_test_program()` - Define the instruction sequence:**
+
+```systemverilog
+// Base address: 0x80000000 (program start)
+// Data region:  0x80001000 (store/load target, within 8KB BlockRAM)
+write_memory_backdoor(32'h80000000, 32'h<encoding>);  // instruction
+write_memory_backdoor(32'h80000004, 32'h00100073);    // EBREAK (halt)
+```
+
+**2. `verify_results()` - Check register values:**
+
+```systemverilog
+read_cpu_reg(<reg_num>, reg_val);
+if (reg_val != 32'h<expected>) begin
+    `uvm_error(get_type_name(),
+        $sformatf("FAIL: x%0d = 0x%08X (expected 0x%08X)", <n>, reg_val, <expected>))
+    all_pass = 0;
+end
+```
+
+### Memory Map Reference
+
+```text
+BlockRAM: 0x80000000 - 0x80001FFF (8KB total)
+  Program: 0x80000000 - 0x800001FF (128 instructions max)
+  Data:    0x80001000 - 0x80001FFF (store/load target)
+```
+
+### RV32I Encoding Quick Reference
+
+| Instruction | Format | Encoding |
+|-------------|--------|----------|
+| `ADDI rd, rs1, imm` | I-type | `imm[11:0]\|rs1[4:0]\|000\|rd[4:0]\|0010011` |
+| `LUI rd, imm` | U-type | `imm[31:12]\|rd[4:0]\|0110111` |
+| `SW rs2, off(rs1)` | S-type | `imm[11:5]\|rs2[4:0]\|rs1[4:0]\|010\|imm[4:0]\|0100011` |
+| `LW rd, off(rs1)` | I-type | `imm[11:0]\|rs1[4:0]\|010\|rd[4:0]\|0000011` |
+| `EBREAK` | - | `0x00100073` |
+| `NOP` | - | `0x00000013` |
+
+Register encoding: x0=0, x1=1, ..., x15=0xF, x31=0x1F
+
+### Full Workflow
+
+```text
+1. Scaffold     .\scripts\add_test.ps1 -TestName my_test -Category smoke -Stage 1
+2. Edit         sim/tests/my_test.sv  (define sequence + checks)
+3. Test         .\scripts\run_test.ps1 my_test -Waves -Verbosity UVM_MEDIUM
+4. Debug        Open sim/exec/wave/my_test_*.mxd (if failures)
+5. Regression   .\scripts\run_regression.ps1 -Stage 1
+```
+
+---
+
 ## Summary
 
 Workflow principles:
 
 1. Use PowerShell scripts in `scripts/` (mandatory)
 2. Standard sequence: `run_test.ps1` for single tests, `run_regression.ps1` for batch
-3. Use VS Code tasks for common operations
-4. Consume JSON outputs from `sim/exec/logs/`
-5. Check waveforms in `sim/exec/wave/` when debugging
-6. See `dsim-debugging` skill for troubleshooting
+3. New tests: `add_test.ps1` scaffolds and registers automatically
+4. Use VS Code tasks for common operations
+5. Consume JSON outputs from `sim/exec/logs/`
+6. Check waveforms in `sim/exec/wave/` when debugging
+7. See `dsim-debugging` skill for troubleshooting
