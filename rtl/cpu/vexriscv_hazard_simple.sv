@@ -98,6 +98,11 @@ module vexriscv_hazard_simple
     logic        when_HazardSimplePlugin_l105;
     logic        when_HazardSimplePlugin_l108;
     logic        when_HazardSimplePlugin_l113;
+
+    // Direct WriteBack stage forwarding conditions (not through buffer)
+    logic        writeBack_direct_forward_valid;
+    logic        writeBack_direct_rs1_match;
+    logic        writeBack_direct_rs2_match;
     
     //==========================================================================
     // WriteBack Write Interface
@@ -148,7 +153,16 @@ module vexriscv_hazard_simple
     
     assign when_HazardSimplePlugin_l57_2 = (decode_RS1_USE && (!execute_BYPASSABLE_EXECUTE_STAGE) && (decode_INSTRUCTION_rs1 == execute_INSTRUCTION_rd));
     assign when_HazardSimplePlugin_l58_2 = (decode_RS2_USE && (!execute_BYPASSABLE_EXECUTE_STAGE) && (decode_INSTRUCTION_rs2 == execute_INSTRUCTION_rd));
-    
+
+    //==========================================================================
+    // WriteBack Stage Direct Forwarding Conditions
+    // These check the CURRENT WriteBack stage, not the buffer (which is 1 cycle delayed)
+    //==========================================================================
+
+    assign writeBack_direct_forward_valid = (writeBack_arbitration_isValid && writeBack_REGFILE_WRITE_VALID && (writeBack_INSTRUCTION_rd != 5'h0));
+    assign writeBack_direct_rs1_match = (decode_INSTRUCTION_rs1 == writeBack_INSTRUCTION_rd);
+    assign writeBack_direct_rs2_match = (decode_INSTRUCTION_rs2 == writeBack_INSTRUCTION_rd);
+
     //==========================================================================
     // Hazard Flag Generation
     //==========================================================================
@@ -229,12 +243,11 @@ module vexriscv_hazard_simple
             end
         end
         
-        // Priority 2: WriteBack stage (through buffer)
-        if (when_HazardSimplePlugin_l45) begin
-            if (when_HazardSimplePlugin_l47) begin
-                if (when_HazardSimplePlugin_l48) begin
-                    decode_RS1 = writeBack_forward_data;
-                end
+        // Priority 2: WriteBack stage (direct, not through buffer)
+        // Fixed: Check current WriteBack stage validity, not buffer
+        if (writeBack_direct_forward_valid) begin
+            if (writeBack_direct_rs1_match) begin
+                decode_RS1 = writeBack_forward_data;
             end
         end
         
@@ -271,12 +284,11 @@ module vexriscv_hazard_simple
             end
         end
         
-        // Priority 2: WriteBack stage (through buffer)
-        if (when_HazardSimplePlugin_l45) begin
-            if (when_HazardSimplePlugin_l47) begin
-                if (when_HazardSimplePlugin_l51) begin
-                    decode_RS2 = writeBack_forward_data;
-                end
+        // Priority 2: WriteBack stage (direct, not through buffer)
+        // Fixed: Check current WriteBack stage validity, not buffer
+        if (writeBack_direct_forward_valid) begin
+            if (writeBack_direct_rs2_match) begin
+                decode_RS2 = writeBack_forward_data;
             end
         end
         
