@@ -19,8 +19,15 @@
 //   - Write-through: Write data available on next cycle
 //   - Read-First mode: Read old data when writing same address
 //
+// Synthesis Notes (Issue #5 fix):
+//   - BRAM logic separated from reset and MMIO handling for RAMB36E1 inference
+//   - Loop-based byte-enable pattern for Vivado recognition
+//   - MMIO mux moved to combinational output stage after BRAM register
+//   - Pipeline registers align MMIO selection with BRAM output timing
+//
 // Author: GitHub Copilot (Claude Sonnet 4.5)
 // Date: January 17, 2026
+// Modified: January 31, 2026 (Issue #5 - Synth 8-2914 fix)
 //=====================================================================
 
 module vexriscv_blockram #(
@@ -31,7 +38,7 @@ module vexriscv_blockram #(
 )(
     input  logic        clk,
     input  logic        rst,
-    
+
     // Port A (IBus / Debug when halted)
     input  logic                        a_en,
     input  logic [ADDR_WIDTH-1:0]       a_addr,      // Word address
@@ -40,7 +47,7 @@ module vexriscv_blockram #(
     output logic [DATA_WIDTH-1:0]       a_rdata,
     input  logic [31:0]                 a_byte_addr, // Full byte address for MMIO decode
     output logic                        a_mmio_access, // High when accessing MMIO
-    
+
     // Port B (DBus / Debug when halted)
     input  logic                        b_en,
     input  logic [ADDR_WIDTH-1:0]       b_addr,      // Word address
@@ -49,7 +56,7 @@ module vexriscv_blockram #(
     output logic [DATA_WIDTH-1:0]       b_rdata,
     input  logic [31:0]                 b_byte_addr, // Full byte address for MMIO decode
     output logic                        b_mmio_access, // High when accessing MMIO
-    
+
     // MMIO LED Register Interface
     output logic [31:0] led_reg_wdata,  // LED register write data
     output logic        led_reg_we,     // LED register write enable
@@ -59,109 +66,172 @@ module vexriscv_blockram #(
     //=================================================================
     // MMIO Address Decode
     //=================================================================
-    
+
     // Detect MMIO region access (0x4000-0x7FFF)
     logic a_is_mmio, b_is_mmio;
-    
+
     always_comb begin
         a_is_mmio = (a_byte_addr >= MMIO_BASE) && (a_byte_addr < (MMIO_BASE + 32'h4000));
         b_is_mmio = (b_byte_addr >= MMIO_BASE) && (b_byte_addr < (MMIO_BASE + 32'h4000));
     end
-    
+
     assign a_mmio_access = a_is_mmio;
     assign b_mmio_access = b_is_mmio;
-    
+
     // LED register write control
     // LED is at 0x407C, accessible from either port
     logic a_led_write, b_led_write;
-    
+
     always_comb begin
         a_led_write = a_en && (a_byte_addr == LED_ADDR) && (|a_we);
         b_led_write = b_en && (b_byte_addr == LED_ADDR) && (|b_we);
     end
-    
+
     // LED register write mux (Port B has priority)
     assign led_reg_we    = b_led_write || (a_led_write && !b_en);
     assign led_reg_wdata = b_led_write ? b_wdata : a_wdata;
-    
+
     //=================================================================
     // Block RAM Instantiation (8KB, True Dual-Port)
     //=================================================================
-    
+
     // Infer Xilinx RAMB36E1 primitive with Read-First mode
-    (* ram_style = "block" *) 
+    // Note: Reset and MMIO logic are separated for proper inference
+    (* ram_style = "block" *)
     logic [DATA_WIDTH-1:0] mem [0:(1<<ADDR_WIDTH)-1];
-    
+
     // Initialize with NOP instructions (ADDI x0, x0, 0 = 0x00000013)
     initial begin
         for (int i = 0; i < (1<<ADDR_WIDTH); i++) begin
             mem[i] = 32'h0000_0013;  // NOP
         end
     end
-    
+
     //=================================================================
-    // Port A Logic (Read-First Mode)
+    // Internal BRAM Output Registers (Pure BRAM for inference)
     //=================================================================
-    
+
+    // Internal BRAM read outputs (before MMIO mux)
+    logic [DATA_WIDTH-1:0] bram_out_a;
+    logic [DATA_WIDTH-1:0] bram_out_b;
+
+    // Pipeline registers to align MMIO selection with BRAM output timing
+    logic        a_mmio_sel_r;    // MMIO selected for Port A (registered)
+    logic        b_mmio_sel_r;    // MMIO selected for Port B (registered)
+    logic [31:0] a_mmio_data_r;   // MMIO data for Port A (registered)
+    logic [31:0] b_mmio_data_r;   // MMIO data for Port B (registered)
+    logic        a_reset_out_r;   // Force reset output for Port A
+    logic        b_reset_out_r;   // Force reset output for Port B
+
+    //=================================================================
+    // Port A BRAM Logic (Pure - no reset, no MMIO mux)
+    // Loop-based byte-enable pattern for Vivado RAMB36E1 inference
+    //=================================================================
+
     always_ff @(posedge clk) begin
-        if (rst) begin
-            a_rdata <= 32'h0000_0013;  // Return NOP on reset
-        end else if (a_en) begin
-            if (a_is_mmio) begin
-                // MMIO read: Return LED register value
-                a_rdata <= led_reg_rdata;
-            end else begin
-                // BRAM access: Read-First mode
-                // Read old data before write (if write enabled)
-                a_rdata <= mem[a_addr];
-                
-                // Write with byte enables
-                if (a_we[0]) mem[a_addr][7:0]   <= a_wdata[7:0];
-                if (a_we[1]) mem[a_addr][15:8]  <= a_wdata[15:8];
-                if (a_we[2]) mem[a_addr][23:16] <= a_wdata[23:16];
-                if (a_we[3]) mem[a_addr][31:24] <= a_wdata[31:24];
+        if (a_en && !a_is_mmio) begin
+            // Read-First: Read old data before write
+            bram_out_a <= mem[a_addr];
+            // Write with loop-based byte enables (Vivado recognizes this pattern)
+            for (int i = 0; i < 4; i++) begin
+                if (a_we[i]) mem[a_addr][i*8 +: 8] <= a_wdata[i*8 +: 8];
             end
         end
     end
-    
+
     //=================================================================
-    // Port B Logic (Read-First Mode)
+    // Port B BRAM Logic (Pure - no reset, no MMIO mux)
+    // Loop-based byte-enable pattern for Vivado RAMB36E1 inference
     //=================================================================
-    
+
     always_ff @(posedge clk) begin
-        if (rst) begin
-            b_rdata <= 32'h0000_0013;  // Return NOP on reset
-        end else if (b_en) begin
-            if (b_is_mmio) begin
-                // MMIO read: Return LED register value
-                b_rdata <= led_reg_rdata;
-            end else begin
-                // BRAM access: Read-First mode
-                b_rdata <= mem[b_addr];
-                
-                // Write with byte enables
-                if (b_we[0]) mem[b_addr][7:0]   <= b_wdata[7:0];
-                if (b_we[1]) mem[b_addr][15:8]  <= b_wdata[15:8];
-                if (b_we[2]) mem[b_addr][23:16] <= b_wdata[23:16];
-                if (b_we[3]) mem[b_addr][31:24] <= b_wdata[31:24];
+        if (b_en && !b_is_mmio) begin
+            // Read-First: Read old data before write
+            bram_out_b <= mem[b_addr];
+            // Write with loop-based byte enables (Vivado recognizes this pattern)
+            for (int i = 0; i < 4; i++) begin
+                if (b_we[i]) mem[b_addr][i*8 +: 8] <= b_wdata[i*8 +: 8];
             end
         end
     end
-    
+
+    //=================================================================
+    // Port A MMIO/Reset Pipeline (aligns with BRAM output timing)
+    //=================================================================
+
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            // On reset, force NOP output regardless of access type
+            a_reset_out_r <= 1'b1;
+            a_mmio_sel_r  <= 1'b0;
+            a_mmio_data_r <= 32'h0000_0013;  // NOP
+        end else begin
+            a_reset_out_r <= 1'b0;
+            if (a_en) begin
+                // Pipeline MMIO selection to align with BRAM registered output
+                a_mmio_sel_r  <= a_is_mmio;
+                a_mmio_data_r <= led_reg_rdata;
+            end
+        end
+    end
+
+    //=================================================================
+    // Port B MMIO/Reset Pipeline (aligns with BRAM output timing)
+    //=================================================================
+
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            // On reset, force NOP output regardless of access type
+            b_reset_out_r <= 1'b1;
+            b_mmio_sel_r  <= 1'b0;
+            b_mmio_data_r <= 32'h0000_0013;  // NOP
+        end else begin
+            b_reset_out_r <= 1'b0;
+            if (b_en) begin
+                // Pipeline MMIO selection to align with BRAM registered output
+                b_mmio_sel_r  <= b_is_mmio;
+                b_mmio_data_r <= led_reg_rdata;
+            end
+        end
+    end
+
+    //=================================================================
+    // Output Multiplexers (Combinational - after all registers)
+    // Priority: Reset > MMIO > BRAM
+    //=================================================================
+
+    always_comb begin
+        if (a_reset_out_r)
+            a_rdata = 32'h0000_0013;  // NOP on reset
+        else if (a_mmio_sel_r)
+            a_rdata = a_mmio_data_r;  // MMIO read data
+        else
+            a_rdata = bram_out_a;     // BRAM read data
+    end
+
+    always_comb begin
+        if (b_reset_out_r)
+            b_rdata = 32'h0000_0013;  // NOP on reset
+        else if (b_mmio_sel_r)
+            b_rdata = b_mmio_data_r;  // MMIO read data
+        else
+            b_rdata = bram_out_b;     // BRAM read data
+    end
+
     //=================================================================
     // Assertions (Simulation Only)
     //=================================================================
-    
+
     `ifdef SIMULATION
     // Check for simultaneous write to same address (potential data corruption)
     always_ff @(posedge clk) begin
-        if (!rst && a_en && b_en && !a_is_mmio && !b_is_mmio && 
+        if (!rst && a_en && b_en && !a_is_mmio && !b_is_mmio &&
             (|a_we) && (|b_we) && (a_addr == b_addr)) begin
             $warning("[VEXRISCV_BLOCKRAM] Simultaneous write to address 0x%08X from both ports (Port A: 0x%08X, Port B: 0x%08X)",
                      {a_addr, 2'b00}, a_wdata, b_wdata);
         end
     end
-    
+
     // Monitor MMIO accesses
     always_ff @(posedge clk) begin
         if (!rst && a_en && a_is_mmio && (|a_we)) begin
