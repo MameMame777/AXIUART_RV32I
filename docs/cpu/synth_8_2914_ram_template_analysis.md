@@ -46,7 +46,7 @@ Lines 108 and 132:
 
 ```systemverilog
 if (rst) begin
-    a_rdata <= 32'h0000_0013;  // Return NOP on reset
+    a_rdata <= 32'h0000_0013;  // Return NOP (no-operation instruction) on reset
 end
 ```
 
@@ -101,6 +101,7 @@ always_ff @(posedge clk) begin
     if (a_en && !a_is_mmio) begin
         a_rdata <= mem[a_addr];  // Read-first
         for (int i = 0; i < 4; i++) begin
+            // i*8 +: 8 is indexed part-select syntax: extracts 8 bits starting at position i*8
             if (a_we[i]) mem[a_addr][i*8 +: 8] <= a_wdata[i*8 +: 8];
         end
     end
@@ -154,5 +155,5 @@ This will require changes to the instantiation in `vexriscv_wrapper.sv` to accou
 
 ## References
 
-- Xilinx UG901 "Vivado Design Suite User Guide: Synthesis" - Chapter on RAM HDL Coding Techniques
-- Xilinx UG473 "7 Series FPGAs Memory Resources User Guide" - RAMB36E1 primitive specifications
+- [Xilinx UG901](https://docs.amd.com/r/en-US/ug901-vivado-synthesis/RAM-HDL-Coding-Techniques) "Vivado Design Suite User Guide: Synthesis" - Chapter 4: RAM HDL Coding Techniques (specifically "Block RAM Read/Write Synchronization Modes")
+- [Xilinx UG473](https://docs.amd.com/v/u/en-US/ug473_7Series_Memory_Resources) "7 Series FPGAs Memory Resources User Guide" - Chapter 1: Block RAM Resources (RAMB36E1 primitive specifications)
