@@ -1,292 +1,161 @@
 ---
-name: mcp-workflow
-description: FastMCP + DSIM workflow for UVM test execution. Use when compiling tests, running simulations, executing regression suites, or troubleshooting MCP integration.
+name: dsim-workflow
+description: DSIM UVM test execution workflow using PowerShell scripts. Use when compiling tests, running simulations, executing regression suites, or troubleshooting DSIM issues.
 ---
 
-# MCP Workflow for DSIM UVM Testing
+# DSIM UVM Test Workflow
 
-FastMCP + VS Code MCP integration workflow for the AXIUART_RV32I verification environment.
+PowerShell script-based workflow for the AXIUART_RV32I verification environment.
 
 ## When to Use This Skill
 
 - Compiling or running UVM tests
 - Executing regression test suites
-- Troubleshooting MCP server connectivity
+- Troubleshooting DSIM environment issues
 - Understanding VS Code task integration
-- Configuring test timeout policies
 
 ## Primary Workflow (MANDATORY)
 
-**Use FastMCP + VS Code MCP integration** - configured in `.vscode/mcp.json`
+**Use PowerShell scripts** in [scripts/](../../scripts/)
 
-**Do not violate this rule.** MCP server provides structured JSON outputs, automatic timeout management, and integrated telemetry.
+| Script | Purpose |
+|--------|---------|
+| `run_test.ps1` | Single test execution |
+| `run_regression.ps1` | Batch test execution |
+
+**Note:** MCP-based execution has been deprecated. The `deprecated_mcp_server/` directory is retained for reference only.
 
 ## Standard UVM Test Sequence
 
-### 1. Check DSIM Environment
+### 1. Run Single Test
 
-```bash
-python mcp_server/mcp_client.py \
-    --workspace e:\Nautilus\workspace\fpgawork\AXIUART_RV32I \
-    --tool check_dsim_environment
+```powershell
+.\scripts\run_test.ps1 <test_name> [-Verbosity <level>] [-Waves] [-Seed <n>]
 ```
 
-**Verifies:**
-- `DSIM_HOME`, `DSIM_ROOT`, `DSIM_LIB_PATH`, `DSIM_LICENSE` environment variables
-- DSIM executable accessibility
-- License validity
+**Examples:**
 
-### 2. List Available Tests
+```powershell
+# Basic test execution
+.\scripts\run_test.ps1 vexriscv_regfile_test
 
-```bash
-python mcp_server/mcp_client.py \
-    --workspace e:\Nautilus\workspace\fpgawork\AXIUART_RV32I \
-    --tool list_available_tests
+# With waveform capture
+.\scripts\run_test.ps1 vexriscv_alu_test -Waves
+
+# With higher verbosity
+.\scripts\run_test.ps1 vexriscv_pipeline_flow_test -Verbosity UVM_MEDIUM
 ```
 
-**Returns:** JSON list of all UVM tests in [sim/tests/](../../sim/tests/)
+### 2. Run Regression Suite
 
-### 3. Compile Test
-
-```bash
-python mcp_server/mcp_client.py \
-    --workspace e:\Nautilus\workspace\fpgawork\AXIUART_RV32I \
-    --tool run_uvm_simulation \
-    --test-name <test> \
-    --mode compile \
-    --verbosity UVM_LOW
+```powershell
+.\scripts\run_regression.ps1 [-Stage <n>] [-Tests <list>] [-Verbosity <level>] [-Waves] [-StopOnFail]
 ```
 
-**Example:**
-```bash
-python mcp_server/mcp_client.py \
-    --workspace e:\Nautilus\workspace\fpgawork\AXIUART_RV32I \
-    --tool run_uvm_simulation \
-    --test-name axiuart_basic_test \
-    --mode compile \
-    --verbosity UVM_LOW
+**Examples:**
+
+```powershell
+# Run all Stage 1 tests
+.\scripts\run_regression.ps1 -Stage 1
+
+# Run specific tests
+.\scripts\run_regression.ps1 -Tests vexriscv_regfile_test,vexriscv_alu_test
+
+# Stop on first failure
+.\scripts\run_regression.ps1 -Stage 1 -StopOnFail
 ```
 
-### 4. Run Simulation
+## Available Tests (Stage 1)
 
-```bash
-python mcp_server/mcp_client.py \
-    --workspace e:\Nautilus\workspace\fpgawork\AXIUART_RV32I \
-    --tool run_uvm_simulation \
-    --test-name <test> \
-    --mode run \
-    --verbosity UVM_MEDIUM \
-    --waves
-```
+| Test Name | Purpose |
+|-----------|---------|
+| `vexriscv_regfile_test` | Register file read/write |
+| `vexriscv_alu_test` | ALU operations |
+| `vexriscv_pipeline_flow_test` | Pipeline instruction flow |
+| `vexriscv_ibus_fetch_test` | Instruction bus fetching |
+| `vexriscv_memory_access_test` | Load/Store operations |
+| `vexriscv_ex_bypass_test` | EX stage forwarding |
+| `vexriscv_mem_bypass_test` | MEM stage forwarding |
+| `vexriscv_wb_bypass_test` | WB stage forwarding |
+| `vexriscv_load_use_stall_test` | Load-use hazard stall |
+| `vexriscv_dbus_access_test` | Data bus access |
 
-**Example:**
-```bash
-python mcp_server/mcp_client.py \
-    --workspace e:\Nautilus\workspace\fpgawork\AXIUART_RV32I \
-    --tool run_uvm_simulation \
-    --test-name axiuart_basic_test \
-    --mode run \
-    --verbosity UVM_MEDIUM \
-    --waves
-```
+## Script Parameters
 
-## Timeout Policy (CRITICAL)
+### run_test.ps1
 
-**NEVER specify `--timeout` parameter**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `-TestName` | string | (required) | UVM test class name |
+| `-Verbosity` | enum | UVM_LOW | UVM_LOW, UVM_MEDIUM, UVM_HIGH, UVM_DEBUG |
+| `-Waves` | switch | false | Enable waveform capture (.mxd) |
+| `-Seed` | int | 1 | Random seed |
+| `-CompileOnly` | switch | false | Compile without running |
+| `-RunOnly` | switch | false | Run using existing compiled image |
 
-MCP server auto-selects timeout from [test_timing_config.json](../../mcp_server/test_timing_config.json) or uses `null` (no timeout) by default.
+### run_regression.ps1
 
-### Timeout Configuration
-
-```json
-{
-  "default_timeout": 300,
-  "test_timeouts": {
-    "axiuart_basic_test": 120,
-    "axiuart_stress_test": 600,
-    "axiuart_long_run_test": null
-  }
-}
-```
-
-**Rules:**
-- `null` timeout = no timeout (runs until completion)
-- Specific test timeout overrides default
-- Do not hardcode timeouts in command line
-
-## Regression Testing
-
-### Smoke Suite (Quick Validation)
-
-```bash
-python mcp_server/run_regression.py --suite smoke
-```
-
-**Characteristics:**
-- 2 tests: `axiuart_basic_test`, `uart_loopback_test`
-- Runtime: ~40 seconds
-- Use for: Quick sanity checks, pre-commit validation
-
-### Full Suite (Complete Regression)
-
-```bash
-python mcp_server/run_regression.py --suite full --format html
-```
-
-**Characteristics:**
-- All tests in [regression_tests.json](../../sim/regression_tests.json)
-- HTML report generated in [sim/reports/](../../sim/reports/)
-- Use for: Nightly builds, release validation
-
-### Via MCP Tool
-
-```bash
-python mcp_server/mcp_client.py \
-    --workspace e:\Nautilus\workspace\fpgawork\AXIUART_RV32I \
-    --tool run_regression_suite \
-    --suite smoke
-```
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `-Stage` | int | 0 | Run tests for specific stage (1, 2, etc.) |
+| `-Tests` | string[] | @() | Comma-separated list of specific tests |
+| `-Verbosity` | enum | UVM_LOW | UVM verbosity level |
+| `-Waves` | switch | false | Enable waveform capture for all tests |
+| `-StopOnFail` | switch | false | Stop regression on first failure |
+| `-ReportFile` | string | auto | Custom report file path |
 
 ## VS Code Task Integration
 
-### Compile-Only Task
+Use VS Code tasks from the Command Palette (Ctrl+Shift+P > "Tasks: Run Task"):
 
-**Task:** `DSIM: Run Basic Test (Compile Only - MCP)`
+| Task | Description |
+|------|-------------|
+| `DSIM: Run Single Test` | Run selected test with chosen verbosity |
+| `DSIM: Run Single Test with Waves` | Run with waveform capture |
+| `DSIM: Run Stage 1 Regression` | Run all Stage 1 tests |
+| `DSIM: Run Selected Tests` | Run comma-separated test list |
+| `DSIM: Run regfile_test` | Quick access to regfile test |
+| `DSIM: Run alu_test` | Quick access to ALU test |
 
-Wraps:
-```bash
-python mcp_server/mcp_client.py --workspace . --tool run_uvm_simulation \
-    --test-name axiuart_basic_test --mode compile --verbosity UVM_LOW
-```
+## Output Locations
 
-### Full Simulation Task
+| Output Type | Location |
+|-------------|----------|
+| **Test logs** | [sim/exec/logs/<test_name>_<timestamp>.log](../../sim/exec/logs/) |
+| **Result JSON** | [sim/exec/logs/<test_name>_<timestamp>_result.json](../../sim/exec/logs/) |
+| **Waveforms** | [sim/exec/wave/<test_name>_<timestamp>.mxd](../../sim/exec/wave/) |
+| **Regression report** | [sim/exec/logs/regression_<timestamp>.txt](../../sim/exec/logs/) |
+| **Regression JSON** | [sim/exec/logs/regression_<timestamp>.json](../../sim/exec/logs/) |
 
-**Task:** `DSIM: Run Basic Test (Full Simulation - MCP)`
+## Result JSON Format
 
-Wraps:
-```bash
-python mcp_server/mcp_client.py --workspace . --tool run_uvm_simulation \
-    --test-name axiuart_basic_test --mode run --verbosity UVM_MEDIUM --waves
-```
-
-### MCP Server Startup
-
-**Task:** `🚀 Start Enhanced MCP Server (FastMCP Edition)`
-
-Starts background MCP server when required.
-
-## JSON Output Consumption
-
-MCP server produces structured JSON outputs:
-
-### Test Results
-
-Location: [sim/logs/<test_name>_result.json](../../sim/logs/)
+### Single Test Result
 
 ```json
 {
-  "test_name": "axiuart_basic_test",
-  "status": "PASSED",
-  "duration_seconds": 45.3,
-  "errors": 0,
-  "warnings": 2,
-  "coverage": {
-    "line": 87.5,
-    "toggle": 92.1
-  }
+  "test_name": "vexriscv_regfile_test",
+  "status": "success",
+  "exit_code": 0,
+  "log_file": "sim/exec/logs/vexriscv_regfile_test_20260131_111315.log",
+  "wave_file": "",
+  "timestamp": "20260131_111315"
 }
 ```
 
-### Telemetry
-
-Location: [sim/logs/<test_name>_telemetry.json](../../sim/logs/)
-
-Contains DSIM performance metrics, memory usage, compilation time.
-
-### Coverage Data
-
-Location: [sim/reports/coverage/](../../sim/reports/coverage/)
-
-Parse coverage database for detailed metrics.
-
-## MCP Client API Usage
-
-### Python Integration
-
-```python
-from mcp_server.client_api import DSIMClient
-
-client = DSIMClient(workspace="e:\\Nautilus\\workspace\\fpgawork\\AXIUART_RV32I")
-
-# Check environment
-env_status = client.check_dsim_environment()
-print(f"DSIM ready: {env_status['valid']}")
-
-# List tests
-tests = client.list_available_tests()
-print(f"Available tests: {tests}")
-
-# Run test
-result = client.run_uvm_simulation(
-    test_name="axiuart_basic_test",
-    mode="run",
-    verbosity="UVM_MEDIUM",
-    waves=True
-)
-print(f"Test result: {result['status']}")
-```
-
-## Fallback Path (Only if MCP Unavailable)
-
-### When to Use Fallback
-
-- MCP server unreachable
-- Python environment issues
-- Debugging MCP infrastructure problems
-
-**Document the reason for fallback in development diary.**
-
-### Initialization
-
-```powershell
-cd e:\Nautilus\workspace\fpgawork\AXIUART_RV32I
-.\workspace_init.ps1
-Test-WorkspaceMCPUVM
-```
-
-### Execution
-
-```powershell
-.\sim\exec\run_uvm.ps1 `
-    -TestName axiuart_basic_test `
-    -Waves `
-    -Coverage
-```
-
-### Prohibited
-
-**Never call archived scripts or `archive/legacy_mcp_files/` assets.**
-
-## MCP Server Configuration
-
-### Server Location
-
-[mcp_server/dsim_fastmcp_server.py](../../mcp_server/dsim_fastmcp_server.py)
-
-### Configuration File
-
-[.vscode/mcp.json](../../.vscode/mcp.json)
+### Regression Result
 
 ```json
 {
-  "mcpServers": {
-    "dsim-uvm": {
-      "command": "python",
-      "args": ["mcp_server/dsim_fastmcp_server.py"],
-      "env": {
-        "WORKSPACE_ROOT": "e:\\Nautilus\\workspace\\fpgawork\\AXIUART_RV32I"
-      }
-    }
+  "timestamp": "20260131_111114",
+  "total_tests": 3,
+  "passed": 3,
+  "failed": 0,
+  "skipped": 0,
+  "status": "PASS",
+  "results": {
+    "vexriscv_regfile_test": "PASS",
+    "vexriscv_alu_test": "PASS",
+    "vexriscv_pipeline_flow_test": "PASS"
   }
 }
 ```
@@ -295,80 +164,82 @@ Test-WorkspaceMCPUVM
 
 ### Quick Compile-Run Cycle
 
-```bash
-# Compile
-python mcp_server/mcp_client.py --workspace . --tool run_uvm_simulation \
-    --test-name my_test --mode compile --verbosity UVM_LOW
+```powershell
+# Compile only
+.\scripts\run_test.ps1 my_test -CompileOnly
 
-# If successful, run
-python mcp_server/mcp_client.py --workspace . --tool run_uvm_simulation \
-    --test-name my_test --mode run --verbosity UVM_MEDIUM --waves
+# Run using compiled image
+.\scripts\run_test.ps1 my_test -RunOnly
 ```
 
-### Debug with Assertions Enabled
+### Debug with Waveforms
 
-```bash
-python mcp_server/mcp_client.py --workspace . --tool run_uvm_simulation \
-    --test-name my_test --mode run --waves \
-    --compile-args "+define+ENABLE_ASSERTIONS"
+```powershell
+.\scripts\run_test.ps1 vexriscv_memory_access_test -Waves -Verbosity UVM_DEBUG
 ```
 
-### Coverage-Enabled Run
+### Full Stage 1 Regression
 
-```bash
-python mcp_server/mcp_client.py --workspace . --tool run_uvm_simulation \
-    --test-name my_test --mode run --coverage --waves
+```powershell
+.\scripts\run_regression.ps1 -Stage 1 -Verbosity UVM_LOW
 ```
 
-## Output Locations
+## DSIM Environment
 
-| Output Type | Location |
-|-------------|----------|
-| **Test logs** | [sim/logs/<test_name>.log](../../sim/logs/) |
-| **Result JSON** | [sim/logs/<test_name>_result.json](../../sim/logs/) |
-| **Telemetry** | [sim/logs/<test_name>_telemetry.json](../../sim/logs/) |
-| **Waveforms** | [sim/logs/<test_name>.mxd](../../sim/logs/) |
-| **Coverage** | [sim/reports/coverage/](../../sim/reports/coverage/) |
-| **Regression reports** | [sim/reports/regression_<timestamp>.html](../../sim/reports/) |
+Scripts automatically configure DSIM environment:
+
+- `DSIM_HOME`: C:\Program Files\Altair\DSim\2025.1
+- License auto-discovery from standard locations
+- PATH includes DSIM binaries and dependencies
+
+### Environment Variables (Auto-configured)
+
+| Variable | Value |
+|----------|-------|
+| `DSIM_HOME` | Installation directory |
+| `DSIM_ROOT` | Same as DSIM_HOME |
+| `DSIM_LIB_PATH` | DSIM_HOME/lib |
+| `DSIM_LICENSE` | Auto-discovered license file |
 
 ## Troubleshooting
 
-### MCP Server Not Responding
+### DSIM Not Found
 
-1. Check background task: `🚀 Start Enhanced MCP Server (FastMCP Edition)`
-2. Verify Python environment: `python --version` (requires 3.8+)
-3. Test direct invocation: `python mcp_server/dsim_fastmcp_server.py --help`
-
-### DSIM Environment Errors
-
-```bash
-python mcp_server/mcp_client.py --workspace . --tool check_dsim_environment
+Verify DSIM installation:
+```powershell
+Test-Path "C:\Program Files\Altair\DSim\2025.1\bin\dsim.exe"
 ```
 
-Review output for missing environment variables. See `dsim-debugging` skill for detailed troubleshooting.
+### License Issues
+
+Check license file locations:
+- `C:\Program Files\Altair\dsim-license.json`
+- `C:\Program Files\Altair\DSim\2025.1\dsim-license.json`
+- `$env:LOCALAPPDATA\metrics-ca\dsim-license.json`
 
 ### Test Not Found
 
-```bash
-python mcp_server/mcp_client.py --workspace . --tool list_available_tests
-```
+Verify test exists in [sim/tests/](../../sim/tests/) and is listed in [sim/uvm/tb/dsim_config.f](../../sim/uvm/tb/dsim_config.f).
 
-Verify test exists in [sim/tests/](../../sim/tests/) and is registered in [regression_tests.json](../../sim/regression_tests.json).
+### Compilation Errors
 
-## Additional Resources
+See `dsim-debugging` skill for detailed troubleshooting.
 
-- **MCP server implementation**: [mcp_server/README.md](../../mcp_server/README.md)
-- **Regression configuration**: [mcp_server/REGRESSION.md](../../mcp_server/REGRESSION.md)
-- **DSIM debugging**: Reference `dsim-debugging` skill
-- **Test execution**: [docs/vexriscv_test_quickstart.md](../../docs/vexriscv_test_quickstart.md)
+## Deprecated MCP Server
+
+The MCP server has been deprecated. Files are retained in `deprecated_mcp_server/` for reference only.
+
+**Do not use:**
+- `deprecated_mcp_server/mcp_client.py`
+- `deprecated_mcp_server/dsim_fastmcp_server.py`
+- `deprecated_mcp_server/run_regression.py`
 
 ## Summary
 
-MCP workflow principles:
-1. Always use FastMCP + VS Code MCP integration (mandatory)
-2. Never specify `--timeout` parameter (auto-selected from [test_timing_config.json](../../mcp_server/test_timing_config.json))
-3. Standard sequence: `check_dsim_environment` → `list_available_tests` → `compile` → `run`
-4. Prefer VS Code tasks for common operations
-5. Consume JSON outputs from [sim/logs/](../../sim/logs/) and [sim/reports/](../../sim/reports/)
-6. Use fallback PowerShell path only when MCP unavailable (document reason)
-7. Smoke suite (~40s) for quick validation, full suite for complete regression
+Workflow principles:
+1. Use PowerShell scripts in [scripts/](../../scripts/) (mandatory)
+2. Standard sequence: `run_test.ps1` for single tests, `run_regression.ps1` for batch
+3. Use VS Code tasks for common operations
+4. Consume JSON outputs from [sim/exec/logs/](../../sim/exec/logs/)
+5. Check waveforms in [sim/exec/wave/](../../sim/exec/wave/) when debugging
+6. See `dsim-debugging` skill for troubleshooting
