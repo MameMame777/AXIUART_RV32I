@@ -8,6 +8,7 @@
 #   -Seed N           Random seed (default: 1)
 #   -CompileOnly      Compile only, do not run
 #   -RunOnly          Run only (use existing compiled image)
+#   -CleanupDays N    Auto-delete logs older than N days before run (0=disable)
 #==============================================================================
 
 param(
@@ -24,6 +25,8 @@ param(
     [switch]$CompileOnly,
 
     [switch]$RunOnly,
+
+    [int]$CleanupDays = 0,
 
     [switch]$Help
 )
@@ -45,6 +48,7 @@ Options:
   -Seed N           Random seed (default: 1)
   -CompileOnly      Compile only
   -RunOnly          Run only
+  -CleanupDays N    Auto-delete logs older than N days (0=disable)
   -Help             Show this help
 "@
     exit 0
@@ -91,6 +95,49 @@ function Setup-Environment {
     # Create directories
     New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
     New-Item -ItemType Directory -Force -Path $WaveDir | Out-Null
+
+    # Auto-cleanup old files if requested
+    if ($CleanupDays -gt 0) {
+        Cleanup-OldLogs -Days $CleanupDays
+    }
+}
+
+# Cleanup old log files
+function Cleanup-OldLogs {
+    param([int]$Days)
+
+    $cutoffDate = (Get-Date).AddDays(-$Days)
+    $deletedCount = 0
+    $totalSize = 0
+
+    # Cleanup log files
+    if (Test-Path $LogDir) {
+        $oldFiles = Get-ChildItem -Path $LogDir -File -Recurse |
+            Where-Object { $_.LastWriteTime -lt $cutoffDate }
+
+        foreach ($file in $oldFiles) {
+            $totalSize += $file.Length
+            Remove-Item -Path $file.FullName -Force -ErrorAction SilentlyContinue
+            $deletedCount++
+        }
+    }
+
+    # Cleanup wave files
+    if (Test-Path $WaveDir) {
+        $oldWaves = Get-ChildItem -Path $WaveDir -File -Recurse |
+            Where-Object { $_.LastWriteTime -lt $cutoffDate }
+
+        foreach ($file in $oldWaves) {
+            $totalSize += $file.Length
+            Remove-Item -Path $file.FullName -Force -ErrorAction SilentlyContinue
+            $deletedCount++
+        }
+    }
+
+    if ($deletedCount -gt 0) {
+        $sizeMB = [math]::Round($totalSize / 1MB, 2)
+        Write-Host "[Cleanup] Deleted $deletedCount files older than $Days days ($sizeMB MB)"
+    }
 }
 
 # Run DSIM
