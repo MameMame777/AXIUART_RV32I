@@ -20,7 +20,11 @@ if (Test-Path $shellActivateScript) {
     $env:DSIM_HOME = "C:\Program Files\Altair\DSim\2025.1"
     $env:DSIM_ROOT = "C:\Program Files\Altair\DSim\2025.1"
     $env:DSIM_LIB_PATH = "C:\Program Files\Altair\DSim\2025.1\lib"
-    $env:DSIM_LICENSE = "C:\Users\Nautilus\AppData\Local\metrics-ca\dsim-license.json"
+    
+    # ライセンスパスは環境変数を優先、未設定なら標準パスを使用
+    if (-not $env:DSIM_LICENSE) {
+        $env:DSIM_LICENSE = Join-Path $env:LOCALAPPDATA "metrics-ca\dsim-license.json"
+    }
     
     # PATHに追加
     $env:PATH = "C:\Program Files\Altair\DSim\2025.1\bin;" + $env:PATH
