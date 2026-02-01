@@ -143,7 +143,7 @@ class vexriscv_base_test extends uvm_test;
         
         // Build Python command to load hex file
         python_cmd = $sformatf(
-            "python %s\\mcp_server\\tools\\vexriscv_hex_loader.py %s %s",
+            "python %s\\tools\\vexriscv_hex_loader.py %s %s",
             workspace_root,
             full_hex_path,
             translate_addr ? "--offset -0x80000000" : "--offset 0"

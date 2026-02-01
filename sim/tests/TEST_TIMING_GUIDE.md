@@ -24,8 +24,7 @@ This document provides estimated execution times and recommended timeout setting
 - **Status**: ✅ Validated (7/7 matches)
 - **Command**:
   ```powershell
-  python mcp_server/mcp_client.py --workspace . --tool run_uvm_simulation \
-    --test-name axiuart_cpu_simple_mem_test --mode run --verbosity UVM_LOW --timeout 180
+  .\scripts\run_test.ps1 axiuart_cpu_simple_mem_test -Verbosity UVM_LOW
   ```
 
 #### axiuart_cpu_memory_test
@@ -43,12 +42,10 @@ This document provides estimated execution times and recommended timeout setting
 - **Command**:
   ```powershell
   # Standard execution
-  python mcp_server/mcp_client.py --workspace . --tool run_uvm_simulation \
-    --test-name axiuart_cpu_memory_test --mode run --verbosity UVM_LOW --timeout 1200
+  .\scripts\run_test.ps1 axiuart_cpu_memory_test -Verbosity UVM_LOW
   
   # Debug execution with waveforms
-  python mcp_server/mcp_client.py --workspace . --tool run_uvm_simulation \
-    --test-name axiuart_cpu_memory_test --mode run --verbosity UVM_DEBUG --waves --timeout 2400
+  .\scripts\run_test.ps1 axiuart_cpu_memory_test -Verbosity UVM_DEBUG -Waves
   ```
 
 ### Timeout Calculation Guidelines

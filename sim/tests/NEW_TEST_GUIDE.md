@@ -13,15 +13,7 @@ cp sim/tests/.test_template.sv sim/tests/my_new_test.sv
 echo '`include "my_new_test.sv"' >> sim/tests/axiuart_test_pkg.sv
 
 # 5. Run test
-python mcp_server/mcp_client.py --workspace . \
-  --tool run_uvm_simulation \
-  --test-name my_new_test \
-  --mode compile --verbosity UVM_LOW
-
-python mcp_server/mcp_client.py --workspace . \
-  --tool run_uvm_simulation \
-  --test-name my_new_test \
-  --mode run --verbosity UVM_MEDIUM --waves
+.\scripts\run_test.ps1 my_new_test -Verbosity UVM_MEDIUM -Waves
 ```
 
 ---

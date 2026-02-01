@@ -65,8 +65,7 @@ If **x4 ≠ 84**:
 
 ```powershell
 # Compile + Run
-python mcp_server/mcp_client.py --workspace . --tool run_uvm_simulation `
-  --test-name rv32i_load_use_stall_test --mode run --verbosity UVM_MEDIUM --waves
+.\scripts\run_test.ps1 rv32i_load_use_stall_test -Verbosity UVM_MEDIUM -Waves
 ```
 
 ## Success Criteria

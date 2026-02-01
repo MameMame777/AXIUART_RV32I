@@ -12,8 +12,8 @@ Successfully completed all three requested tasks:
 ## 1. Regression Test Results
 
 ### Command
-```bash
-python mcp_server/run_regression.py --suite smoke --format html
+```powershell
+.\scripts\run_regression.ps1 -Stage 1 -Verbosity UVM_LOW
 ```
 
 ### Results
@@ -184,8 +184,8 @@ Untracked files cleaned: 6 (temp_*.txt)
    ```
 
 2. **Run Full Regression**
-   ```bash
-   python mcp_server/run_regression.py --suite full --format html
+   ```powershell
+   .\scripts\run_regression.ps1 -Stage 1 -Verbosity UVM_LOW
    ```
 
 3. **Create Release Tag**

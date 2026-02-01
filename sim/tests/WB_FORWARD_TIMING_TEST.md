@@ -56,8 +56,7 @@ If LED ≠ 0x7, the WB forwarding timing fix is NOT working correctly.
 
 ```powershell
 # Compile + Run
-python mcp_server/mcp_client.py --workspace . --tool run_uvm_simulation `
-  --test-name rv32i_wb_forward_timing_test --mode run --verbosity UVM_MEDIUM --waves
+.\scripts\run_test.ps1 rv32i_wb_forward_timing_test -Verbosity UVM_MEDIUM -Waves
 ```
 
 ## Success Criteria
