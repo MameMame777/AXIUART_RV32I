@@ -34,6 +34,14 @@
 - Do NOT switch to `main` or other branches for editing.
 - When creating commits, stay on `work/claude`.
 - Merge to `main` is performed by the user after review.
+- **Sync with main regularly**: Before starting new tasks, sync with main to prevent conflicts:
+
+  ```bash
+  git fetch origin main
+  git merge origin/main
+  ```
+
+- If merge conflicts occur, resolve them before proceeding with other work.
 
 ## Tooling Workflow (PowerShell Scripts - MANDATORY)
 
