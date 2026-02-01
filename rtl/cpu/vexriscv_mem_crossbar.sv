@@ -166,17 +166,17 @@ module vexriscv_mem_crossbar (
     dbus_req_t dbus_fifo_dout;
     logic dbus_fifo_push;
     logic dbus_fifo_pop;
+    logic dbus_fifo_pop_done;
     logic dbus_fifo_empty;
     logic dbus_fifo_full;
-    logic dbus_fifo_count;
-    
+    logic [1:0] dbus_fifo_count;  // 2-bit counter for 2-entry FIFO (0, 1, 2)
+
     dbus_req_t [1:0] dbus_fifo;
     logic dbus_wr_ptr;
     logic dbus_rd_ptr;
-    
-    assign dbus_fifo_count = dbus_wr_ptr - dbus_rd_ptr;
-    assign dbus_fifo_empty = (dbus_fifo_count == 1'b0);
-    assign dbus_fifo_full  = (dbus_fifo_count == 1'b1) && (dbus_wr_ptr == dbus_rd_ptr);
+
+    assign dbus_fifo_empty = (dbus_fifo_count == 2'd0);
+    assign dbus_fifo_full  = (dbus_fifo_count == 2'd2);
     
     // DBus command handshake: Accept when FIFO not full
     assign dBus_cmd_ready = !dbus_fifo_full && !cpu_halted;
@@ -191,16 +191,27 @@ module vexriscv_mem_crossbar (
     always_ff @(posedge clk) begin
         if (rst) begin
             dbus_wr_ptr <= 1'b0;
+            dbus_fifo_count <= 2'd0;
             // Initialize FIFO to prevent X propagation
             for (int i = 0; i < 2; i++) begin
                 dbus_fifo[i] <= '0;
             end
-        end else if (dbus_fifo_push) begin
-            dbus_fifo[dbus_wr_ptr] <= dbus_fifo_din;
-            dbus_wr_ptr <= ~dbus_wr_ptr;
+        end else begin
+            // FIFO push
+            if (dbus_fifo_push) begin
+                dbus_fifo[dbus_wr_ptr] <= dbus_fifo_din;
+                dbus_wr_ptr <= ~dbus_wr_ptr;
+            end
+
+            // FIFO count update (handle simultaneous push/pop)
+            case ({dbus_fifo_push, dbus_fifo_pop_done})
+                2'b10: dbus_fifo_count <= dbus_fifo_count + 1'b1;  // Push only
+                2'b01: dbus_fifo_count <= dbus_fifo_count - 1'b1;  // Pop done only
+                default: dbus_fifo_count <= dbus_fifo_count;       // Both or neither
+            endcase
         end
     end
-    
+
     assign dbus_fifo_dout = dbus_fifo[dbus_rd_ptr];
     
     //=================================================================
@@ -271,8 +282,10 @@ module vexriscv_mem_crossbar (
     dbus_state_t dbus_state;
     logic [31:0] dbus_rdata_buf;
     logic        dbus_was_read;
-    
+
+    // FIFO pop signals
     assign dbus_fifo_pop = (dbus_state == DBUS_IDLE) && !dbus_fifo_empty && !cpu_halted;
+    assign dbus_fifo_pop_done = (dbus_state == DBUS_RESPOND);  // Count decrements when response sent
     
     always_ff @(posedge clk) begin
         if (rst) begin
