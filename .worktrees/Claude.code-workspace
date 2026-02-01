@@ -1,0 +1,25 @@
+{
+  "settings": {
+    "workbench.colorCustomizations": {
+      "statusBar.foreground": "#ffffff",
+      "titleBar.activeForeground": "#ffffff",
+      "statusBar.background": "#d97706",
+      "titleBar.activeBackground": "#d97706",
+      "titleBar.inactiveForeground": "#cccccc",
+      "titleBar.inactiveBackground": "#92400e"
+    },
+    "window.title": "${activeEditorShort} - AXIUART_RV32I [Claude]"
+  },
+  "folders": [
+    {
+      "name": "AXIUART_RV32I (Claude)",
+      "path": "claude"
+    }
+  ],
+  "extensions": {
+    "recommendations": [
+      "mshr-h.veriloghdl",
+      "anthropic.claude-code"
+    ]
+  }
+}
