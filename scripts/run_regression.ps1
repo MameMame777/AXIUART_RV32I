@@ -218,6 +218,21 @@ foreach ($testName in $TestsToRun) {
 
     $exitCode = Run-SingleTest -TestName $testName
 
+    # Prefer result JSON from run_test to determine status
+    $resultJsonFile = Get-ChildItem -Path $LogDir -Filter "${testName}_*_result.json" |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+    if ($resultJsonFile) {
+        $resultJson = Get-Content $resultJsonFile.FullName | ConvertFrom-Json
+        if ($null -ne $resultJson.exit_code) {
+            $exitCode = [int]$resultJson.exit_code
+        } elseif ($resultJson.status -eq "success") {
+            $exitCode = 0
+        } else {
+            $exitCode = 1
+        }
+    }
+
     $endTime = Get-Date
     $duration = [int]($endTime - $startTime).TotalSeconds
 
