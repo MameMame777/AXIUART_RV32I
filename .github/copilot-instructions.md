@@ -2,7 +2,7 @@
 
 ## Base Instructions
 
-See: [base-instructions.md](claude-shared/instructions/base-instructions.md)
+See: [base-instructions.md](../.claude/shared/instructions/base-instructions.md)
 
 ---
 

@@ -2,7 +2,7 @@
 
 ## Base Instructions (Shared)
 
-../.github/claude-shared/instructions/base-instructions.md
+shared/instructions/base-instructions.md
 
 ## Project-Specific Instructions
 
