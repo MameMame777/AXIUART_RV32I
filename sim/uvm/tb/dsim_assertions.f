@@ -12,5 +12,9 @@
 ../../assertions/td4cpu_flag_hazard_assertions.sv
 ../../assertions/td4cpu_fetch_spec.sv
 ../../assertions/spec/td4cpu_branch_fetch_assertions.sv
+../../assertions/spec/vexriscv_ibus_rsp_pc_spec.sv
+../../assertions/spec/vexriscv_mem_crossbar_fifo_spec.sv
 ../../assertions/bind_debug_spec.sv
+../../assertions/bind/bind_vexriscv_ibus_rsp_pc_spec.sv
+../../assertions/bind/bind_vexriscv_mem_crossbar_fifo_spec.sv
 
