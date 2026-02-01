@@ -55,6 +55,7 @@ module vexriscv_top
     input  logic        iBus_rsp_valid,
     input  logic        iBus_rsp_payload_error,
     input  logic [31:0] iBus_rsp_payload_inst,
+    input  logic [31:0] iBus_rsp_payload_pc,
     
     // Data Bus (AXI4-Lite compatible signals)
     output logic        dBus_cmd_valid,
@@ -429,7 +430,8 @@ module vexriscv_top
         .iBus_cmd_payload_pc            (iBus_cmd_payload_pc),
         .iBus_rsp_valid                 (iBus_rsp_valid),
         .iBus_rsp_payload_error         (iBus_rsp_payload_error),
-        .iBus_rsp_payload_inst          (iBus_rsp_payload_inst),
+        .iBus_rsp_payload_inst           (iBus_rsp_payload_inst),
+        .iBus_rsp_payload_pc             (iBus_rsp_payload_pc),
         .branchPlugin_jump_valid        (BranchPlugin_jumpInterface_valid),
         .branchPlugin_jump_payload      (BranchPlugin_jumpInterface_payload),
         .csrPlugin_jump_valid           (CsrPlugin_jumpInterface_valid),

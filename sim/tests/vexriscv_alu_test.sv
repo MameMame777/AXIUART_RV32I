@@ -283,7 +283,7 @@ class vexriscv_alu_test extends vexriscv_base_test;
         
         // Upper Immediate
         expected_values[29] = 32'h12345000;  // x29 = 0x12345000
-        expected_values[30] = 32'h80000098;  // x30 = PC of AUIPC (Shifted due to NOPs)
+        expected_values[30] = 32'h80000084;  // x30 = PC of AUIPC (instruction address)
         
         // Edge cases
         expected_values[31] = 32'h0000000F;  // x31 = 15
