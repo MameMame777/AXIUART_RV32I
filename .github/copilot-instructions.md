@@ -29,9 +29,10 @@ be very in-depth and continue interviewing me continually until it's complete.
 
 # Git Branch Workflow
 
-- This workspace uses git worktree. Work exclusively on the `work/claude` branch.
-- Do NOT switch to `main` or other branches for editing.
-- Merge to `main` is performed by the user after review.
+- Work on the default branch (`main`) for this workspace.
+- Claude Code uses a separate worktree (`.worktrees/claude` with `work/claude` branch).
+- To create Claude worktree: `.\scripts\setup_worktree.ps1`
+- To remove Claude worktree: `.\scripts\setup_worktree.ps1 -Remove`
 - **Sync with main regularly**: Before starting new tasks, sync with main to prevent conflicts:
 
   ```bash
@@ -111,3 +112,6 @@ RTL design debugging methodology and reasoning process. Use when investigating t
 
 ## python-debugging
 Python debugging methodology and problem-solving framework. Use when investigating exceptions, async issues, logging problems, or MCP integration failures in Python code.
+
+## worktree-management
+Git worktree setup and VS Code workspace management. Use when setting up Claude Code worktree, opening workspaces in new windows, or managing parallel development environments.
