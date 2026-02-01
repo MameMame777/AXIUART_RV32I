@@ -27,6 +27,20 @@ be very in-depth and continue interviewing me continually until it's complete.
 - Prefer ASCII in new edits unless the file already uses other characters for justified reasons.
 - Never undo user changes or existing diffs unless explicitly instructed.
 
+# Git Branch Workflow
+
+- This workspace uses git worktree. Work exclusively on the `work/claude` branch.
+- Do NOT switch to `main` or other branches for editing.
+- Merge to `main` is performed by the user after review.
+- **Sync with main regularly**: Before starting new tasks, sync with main to prevent conflicts:
+
+  ```bash
+  git fetch origin main
+  git merge origin/main
+  ```
+
+- If merge conflicts occur, resolve them before proceeding with other work.
+
 # Tooling Workflow (PowerShell Scripts - MANDATORY)
 - Primary workflow: use PowerShell scripts in `scripts/` directory.
 - **Single test**: `.\scripts\run_test.ps1 <test_name> [-Verbosity UVM_LOW] [-Waves]`
