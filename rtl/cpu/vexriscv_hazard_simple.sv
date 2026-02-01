@@ -321,8 +321,12 @@ module vexriscv_hazard_simple
             writeBackBuffer_payload_address <= 5'h0;
             writeBackBuffer_payload_data <= 32'h0;
         end else begin
+            // FIX Issue #18: writeBackBuffer_valid must be updated every cycle
+            // to prevent permanent hazard detection when a previous WB write
+            // address matches current decode instruction's source register.
+            // The buffer is valid for exactly one cycle after a WB write.
+            writeBackBuffer_valid <= writeBackWrites_valid;
             if (writeBackWrites_valid) begin
-                writeBackBuffer_valid <= 1'b1;
                 writeBackBuffer_payload_address <= writeBackWrites_payload_address;
                 writeBackBuffer_payload_data <= writeBackWrites_payload_data;
             end

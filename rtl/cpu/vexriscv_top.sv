@@ -755,7 +755,10 @@ module vexriscv_top
     assign writeBack_REGFILE_WRITE_VALID = memory_to_writeBack_REGFILE_WRITE_VALID;
     assign writeBack_ENV_CTRL = _zz_writeBack_ENV_CTRL;
     assign writeBack_MEMORY_ADDRESS_LOW = memory_to_writeBack_MEMORY_ADDRESS_LOW;
-    assign writeBack_REGFILE_WRITE_DATA = memory_to_writeBack_REGFILE_WRITE_DATA;
+    // FIX Issue #18: Load instructions must use DBus response data, not ALU result
+    assign writeBack_REGFILE_WRITE_DATA = writeBack_MEMORY_ENABLE ?
+                                          writeBack_DBusSimplePlugin_rspFormated :
+                                          memory_to_writeBack_REGFILE_WRITE_DATA;
     assign writeBack_MEMORY_READ_DATA = memory_to_writeBack_MEMORY_READ_DATA;
     
     //==========================================================================
