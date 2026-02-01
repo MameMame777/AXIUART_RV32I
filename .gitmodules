@@ -1,0 +1,3 @@
+[submodule ".github/claude-shared"]
+	path = .github/claude-shared
+	url = E:/Nautilus/workspace/knowledge-share
