@@ -210,10 +210,10 @@ function Run-Dsim {
 
         # Parse UVM Report Summary section for accurate counts
         foreach ($line in $logContent) {
-            if ($line -match "^UVM_ERROR\s*:\s*(\d+)") {
+            if ($line -match "^\s*UVM_ERROR\s*:\s*(\d+)") {
                 $uvmErrors = [int]$Matches[1]
             }
-            if ($line -match "^UVM_FATAL\s*:\s*(\d+)") {
+            if ($line -match "^\s*UVM_FATAL\s*:\s*(\d+)") {
                 $uvmFatals = [int]$Matches[1]
             }
             if ($line -match "TEST PASSED|PASS:\s") {
@@ -226,11 +226,13 @@ function Run-Dsim {
 
         if ($uvmErrors -eq 0 -and $uvmFatals -eq 0 -and $exitCode -eq 0) {
             Write-Host "Status: PASS"
+            $testPass = $true
         } else {
             Write-Host "Status: FAIL"
             Write-Host ""
             Write-Host "--- Error Summary ---"
-            $logContent | Select-String -Pattern "^UVM_ERROR|^UVM_FATAL|\bFAIL\b" | Select-Object -First 20
+            $logContent | Select-String -Pattern "^\s*UVM_ERROR|^\s*UVM_FATAL|\bFAIL\b" | Select-Object -First 20
+            $testPass = $false
         }
     }
 
@@ -242,10 +244,12 @@ function Run-Dsim {
     Write-Host "Exit Code: $exitCode"
 
     # Output JSON for script consumers
+    $resultCode = if ($testPass) { 0 } else { 1 }
+
     $resultJson = @{
         test_name = $TestName
-        status = if ($exitCode -eq 0) { "success" } else { "failure" }
-        exit_code = $exitCode
+        status = if ($testPass) { "success" } else { "failure" }
+        exit_code = $resultCode
         log_file = $logFile
         wave_file = if ($Waves) { $waveFile } else { "" }
         timestamp = $timestamp
@@ -254,7 +258,7 @@ function Run-Dsim {
     $jsonFile = Join-Path $LogDir "${TestName}_${timestamp}_result.json"
     $resultJson | Out-File -FilePath $jsonFile -Encoding UTF8
 
-    return $exitCode
+    return $resultCode
 }
 
 # Main

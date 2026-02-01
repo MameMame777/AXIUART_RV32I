@@ -63,12 +63,16 @@ class vexriscv_load_use_stall_test extends vexriscv_base_test;
         start_cpu();
         
         cycle_count = 0;
-        repeat(30) begin
+        while (!is_cpu_halted() && (cycle_count < timeout_cycles)) begin
             @(posedge $root.rv32i_tb_top.clk);
             cycle_count++;
         end
-        
-        halt_cpu();
+
+        if (!is_cpu_halted()) begin
+            `uvm_error(get_type_name(),
+                $sformatf("Timeout waiting for CPU halt after %0d cycles", timeout_cycles))
+            halt_cpu();
+        end
         
         // Key test: Should take ~4 cycles (with stall), not 3
         // Allow margin for pipeline fill/drain

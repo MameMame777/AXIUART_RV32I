@@ -101,11 +101,18 @@ module vexriscv_fetch_verification (
     end
     
     property p_reset_sync;
-        @(posedge clk) rst |-> cpu_reset;
+        @(posedge clk) (rst && $past(rst)) |-> cpu_reset;
     endproperty
-    
+
     ast_reset_sync: assert property (p_reset_sync)
         else $error("[FETCH_VERIFY] Reset desynchronized: rst=%b cpu_reset=%b", rst, cpu_reset);
+
+    property p_reset_deassert;
+        @(posedge clk) $fell(rst) |-> ##[0:1] !cpu_reset;
+    endproperty
+
+    ast_reset_deassert: assert property (p_reset_deassert)
+        else $error("[FETCH_VERIFY] CPU reset not deasserted within 1 cycle of rst falling");
     
     //==========================================================================
     // CPU Control Signal Monitoring
