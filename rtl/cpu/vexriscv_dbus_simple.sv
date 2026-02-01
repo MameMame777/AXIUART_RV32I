@@ -54,7 +54,11 @@ module vexriscv_dbus_simple
     input  logic [31:0] writeBack_MEMORY_READ_DATA,
     
     // Outputs
-    output logic [31:0] writeBack_DBusSimplePlugin_rspFormated
+    output logic [31:0] writeBack_DBusSimplePlugin_rspFormated,
+
+    // Stall signals for arbitration
+    output logic        execute_DBus_cmdWait,   // Stall EX when cmd not ready
+    output logic        memory_DBus_rspWait     // Stall MEM when rsp not ready (load)
 );
 
     //==========================================================================
@@ -152,10 +156,14 @@ module vexriscv_dbus_simple
                                            (!execute_DBusSimplePlugin_skipCmd)) && 
                                            1'b1); // No extra skip condition
     
-    assign when_DBusSimplePlugin_l490 = (((memory_arbitration_isValid && memory_MEMORY_ENABLE) && 
-                                          (!memory_MEMORY_STORE)) && 
+    assign when_DBusSimplePlugin_l490 = (((memory_arbitration_isValid && memory_MEMORY_ENABLE) &&
+                                          (!memory_MEMORY_STORE)) &&
                                           ((!dBus_rsp_ready) || 1'b0));
-    
+
+    // Export stall signals for use in vexriscv_top arbitration
+    assign execute_DBus_cmdWait = when_DBusSimplePlugin_l435;
+    assign memory_DBus_rspWait  = when_DBusSimplePlugin_l490;
+
     //==========================================================================
     // WriteBack Stage - Load Response Shifting
     //==========================================================================

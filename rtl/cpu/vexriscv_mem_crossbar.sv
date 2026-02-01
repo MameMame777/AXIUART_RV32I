@@ -299,8 +299,11 @@ module vexriscv_mem_crossbar (
                         // Write: No read data needed
                         dbus_state <= DBUS_RESPOND;
                     end else begin
-                        // Read: Capture data
-                        dbus_rdata_buf <= ram_b_mmio_access ? led_reg_rdata : ram_b_rdata;
+                        // Read: Capture data from BRAM output
+                        // Note: ram_b_rdata already handles MMIO mux via registered
+                        // selection (b_mmio_sel_r) in vexriscv_blockram, so we don't
+                        // need to check ram_b_mmio_access here.
+                        dbus_rdata_buf <= ram_b_rdata;
                         dbus_state <= DBUS_RESPOND;
                     end
                 end
