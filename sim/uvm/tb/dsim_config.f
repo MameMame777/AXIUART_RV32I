@@ -117,6 +117,9 @@
 ../../tests/vexriscv_ibus_fetch_test.sv
 ../../tests/vexriscv_dbus_access_test.sv
 
+# Issue #13 Investigation - LED MMIO via UART-AXI path
+../../tests/vexriscv_led_uart_test.sv
+
 # Testbench Top Module (includes package and test_lib)
 +incdir+.
 ./rv32i_tb_top.sv
