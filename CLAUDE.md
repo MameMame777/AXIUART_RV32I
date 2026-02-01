@@ -28,6 +28,13 @@ E:\Nautilus\workspace\fpgawork\AXIUART_\reference\Accellera\uvm\distrib\examples
 - Prefer ASCII in new edits unless the file already uses other characters for justified reasons.
 - Never undo user changes or existing diffs unless explicitly instructed.
 
+## Git Branch Workflow
+
+- This workspace uses git worktree. Claude MUST work exclusively on the `work/claude` branch.
+- Do NOT switch to `main` or other branches for editing.
+- When creating commits, stay on `work/claude`.
+- Merge to `main` is performed by the user after review.
+
 ## Tooling Workflow (PowerShell Scripts - MANDATORY)
 
 - Primary workflow: use PowerShell scripts in `scripts/` directory.
