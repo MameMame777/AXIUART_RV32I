@@ -199,17 +199,12 @@ with LEDController('COM3') as led:
 
 ### Hardware Simulation
 
-```bash
-# Check simulation environment
-python mcp_server/mcp_client.py --workspace . --tool check_dsim_environment
-
-# Compile VexRiscv RTL only (no UVM)
-python mcp_server/mcp_client.py --workspace . --tool compile_rtl_modules \
-  --file-list rtl/cpu/vexriscv_test.f --top-module vexriscv_wrapper
-
+```powershell
 # Run UVM test (compile + simulate)
-python mcp_server/mcp_client.py --workspace . --tool run_uvm_simulation_batch \
-  --test-name axiuart_reg_rw_test --verbosity UVM_MEDIUM --waves
+.\scripts\run_test.ps1 axiuart_reg_rw_test -Verbosity UVM_MEDIUM -Waves
+
+# Run regression suite
+.\scripts\run_regression.ps1 -Stage 1
 
 # View results
 # Logs: sim/exec/logs/

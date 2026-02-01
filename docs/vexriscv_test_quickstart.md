@@ -17,37 +17,27 @@ Complete VexRiscv CPU verification infrastructure with 3 implementation stages:
 ## Quick Commands
 
 ### List Available VexRiscv Tests
-```bash
-# List all VexRiscv ISA tests (from upstream)
-python mcp_server/mcp_client.py --workspace . --tool list_vexriscv_tests
-
-# Test the MCP tools
-python mcp_server/test_vexriscv_tools.py
+```powershell
+# List available tests
+Get-ChildItem sim\tests\*.sv | Select-Object Name
 ```
 
 ### Run Stage 1 Regression Suites
-```bash
-# Smoke tests only (3 tests, ~20s)
-python mcp_server/run_regression.py --suite vexriscv_smoke
+```powershell
+# Run Stage 1 regression (all foundation tests)
+.\scripts\run_regression.ps1 -Stage 1 -Verbosity UVM_LOW
 
-# Hazard tests only (4 tests, ~30s)
-python mcp_server/run_regression.py --suite vexriscv_hazard
-
-# Bus protocol tests (2 tests, ~20s)
-python mcp_server/run_regression.py --suite vexriscv_bus
-
-# Complete Stage 1 (all 9 tests, ~70s)
-python mcp_server/run_regression.py --suite vexriscv_stage1 --format html
+# Run specific tests
+.\scripts\run_regression.ps1 -Tests vexriscv_regfile_test,vexriscv_pipeline_flow_test -Verbosity UVM_LOW
 ```
 
 ### Run Individual Tests
-```bash
-# Via MCP (recommended)
-python mcp_server/mcp_client.py --workspace . --tool run_uvm_simulation \
-  --test-name vexriscv_regfile_test --mode run --verbosity UVM_MEDIUM
+```powershell
+# Standard workflow
+.\scripts\run_test.ps1 vexriscv_regfile_test -Verbosity UVM_MEDIUM
 
-# Via legacy script (fallback)
-./sim/exec/run_uvm.ps1 -TestName vexriscv_regfile_test -Mode run -Waves
+# With waveforms
+.\scripts\run_test.ps1 vexriscv_regfile_test -Verbosity UVM_MEDIUM -Waves
 ```
 
 ---
@@ -103,8 +93,7 @@ python mcp_server/mcp_client.py --workspace . --tool run_uvm_simulation \
 ### Execute ISA Test (via MCP tool)
 ```bash
 # Run single ISA test
-python mcp_server/mcp_client.py --workspace . --tool run_vexriscv_isa_test \
-  --test-name rv32ui-p-add --timeout-cycles 10000 --waves
+.\scripts\run_test.ps1 rv32ui-p-add -Verbosity UVM_LOW -Waves
 ```
 
 ### Test Protocol
@@ -270,9 +259,9 @@ bind vexriscv_mem_crossbar vexriscv_tohost_monitor u_tohost_monitor (
 ### Address Translation Issues
 
 **Test**: Verify hex loader
-```bash
-python mcp_server/tools/vexriscv_hex_loader.py \
-  vexriscv_reference/source/src/test/resources/hex/rv32ui-p-add.hex \
+```powershell
+python tools\vexriscv_hex_loader.py `
+  vexriscv_reference/source/src/test/resources/hex/rv32ui-p-add.hex `
   --dump
 ```
 

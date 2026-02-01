@@ -107,7 +107,7 @@ Remove-Item sim/uvm/tb/dsim_assertions_rv32i.f
 
 ### Verification After Deletion
 1. Compile RV32I test: `make -f Makefile_rv32i compile`
-2. Run via MCP: `python mcp_server/mcp_client.py --tool run_uvm_simulation --test-name rv32i_basic_test --mode compile`
+2. Run via PowerShell: `.\scripts\run_test.ps1 rv32i_basic_test -Verbosity UVM_LOW`
 3. Verify no file-not-found errors
 
 ### Optional Cleanup

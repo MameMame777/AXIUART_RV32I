@@ -82,16 +82,13 @@ dsim -uvm 1.2 -work work -image pkg_image -f tb_only.f -top axiuart_tb_top
 
 **重要:** 簡素化版が完全動作するまで、既存環境 (`sim/uvm/`) を維持・使用する。
 
-### 既存環境での作業継続
+### PowerShellスクリプトでの実行
 ```powershell
-# コンパイルのみ
-python mcp_server/mcp_client.py --workspace "e:\Nautilus\workspace\fpgawork\AXIUART_" \
-    --tool compile_design_only --test-name uart_axi4_basic_test --verbosity UVM_LOW
+# 標準実行
+.\scripts\run_test.ps1 uart_axi4_basic_test -Verbosity UVM_LOW
 
-# フルシミュレーション
-python mcp_server/mcp_client.py --workspace "e:\Nautilus\workspace\fpgawork\AXIUART_" \
-    --tool run_uvm_simulation_batch --test-name uart_axi4_basic_test \
-    --verbosity UVM_MEDIUM --waves
+# 波形付き実行
+.\scripts\run_test.ps1 uart_axi4_basic_test -Verbosity UVM_MEDIUM -Waves
 ```
 
 ## ファイル構成
@@ -113,16 +110,15 @@ sim/uvm_simplified/
 │   ├── axiuart_basic_test.sv   # テストクラス（パッケージに統合済み）
 │   ├── axiuart_tb_top.sv       # トップモジュール
 │   └── dsim_config.f           # DSIM設定ファイル
-├── setup_simplified_env.ps1    # 環境初期化スクリプト
-└── launch_test.py              # テストランチャー（暫定）
+└── setup_simplified_env.ps1    # 環境初期化スクリプト
 ```
 
-### 設定ファイル (`mcp_server/`)
+### PowerShellスクリプト (`scripts/`)
 ```
-mcp_server/
-├── simplified_config.py        # 簡素化版設定
-├── run_simplified_test.py      # 簡素化版実行スクリプト
-└── client_api.py               # 既存MCP API（環境変数設定含む）
+scripts/
+├── run_test.ps1                # テスト実行スクリプト
+├── run_regression.ps1          # リグレッション実行スクリプト
+└── clean_logs.ps1              # ログクリーンアップ
 ```
 
 ## デバッグコマンド集

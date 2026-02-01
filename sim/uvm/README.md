@@ -190,15 +190,13 @@ Sequence
 
 ## 使用方法
 
-### MCP経由での実行（推奨）
-```bash
-# FastMCP統合による標準ワークフロー
-python mcp_server/mcp_client.py --workspace . --tool run_uvm_simulation \
-  --test-name axiuart_basic_test --mode run --verbosity UVM_MEDIUM
+### PowerShell スクリプト経由での実行（推奨）
+```powershell
+# 標準ワークフロー
+.\scripts\run_test.ps1 axiuart_basic_test -Verbosity UVM_MEDIUM
 
 # CPU検証テスト
-python mcp_server/mcp_client.py --workspace . --tool run_uvm_simulation \
-  --test-name axiuart_cpu_mem_simple_rw_test --mode run --verbosity UVM_MEDIUM
+.\scripts\run_test.ps1 axiuart_cpu_mem_simple_rw_test -Verbosity UVM_MEDIUM
 ```
 
 ### 直接コンパイル・実行

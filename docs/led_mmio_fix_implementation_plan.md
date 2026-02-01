@@ -189,13 +189,13 @@ grep -n "ADDI.*R1.*6'd" sim/tests/axiuart_cpu_mmio_led_test.sv
 **Objective:** Ensure no compilation errors introduced
 
 **Commands:**
-```bash
+```powershell
 cd E:\Nautilus\workspace\fpgawork\TD4UART
-python mcp_server/mcp_client.py --workspace . --tool check_dsim_environment
+.\scripts\run_test.ps1 -Help
 ```
 
 **Success Criteria:**
-- DSIM environment variables all set
+- PowerShell script displays help information
 - No missing dependencies
 
 ---

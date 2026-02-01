@@ -21,8 +21,7 @@ This directory contains the complete UVM testbench infrastructure for the AXIUAR
 
 **Normal Development (Fast):**
 ```powershell
-python mcp_server/mcp_client.py --workspace . --tool run_uvm_simulation \
-  --test-name axiuart_cpu_simple_mem_test --mode compile --verbosity UVM_LOW
+.\scripts\run_test.ps1 axiuart_cpu_simple_mem_test -Verbosity UVM_LOW
 ```
 - Compiles: **22 modules**
 - Performance: Optimal (no assertion overhead)
@@ -30,9 +29,7 @@ python mcp_server/mcp_client.py --workspace . --tool run_uvm_simulation \
 
 **Debug Mode (Full Checking):**
 ```powershell
-python mcp_server/mcp_client.py --workspace . --tool run_uvm_simulation \
-  --test-name axiuart_cpu_simple_mem_test --mode compile --verbosity UVM_LOW \
-  --plusarg +define+ENABLE_ASSERTIONS
+.\scripts\run_test.ps1 axiuart_cpu_simple_mem_test -Verbosity UVM_LOW -Plusargs "+define+ENABLE_ASSERTIONS"
 ```
 - Compiles: **28 modules** (+6 assertion modules)
 - Performance: +19% compilation time, extensive runtime checking
@@ -293,31 +290,24 @@ Note: MXD format provides better performance and smaller file sizes compared to 
 
 ### Using MCP Tools (Recommended)
 
-The project uses FastMCP (Model Context Protocol) for simulation management. Two approaches are available:
+The project uses PowerShell scripts for simulation management.
 
-#### Batch Mode (Recommended for Normal Testing)
-Automatically compiles and runs in sequence:
+#### Standard Mode (Recommended)
+Automatically compiles and runs:
 
 ```powershell
-python mcp_server/mcp_client.py --workspace . --tool run_uvm_simulation_batch --test-name axiuart_basic_test --verbosity UVM_MEDIUM
+.\scripts\run_test.ps1 axiuart_basic_test -Verbosity UVM_MEDIUM
 ```
 
-#### Step-by-Step Mode (For Debugging)
-1. Compile only:
+#### With Waveforms (For Debugging)
 ```powershell
-python mcp_server/mcp_client.py --workspace . --tool run_uvm_simulation --test-name axiuart_basic_test --mode compile --verbosity UVM_LOW
+.\scripts\run_test.ps1 axiuart_basic_test -Verbosity UVM_MEDIUM -Waves
 ```
 
-2. Run simulation:
-```powershell
-python mcp_server/mcp_client.py --workspace . --tool run_uvm_simulation --test-name axiuart_basic_test --mode run --verbosity UVM_MEDIUM
-```
-
-#### Available MCP Tools
-- `check_dsim_environment`: Verify DSIM installation and environment variables
-- `list_available_tests`: List all available UVM tests
-- `compile_design`: Compile-only pass for syntax checking
-- `run_uvm_simulation`: Execute simulation (compile or run mode)
+#### Available Scripts
+- `run_test.ps1`: Execute single test (compile + simulate)
+- `run_regression.ps1`: Execute regression suites
+- `clean_logs.ps1`: Clean old simulation logs
 - `run_uvm_simulation_batch`: One-step compile and run
 - `get_simulation_logs`: Retrieve and analyze log files
 
@@ -438,7 +428,7 @@ Default paths if environment variables are not set:
 ### Common Issues
 
 #### Compilation Errors
-1. Check DSIM environment: `python mcp_server/mcp_client.py --workspace . --tool check_dsim_environment`
+1. Verify environment: `.\scripts\run_test.ps1 -Help` should display available options
 2. Verify file paths in dsim_config.f
 3. Check timescale declarations in all files
 

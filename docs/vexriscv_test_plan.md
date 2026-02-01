@@ -163,7 +163,7 @@ endclass
 
 ### 2.2 Python Hex Loader with Address Translation
 
-**File**: `mcp_server/tools/vexriscv_hex_loader.py`
+**File**: `tools/vexriscv_hex_loader.py`
 
 ```python
 import re
@@ -1012,34 +1012,26 @@ python mcp_server/mcp_client.py --tool run_uvm_simulation \
 
 ```powershell
 # 1. Check environment
-python mcp_server/mcp_client.py --workspace . --tool check_dsim_environment
+.\scripts\run_test.ps1 -Help
 
 # 2. List VexRiscv tests
-python mcp_server/mcp_client.py --workspace . --tool list_vexriscv_tests --category isa
+Get-ChildItem sim\tests\vexriscv*.sv
 
 # 3. Run single test
-python mcp_server/mcp_client.py --workspace . \
-    --tool run_vexriscv_isa_test --test-name rv32ui-p-add --timeout 5000
+.\scripts\run_test.ps1 vexriscv_regfile_test -Verbosity UVM_LOW
 
 # 4. With waveforms
-python mcp_server/mcp_client.py --workspace . \
-    --tool run_vexriscv_isa_test --test-name rv32ui-p-add --waves
+.\scripts\run_test.ps1 vexriscv_regfile_test -Verbosity UVM_LOW -Waves
 ```
 
 ### 6.2 Regression Testing
 
 ```powershell
-# Smoke (5 tests, ~2 min)
-python mcp_server/run_regression.py --suite vexriscv_smoke
+# Stage 1 regression (foundation tests)
+.\scripts\run_regression.ps1 -Stage 1 -Verbosity UVM_LOW
 
-# Full ISA (30 tests, ~15 min)
-python mcp_server/run_regression.py --suite vexriscv_isa_full --format html
-
-# Compliance (40+ tests, ~20 min)
-python mcp_server/run_regression.py --suite vexriscv_compliance --format junit
-
-# Complete (all suites, ~45 min)
-python mcp_server/run_regression.py --suite vexriscv_full --format html --format junit
+# Run specific tests
+.\scripts\run_regression.ps1 -Tests vexriscv_regfile_test,vexriscv_alu_test -Verbosity UVM_LOW
 ```
 
 ### 6.3 Troubleshooting
@@ -1142,24 +1134,28 @@ sim/
 │   └── vexriscv_regfile_bypass_spec.sv        # NEW
 └── assertions/bind_vexriscv_*.sv              # NEW: 5 files
 
-mcp_server/tools/
-└── vexriscv_hex_loader.py                     # NEW: Hex loader
+scripts/
+├── run_test.ps1                             # Test execution
+├── run_regression.ps1                       # Regression runner
+└── clean_logs.ps1                           # Log cleanup
+tools/
+└── vexriscv_hex_loader.py                     # Hex loader
 ```
 
-### B. MCP Tool Reference
+### B. PowerShell Script Reference
 
 ```powershell
 # Check environment
-python mcp_server/mcp_client.py --tool check_dsim_environment
+.\scripts\run_test.ps1 -Help
 
 # List tests
-python mcp_server/mcp_client.py --tool list_vexriscv_tests --category isa
+Get-ChildItem sim\tests\vexriscv*.sv
 
-# Run single ISA test
-python mcp_server/mcp_client.py --tool run_vexriscv_isa_test --test-name rv32ui-p-add
+# Run single test
+.\scripts\run_test.ps1 vexriscv_regfile_test -Verbosity UVM_LOW
 
 # Regression
-python mcp_server/run_regression.py --suite vexriscv_smoke
+.\scripts\run_regression.ps1 -Stage 1
 ```
 
 ### C. References
@@ -1167,7 +1163,6 @@ python mcp_server/run_regression.py --suite vexriscv_smoke
 **Key Documents**:
 1. [VexRiscv Implementation Principles](vexriscv_implementation_principles.md)
 2. [Assertion Guidelines](../sim/assertions/forCopilot-assertions.md)
-3. [MCP Server README](../mcp_server/README.md)
 
 **Upstream Resources**:
 1. VexRiscv GitHub: https://github.com/SpinalHDL/VexRiscv
