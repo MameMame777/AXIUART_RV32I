@@ -61,6 +61,7 @@ module vexriscv_wrapper (
     logic        iBus_rsp_valid;
     logic        iBus_rsp_payload_error;
     logic [31:0] iBus_rsp_payload_inst;
+    logic [31:0] iBus_rsp_payload_pc;
     
     // VexRiscv DBus
     logic        dBus_cmd_valid;
@@ -116,7 +117,7 @@ module vexriscv_wrapper (
             $display("[%0t] [VexRiscv] IBus CMD: PC=0x%08X", $time, iBus_cmd_payload_pc);
         end
         if (iBus_rsp_valid) begin
-            $display("[%0t] [VexRiscv] IBus RSP: INST=0x%08X", $time, iBus_rsp_payload_inst);
+            $display("[%0t] [VexRiscv] IBus RSP: PC=0x%08X INST=0x%08X", $time, iBus_rsp_payload_pc, iBus_rsp_payload_inst);
         end
     end
     
@@ -135,6 +136,7 @@ module vexriscv_wrapper (
         .iBus_rsp_valid(iBus_rsp_valid),
         .iBus_rsp_payload_error(iBus_rsp_payload_error),
         .iBus_rsp_payload_inst(iBus_rsp_payload_inst),
+        .iBus_rsp_payload_pc(iBus_rsp_payload_pc),
         
         // DBus
         .dBus_cmd_valid(dBus_cmd_valid),
@@ -172,6 +174,7 @@ module vexriscv_wrapper (
         .iBus_rsp_valid(iBus_rsp_valid),
         .iBus_rsp_payload_error(iBus_rsp_payload_error),
         .iBus_rsp_payload_inst(iBus_rsp_payload_inst),
+        .iBus_rsp_payload_pc(iBus_rsp_payload_pc),
         
         // VexRiscv DBus
         .dBus_cmd_valid(dBus_cmd_valid),

@@ -49,6 +49,7 @@ module vexriscv_mem_crossbar (
     output logic        iBus_rsp_valid,
     output logic        iBus_rsp_payload_error,
     output logic [31:0] iBus_rsp_payload_inst,
+    output logic [31:0] iBus_rsp_payload_pc,
     
     //=================================================================
     // VexRiscv DBus Interface (Data Access)
@@ -226,6 +227,7 @@ module vexriscv_mem_crossbar (
     
     ibus_state_t ibus_state;
     logic [31:0] ibus_rdata_buf;
+    logic [31:0] ibus_pc_buf;
     
     // Remove cpu_halted gating - VexRiscv won't issue commands when halted anyway
     // The cpu_halted check was preventing FIFO from being serviced, causing pipeline starvation
@@ -238,13 +240,16 @@ module vexriscv_mem_crossbar (
             iBus_rsp_valid <= 1'b0;
             iBus_rsp_payload_inst <= 32'h0000_0013;
             iBus_rsp_payload_error <= 1'b0;
+            iBus_rsp_payload_pc <= 32'h0;
             ibus_rdata_buf <= 32'h0;
+            ibus_pc_buf <= 32'h0;
         end else begin
             case (ibus_state)
                 IBUS_IDLE: begin
                     iBus_rsp_valid <= 1'b0;
                     if (ibus_fifo_pop) begin
                         // Issue read to Port A
+                        ibus_pc_buf <= ibus_fifo_dout.pc;
                         ibus_state <= IBUS_READ_WAIT;
                     end
                 end
@@ -260,6 +265,7 @@ module vexriscv_mem_crossbar (
                     iBus_rsp_valid <= 1'b1;
                     iBus_rsp_payload_inst <= ibus_rdata_buf;
                     iBus_rsp_payload_error <= 1'b0;  // No error support yet
+                    iBus_rsp_payload_pc <= ibus_pc_buf;
                     
                     // Pop FIFO entry
                     ibus_rd_ptr <= ibus_rd_ptr + 1'b1;
