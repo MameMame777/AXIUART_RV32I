@@ -233,6 +233,8 @@ module vexriscv_top
     logic [1:0]  writeBack_MEMORY_ADDRESS_LOW;
     logic [31:0] writeBack_MEMORY_READ_DATA;
     logic [31:0] writeBack_DBusSimplePlugin_rspFormated;
+    logic        execute_DBus_cmdWait;   // DBus stall: cmd not ready
+    logic        memory_DBus_rspWait;    // DBus stall: rsp not ready (load)
     logic [0:0]  writeBack_ENV_CTRL;
     logic [31:0] writeBack_FORMAL_PC_NEXT;
     
@@ -485,7 +487,9 @@ module vexriscv_top
         .writeBack_INSTRUCTION          (writeBack_INSTRUCTION),
         .writeBack_MEMORY_ADDRESS_LOW   (writeBack_MEMORY_ADDRESS_LOW),
         .writeBack_MEMORY_READ_DATA     (writeBack_MEMORY_READ_DATA),
-        .writeBack_DBusSimplePlugin_rspFormated (writeBack_DBusSimplePlugin_rspFormated)
+        .writeBack_DBusSimplePlugin_rspFormated (writeBack_DBusSimplePlugin_rspFormated),
+        .execute_DBus_cmdWait           (execute_DBus_cmdWait),
+        .memory_DBus_rspWait            (memory_DBus_rspWait)
     );
     
     // Hazard Detection & Forwarding
@@ -883,7 +887,10 @@ module vexriscv_top
     // Execute stage arbitration
     always_comb begin
         execute_arbitration_haltItself = execute_arbitration_haltItself_shifter;
-        // DBusSimplePlugin halt can be OR'd here
+        // DBusSimplePlugin: stall when memory cmd not ready
+        if (execute_DBus_cmdWait) begin
+            execute_arbitration_haltItself = 1'b1;
+        end
         // CsrPlugin blocked by side effects can be OR'd here
     end
     
@@ -908,7 +915,10 @@ module vexriscv_top
     // Memory stage arbitration
     always_comb begin
         memory_arbitration_haltItself = 1'b0;
-        // DBusSimplePlugin memory wait would go here
+        // DBusSimplePlugin: stall when waiting for load response
+        if (memory_DBus_rspWait) begin
+            memory_arbitration_haltItself = 1'b1;
+        end
     end
     
     assign memory_arbitration_haltByOther = 1'b0;
