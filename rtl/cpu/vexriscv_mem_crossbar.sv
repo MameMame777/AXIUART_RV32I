@@ -122,7 +122,7 @@ module vexriscv_mem_crossbar (
     logic ibus_fifo_full;
     logic [2:0] ibus_fifo_count;
     
-    ibus_req_t [6:0] ibus_fifo;
+    ibus_req_t [7:0] ibus_fifo;  // 8 entries to match 3-bit pointer range (Issue #39 fix)
     logic [2:0] ibus_wr_ptr;
     logic [2:0] ibus_rd_ptr;
     
@@ -139,8 +139,8 @@ module vexriscv_mem_crossbar (
     always_ff @(posedge clk) begin
         if (rst) begin
             ibus_wr_ptr <= 3'b000;
-            // Initialize FIFO to prevent X propagation
-            for (int i = 0; i < 7; i++) begin
+            // Initialize FIFO to prevent X propagation (all 8 entries)
+            for (int i = 0; i < 8; i++) begin
                 ibus_fifo[i] <= '0;
             end
         end else if (ibus_fifo_push) begin
