@@ -26,6 +26,7 @@ module vexriscv_ibus_simple
     input  logic        iBus_rsp_valid,
     input  logic        iBus_rsp_payload_error,
     input  logic [31:0] iBus_rsp_payload_inst,
+    input  logic [31:0] iBus_rsp_payload_pc,
     
     // Jump interfaces (priority: Branch > CSR > Prediction)
     input  logic        branchPlugin_jump_valid,
@@ -129,6 +130,33 @@ module vexriscv_ibus_simple
     logic        rspBuffer_pop_ready;
     logic        rspBuffer_pop_payload_error;
     logic [31:0] rspBuffer_pop_payload_inst;
+    logic        rspBuffer_output_valid;
+    logic        rspBuffer_flush;
+    logic        io_pop_fire;
+
+    //==========================================================================
+    // Internal Signals - Response PC FIFO
+    //==========================================================================
+
+    localparam int RSP_PC_FIFO_DEPTH = 8;
+    localparam int RSP_PC_FIFO_ADDR_WIDTH = $clog2(RSP_PC_FIFO_DEPTH);
+    localparam int RSP_PC_FIFO_COUNT_WIDTH = $clog2(RSP_PC_FIFO_DEPTH + 1);
+    localparam logic [RSP_PC_FIFO_COUNT_WIDTH-1:0] RSP_PC_FIFO_DEPTH_CONST = RSP_PC_FIFO_DEPTH;
+
+    logic [31:0] rspPc_mem [RSP_PC_FIFO_DEPTH];
+    logic [RSP_PC_FIFO_ADDR_WIDTH-1:0] rspPc_wr_ptr;
+    logic [RSP_PC_FIFO_ADDR_WIDTH-1:0] rspPc_rd_ptr;
+    logic [RSP_PC_FIFO_COUNT_WIDTH-1:0] rspPc_count;
+    logic        rspPc_push;
+    logic        rspPc_pop;
+    logic [31:0] rspPc_push_payload;
+    logic [31:0] rspPc_pop_payload;
+    logic        rspPc_full;
+    logic        rspPc_empty;
+    logic        rspPc_push_effective;
+    logic        rspPc_pop_effective;
+    logic [RSP_PC_FIFO_COUNT_WIDTH-1:0] rspPc_count_next;
+    logic        rspPc_bypass;
     
     logic        injector_decodeInput_valid;
     logic        injector_decodeInput_ready;
@@ -227,7 +255,7 @@ module vexriscv_ibus_simple
     
     always_comb begin
         iBusRsp_stages_0_halt = 1'b0;
-        if (pending_value == 3'b111) begin // when_IBusSimplePlugin_l306
+        if ((pending_value == 3'b111) || (rspPc_full && (!rspPc_pop))) begin // when_IBusSimplePlugin_l306
             iBusRsp_stages_0_halt = 1'b1;
         end
     end
@@ -266,6 +294,8 @@ module vexriscv_ibus_simple
     assign rspBuffer_push_valid = iBus_rsp_valid;
     assign rspBuffer_push_payload_error = iBus_rsp_payload_error;
     assign rspBuffer_push_payload_inst = iBus_rsp_payload_inst;
+    assign rspBuffer_output_valid = (rspBuffer_pop_valid && (rspJoin_rspBuffer_discardCounter == 3'b000));
+    assign rspBuffer_flush = ((rspJoin_rspBuffer_discardCounter != 3'b000) || iBusRsp_flush);
     
     StreamFifoLowLatency rspBuffer (
         .clk                    (clk),
@@ -278,18 +308,45 @@ module vexriscv_ibus_simple
         .io_pop_ready           (rspBuffer_pop_ready),
         .io_pop_payload_error   (rspBuffer_pop_payload_error),
         .io_pop_payload_inst    (rspBuffer_pop_payload_inst),
-        .io_flush               (iBusRsp_flush),
+        .io_flush               (rspBuffer_flush),
         .io_occupancy           (),
         .io_availability        ()
     );
+
+    assign rspBuffer_pop_ready = (injector_decodeInput_ready || rspBuffer_flush);
+    assign io_pop_fire = (rspBuffer_pop_valid && rspBuffer_pop_ready);
     
     //==========================================================================
     // Pending Counter
     //==========================================================================
     
     assign pending_inc = (iBus_cmd_valid && iBus_cmd_ready);
-    assign pending_dec = (rspBuffer_pop_valid && rspBuffer_pop_ready && (rspJoin_rspBuffer_discardCounter == 3'b000));
+    assign pending_dec = io_pop_fire;
     assign pending_next = (pending_value + {2'b00, pending_inc}) - {2'b00, pending_dec};
+
+    //==========================================================================
+    // Response PC FIFO (tracks request PC vs response)
+    //==========================================================================
+
+    assign rspPc_push = (rspBuffer_push_valid && rspBuffer_push_ready);
+    assign rspPc_pop = (rspBuffer_pop_valid && rspBuffer_pop_ready);
+    assign rspPc_push_payload = iBus_rsp_payload_pc;
+    assign rspPc_pop_payload = rspPc_bypass ? rspPc_push_payload : rspPc_mem[rspPc_rd_ptr];
+    assign rspPc_full = (rspPc_count == RSP_PC_FIFO_DEPTH_CONST);
+    assign rspPc_empty = (rspPc_count == {RSP_PC_FIFO_COUNT_WIDTH{1'b0}});
+
+    always_comb begin
+        rspPc_bypass = (rspPc_empty && rspPc_push && rspPc_pop);
+        rspPc_push_effective = (rspPc_push && ((!rspPc_full) || rspPc_pop) && (!rspPc_bypass));
+        rspPc_pop_effective = (rspPc_pop && (!rspPc_empty) && (!rspPc_bypass));
+        rspPc_count_next = rspPc_count;
+        if (rspPc_push_effective) begin
+            rspPc_count_next = rspPc_count_next + {{(RSP_PC_FIFO_COUNT_WIDTH-1){1'b0}}, 1'b1};
+        end
+        if (rspPc_pop_effective) begin
+            rspPc_count_next = rspPc_count_next - {{(RSP_PC_FIFO_COUNT_WIDTH-1){1'b0}}, 1'b1};
+        end
+    end
     
     //==========================================================================
     // IBus Command
@@ -302,7 +359,7 @@ module vexriscv_ibus_simple
     // Response Join & Injector
     //==========================================================================
     
-    assign rspBuffer_pop_ready = injector_decodeInput_ready;
+    assign iBusRsp_stages_1_output_ready = injector_decodeInput_ready;
     
     always_comb begin
         iBusRsp_readyForError = 1'b1;
@@ -313,8 +370,6 @@ module vexriscv_ibus_simple
             iBusRsp_readyForError = 1'b0;
         end
     end
-    
-    assign iBusRsp_stages_1_output_ready = ((1'b0 && (!injector_decodeInput_valid)) || injector_decodeInput_ready);
     
     assign injector_decodeInput_ready = (!decode_arbitration_isStuck);
     
@@ -454,13 +509,13 @@ module vexriscv_ibus_simple
                 $display("[%0t] INJECTOR: Clearing injector_decodeInput_valid due to removeIt", $time);
             end
             if (iBusRsp_stages_1_output_ready) begin
-                injector_decodeInput_valid <= (rspBuffer_pop_valid && (!externalFlush));
-                if (rspBuffer_pop_valid && (!externalFlush)) begin
+                injector_decodeInput_valid <= (rspBuffer_output_valid && (!externalFlush));
+                if (rspBuffer_output_valid && (!externalFlush)) begin
                     $display("[%0t] INJECTOR: Setting injector_decodeInput_valid=1 (inst=0x%08x, pc=0x%08x)", 
-                             $time, rspBuffer_pop_payload_inst, iBusRsp_stages_1_output_payload);
+                             $time, rspBuffer_pop_payload_inst, rspPc_pop_payload);
                 end else begin
                     $display("[%0t] INJECTOR: Clearing injector_decodeInput_valid (rspValid=%0b, flush=%0b)", 
-                             $time, rspBuffer_pop_valid, externalFlush);
+                             $time, rspBuffer_output_valid, externalFlush);
                 end
             end
             
@@ -502,11 +557,36 @@ module vexriscv_ibus_simple
     end
     
     always_ff @(posedge clk) begin
-        if (iBusRsp_stages_1_output_ready) begin
-            injector_decodeInput_payload_pc <= iBusRsp_stages_1_output_payload;  // PC from stage 1
+        if (rspBuffer_output_valid && rspBuffer_pop_ready) begin
+            injector_decodeInput_payload_pc <= rspPc_pop_payload;  // PC from response FIFO
             injector_decodeInput_payload_rsp_error <= rspBuffer_pop_payload_error;
             injector_decodeInput_payload_rsp_inst <= rspBuffer_pop_payload_inst;
             injector_decodeInput_payload_isRvc <= 1'b0;
+        end
+    end
+
+    //==========================================================================
+    // Sequential Logic - Response PC FIFO
+    //==========================================================================
+
+    always_ff @(posedge clk or posedge reset) begin
+        if (reset) begin
+            rspPc_wr_ptr <= {RSP_PC_FIFO_ADDR_WIDTH{1'b0}};
+            rspPc_rd_ptr <= {RSP_PC_FIFO_ADDR_WIDTH{1'b0}};
+            rspPc_count <= {RSP_PC_FIFO_COUNT_WIDTH{1'b0}};
+        end else if (iBusRsp_flush) begin
+            rspPc_wr_ptr <= {RSP_PC_FIFO_ADDR_WIDTH{1'b0}};
+            rspPc_rd_ptr <= {RSP_PC_FIFO_ADDR_WIDTH{1'b0}};
+            rspPc_count <= {RSP_PC_FIFO_COUNT_WIDTH{1'b0}};
+        end else begin
+            rspPc_count <= rspPc_count_next;
+            if (rspPc_push_effective) begin
+                rspPc_mem[rspPc_wr_ptr] <= rspPc_push_payload;
+                rspPc_wr_ptr <= rspPc_wr_ptr + {{(RSP_PC_FIFO_ADDR_WIDTH-1){1'b0}}, 1'b1};
+            end
+            if (rspPc_pop_effective) begin
+                rspPc_rd_ptr <= rspPc_rd_ptr + {{(RSP_PC_FIFO_ADDR_WIDTH-1){1'b0}}, 1'b1};
+            end
         end
     end
     
@@ -520,7 +600,7 @@ module vexriscv_ibus_simple
             rspJoin_rspBuffer_discardCounter <= 3'b000;
         end else begin
             pending_value <= pending_next;
-            rspJoin_rspBuffer_discardCounter <= (rspJoin_rspBuffer_discardCounter - {2'b00, (rspBuffer_pop_valid && (rspJoin_rspBuffer_discardCounter != 3'b000))});
+            rspJoin_rspBuffer_discardCounter <= (rspJoin_rspBuffer_discardCounter - {2'b00, (io_pop_fire && (rspJoin_rspBuffer_discardCounter != 3'b000))});
             if (iBusRsp_flush) begin
                 rspJoin_rspBuffer_discardCounter <= (pending_value - {2'b00, pending_dec});
             end
