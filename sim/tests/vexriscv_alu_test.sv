@@ -121,73 +121,58 @@ class vexriscv_alu_test extends vexriscv_base_test;
         bit [31:0] test_program[];
         int i;
         
-        test_program = new[50];  // Allocate space for comprehensive ALU test
+        test_program = new[33];  // 33 instructions (NOP padding removed - Issue #39 fixed)
 
-        // Workaround for BRAM read issues at address offsets ending in 0x1C (words 7, 15, 23, 31...)
-        // We insert NOPs at these specific indices to ensure actual instructions are never fetched from "Bad Addresses".
-        
-        // Indices 0-6 (Safe)
+        // Initialization
         test_program[0]  = 32'h01000093;  // ADDI x1, x0, 16       x1 = 16
         test_program[1]  = 32'h00800113;  // ADDI x2, x0, 8        x2 = 8
         test_program[2]  = 32'hFFF00193;  // ADDI x3, x0, -1       x3 = 0xFFFFFFFF
         test_program[3]  = 32'h80000237;  // LUI  x4, 0x80000      x4 = 0x80000000
+        // Arithmetic
         test_program[4]  = 32'h002082B3;  // ADD  x5, x1, x2       x5 = 16 + 8 = 24 (0x18)
         test_program[5]  = 32'h40208333;  // SUB  x6, x1, x2       x6 = 16 - 8 = 8
         test_program[6]  = 32'h00508393;  // ADDI x7, x1, 5        x7 = 16 + 5 = 21 (0x15)
+        test_program[7]  = 32'hFFD08413;  // ADDI x8, x1, -3       x8 = 16 - 3 = 13 (0x0D)
+        // Logical
+        test_program[8]  = 32'h0020F4B3;  // AND  x9, x1, x2       x9 = 0x10 & 0x08 = 0x00
+        test_program[9]  = 32'h0020E533;  // OR   x10, x1, x2      x10 = 0x10 | 0x08 = 0x18
+        test_program[10] = 32'h0020C5B3;  // XOR  x11, x1, x2      x11 = 0x10 ^ 0x08 = 0x18
+        test_program[11] = 32'h00F0F613;  // ANDI x12, x1, 15      x12 = 0x10 & 0x0F = 0x00
+        test_program[12] = 32'h00F0E693;  // ORI  x13, x1, 15      x13 = 0x10 | 0x0F = 0x1F
+        test_program[13] = 32'h0FF0C713;  // XORI x14, x1, 255     x14 = 0x10 ^ 0xFF = 0xEF
+        // Comparison
+        test_program[14] = 32'h0020A7B3;  // SLT  x15, x1, x2      x15 = (16 < 8) ? 1 : 0 = 0
+        test_program[15] = 32'h0030A833;  // SLT  x16, x1, x3      x16 = (16 < -1) ? 1 : 0 = 0
+        test_program[16] = 32'h0020B8B3;  // SLTU x17, x1, x2      x17 = (16 < 8) ? 1 : 0 = 0
+        test_program[17] = 32'h0030B933;  // SLTU x18, x1, x3      x18 = (16 < 0xFFFFFFFF) ? 1 : 0 = 1
+        test_program[18] = 32'h0080A993;  // SLTI x19, x1, 8       x19 = (16 < 8) ? 1 : 0 = 0
+        test_program[19] = 32'h0140AA13;  // SLTI x20, x1, 20      x20 = (16 < 20) ? 1 : 0 = 1
+        test_program[20] = 32'h0080BA93;  // SLTIU x21, x1, 8      x21 = (16 < 8) ? 1 : 0 = 0
+        // Comparison (continued)
+        test_program[21] = 32'h0140BB13;  // SLTIU x22, x1, 20     x22 = (16 < 20) ? 1 : 0 = 1
+        // Shift
+        test_program[22] = 32'h00209B93;  // SLLI x23, x1, 2       x23 = 16 << 2 = 64 (0x40)
+        test_program[23] = 32'h00111C13;  // SLLI x24, x2, 1       x24 = 8 << 1 = 16 (0x10)
+        test_program[24] = 32'h00115C93;  // SRLI x25, x2, 1       x25 = 8 >> 1 = 4
+        test_program[25] = 32'h0021DD33;  // SRL  x26, x3, x2      x26 = 0xFFFFFFFF >> 8 = 0x00FFFFFF
+        test_program[26] = 32'h4021DD93;  // SRAI x27, x3, 2       x27 = -1 >>> 2 = -1 (0xFFFFFFFF)
+        test_program[27] = 32'h00221E13;  // SLL  x28, x4, x2      x28 = 0x80000000 << 8 = 0x00000000
+        // Upper Immediate
+        test_program[28] = 32'h12345EB7;  // LUI  x29, 0x12345     x29 = 0x12345000
+        test_program[29] = 32'h00000F17;  // AUIPC x30, 0          x30 = PC (0x80000000 + 29*4 = 0x80000074)
+        // Edge cases
+        test_program[30] = 32'h80008FB7;  // LUI  x31, 0x80008     x31 = 0x80008000
+        test_program[31] = 32'hFFF08F93;  // ADDI x31, x1, -1      x31 = 16 - 1 = 15 (0x0F)
+        // Terminator
+        test_program[32] = 32'h00100073;  // EBREAK
 
-        // Index 7 (Bad Address 0x1C) -> NOP
-        test_program[7]  = 32'h00000013;  // NOP
-
-        // Indices 8-14 (Safe)
-        test_program[8]  = 32'hFFD08413;  // ADDI x8, x1, -3       x8 = 16 - 3 = 13 (0x0D)
-        test_program[9]  = 32'h0020F4B3;  // AND  x9, x1, x2       x9 = 0x10 & 0x08 = 0x00
-        test_program[10] = 32'h0020E533;  // OR   x10, x1, x2      x10 = 0x10 | 0x08 = 0x18
-        test_program[11] = 32'h0020C5B3;  // XOR  x11, x1, x2      x11 = 0x10 ^ 0x08 = 0x18
-        test_program[12] = 32'h00F0F613;  // ANDI x12, x1, 15      x12 = 0x10 & 0x0F = 0x00
-        test_program[13] = 32'h00F0E693;  // ORI  x13, x1, 15      x13 = 0x10 | 0x0F = 0x1F
-        test_program[14] = 32'h0FF0C713;  // XORI x14, x1, 255     x14 = 0x10 ^ 0xFF = 0xEF
-
-        // Index 15 (Bad Address 0x3C) -> NOP
-        test_program[15] = 32'h00000013;  // NOP
-
-        // Indices 16-22 (Safe)
-        test_program[16] = 32'h0020A7B3;  // SLT  x15, x1, x2      x15 = (16 < 8) ? 1 : 0 = 0
-        test_program[17] = 32'h0030A833;  // SLT  x16, x1, x3      x16 = (16 < -1) ? 1 : 0 = 0
-        test_program[18] = 32'h0020B8B3;  // SLTU x17, x1, x2      x17 = (16 < 8) ? 1 : 0 = 0
-        test_program[19] = 32'h0030B933;  // SLTU x18, x1, x3      x18 = (16 < 0xFFFFFFFF) ? 1 : 0 = 1
-        test_program[20] = 32'h0080A993;  // SLTI x19, x1, 8       x19 = (16 < 8) ? 1 : 0 = 0
-        test_program[21] = 32'h0140AA13;  // SLTI x20, x1, 20      x20 = (16 < 20) ? 1 : 0 = 1
-        test_program[22] = 32'h0080BA93;  // SLTIU x21, x1, 8      x21 = (16 < 8) ? 1 : 0 = 0
-
-        // Index 23 (Bad Address 0x5C) -> NOP
-        test_program[23] = 32'h00000013;  // NOP
-
-        // Indices 24-30 (Safe)
-        test_program[24] = 32'h0140BB13;  // SLTIU x22, x1, 20     x22 = (16 < 20) ? 1 : 0 = 1
-        test_program[25] = 32'h00209B93;  // SLLI x23, x1, 2       x23 = 16 << 2 = 64 (0x40)
-        test_program[26] = 32'h00111C13;  // SLLI x24, x2, 1       x24 = 8 << 1 = 16 (0x10)
-        test_program[27] = 32'h00115C93;  // SRLI x25, x2, 1       x25 = 8 >> 1 = 4
-        test_program[28] = 32'h0021DD33;  // SRL  x26, x3, x2      x26 = 0xFFFFFFFF >> 8 = 0x00FFFFFF
-        test_program[29] = 32'h4021DD93;  // SRAI x27, x3, 2       x27 = -1 >>> 2 = -1 (0xFFFFFFFF)
-        test_program[30] = 32'h00221E13;  // SLL  x28, x4, x2      x28 = 0x80000000 << 8 = 0x00000000
-
-        // Index 31 (Bad Address 0x7C) -> NOP
-        test_program[31] = 32'h00000013;  // NOP
-
-        // Indices 32-37 (Safe)
-        test_program[32] = 32'h12345EB7;  // LUI  x29, 0x12345     x29 = 0x12345000
-        test_program[33] = 32'h00000F17;  // AUIPC x30, 0          x30 = PC + 0 (address of this instruction)
-        test_program[34] = 32'h80008FB7;  // LUI  x31, 0x80008     x31 = 0x80008000
-        test_program[35] = 32'hFFF08F93;  // ADDI x31, x1, -1      x31 = 16 - 1 = 15 (0x0F)
-        test_program[36] = 32'h00100073;  // EBREAK
-        
         // Write test program to Block RAM via backdoor
-        for (i = 0; i < 37; i++) begin
+        for (i = 0; i < 33; i++) begin
             write_memory_backdoor(32'h80000000 + (i * 4), test_program[i]);
         end
-        
-        `uvm_info(get_type_name(), 
-            $sformatf("Loaded %0d-instruction ALU test program with NOP padding", 37), 
+
+        `uvm_info(get_type_name(),
+            $sformatf("Loaded %0d-instruction ALU test program", 33),
             UVM_MEDIUM)
     endtask
     
@@ -283,7 +268,7 @@ class vexriscv_alu_test extends vexriscv_base_test;
         
         // Upper Immediate
         expected_values[29] = 32'h12345000;  // x29 = 0x12345000
-        expected_values[30] = 32'h80000098;  // x30 = PC of AUIPC (Shifted due to NOPs)
+        expected_values[30] = 32'h80000074;  // x30 = PC of AUIPC at index 29 (0x80000000 + 29*4)
         
         // Edge cases
         expected_values[31] = 32'h0000000F;  // x31 = 15
