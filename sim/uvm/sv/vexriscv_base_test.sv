@@ -165,14 +165,114 @@ class vexriscv_base_test extends uvm_test;
     endtask
     
     virtual task load_memory_backdoor(string hex_path, bit translate_addr);
-        // Placeholder for memory loading via backdoor
-        // Actual implementation options:
-        // 1. DPI call to Python hex loader
-        // 2. SystemVerilog $readmemh with preprocessing
-        // 3. UVM register backdoor write
+        // Intel HEX file loader with address translation support
+        // Parses Intel HEX format and writes to BRAM via backdoor access
+        int fd;
+        string line;
+        bit [31:0] base_addr, offset_addr, full_addr, data;
+        int byte_count, record_type;
+        bit [7:0] byte_data;
+        logic [10:0] word_addr;
+        int bytes_loaded = 0;
+        int lines_processed = 0;
         
-        `uvm_warning(get_type_name(), 
-            "load_memory_backdoor() is not implemented - override in derived test")
+        `uvm_info(get_type_name(), 
+            $sformatf("Loading hex file: %s (address_translation=%0d)", hex_path, translate_addr), 
+            UVM_LOW)
+        
+        fd = $fopen(hex_path, "r");
+        if (fd == 0) begin
+            `uvm_fatal(get_type_name(), $sformatf("Cannot open hex file: %s", hex_path))
+        end
+        
+        base_addr = 32'h0000_0000;  // Extended Linear Address base
+        
+        // Parse Intel HEX format line by line
+        while (!$feof(fd)) begin
+            void'($fgets(line, fd));
+            lines_processed++;
+            
+            // Skip empty lines or non-record lines
+            if (line.len() < 11 || line[0] != ":") continue;
+            
+            // Parse record header: :BBAAAATTHHHH...CC
+            // BB=byte_count (2 hex), AAAA=address (4 hex), TT=type (2 hex)
+            void'($sscanf(line.substr(1,2), "%h", byte_count));
+            void'($sscanf(line.substr(3,6), "%h", offset_addr));
+            void'($sscanf(line.substr(7,8), "%h", record_type));
+            
+            case (record_type)
+                8'h00: begin  // Data record
+                    // Process bytes in groups of 4 (little-endian word assembly)
+                    for (int i = 0; i < byte_count; i += 4) begin
+                        data = 32'h0000_0000;
+                        
+                        // Assemble 4 bytes into 32-bit word (little-endian)
+                        for (int j = 0; j < 4; j++) begin
+                            if (i+j < byte_count) begin
+                                string byte_str = line.substr(9 + (i+j)*2, 10 + (i+j)*2);
+                                void'($sscanf(byte_str, "%h", byte_data));
+                                data |= (byte_data << (j*8));
+                            end
+                        end
+                        
+                        // Calculate full address
+                        full_addr = base_addr + offset_addr + i;
+                        
+                        // Apply address translation if enabled (0x80000000 → 0x00000000)
+                        if (translate_addr) begin
+                            full_addr = full_addr - 32'h8000_0000;
+                        end
+                        
+                        // Validate address range (8KB BRAM = 0x0000-0x1FFF)
+                        if (full_addr < 32'h0000_2000) begin
+                            word_addr = full_addr[12:2];
+                            
+                            // Direct backdoor write to BRAM
+                            $root.rv32i_tb_top.dut.vexriscv_inst.mem_crossbar.blockram_inst.mem[word_addr] = data;
+                            
+                            bytes_loaded += 4;
+                            
+                            `uvm_info(get_type_name(), 
+                                $sformatf("Loaded: mem[%0d] = 0x%08X (from hex addr 0x%08X)", 
+                                          word_addr, data, full_addr), 
+                                UVM_HIGH)
+                        end else begin
+                            `uvm_warning(get_type_name(), 
+                                $sformatf("Address 0x%08X out of BRAM range (0x0000-0x1FFF), skipping", full_addr))
+                        end
+                    end
+                end
+                
+                8'h01: begin  // EOF record
+                    `uvm_info(get_type_name(), "End of hex file (EOF record)", UVM_MEDIUM)
+                    break;
+                end
+                
+                8'h04: begin  // Extended Linear Address (upper 16 bits)
+                    string addr_high_str = line.substr(9, 12);
+                    bit [15:0] addr_high;
+                    void'($sscanf(addr_high_str, "%h", addr_high));
+                    base_addr = {addr_high, 16'h0000};
+                    `uvm_info(get_type_name(), 
+                        $sformatf("Extended address base: 0x%08X", base_addr), 
+                        UVM_MEDIUM)
+                end
+                
+                default: begin
+                    `uvm_warning(get_type_name(), 
+                        $sformatf("Unsupported Intel HEX record type: 0x%02X at line %0d, skipping", 
+                                  record_type, lines_processed))
+                end
+            endcase
+        end
+        
+        $fclose(fd);
+        
+        `uvm_info(get_type_name(), 
+            $sformatf("Hex file loaded: %0d bytes written to BRAM (%0d lines processed)", 
+                      bytes_loaded, lines_processed), 
+            UVM_LOW)
     endtask
     
     //==========================================================================
@@ -454,6 +554,53 @@ class vexriscv_base_test extends uvm_test;
                 $sformatf("write_regfile_backdoor: Register x%0d out of range (0-31)", reg_num))
         end
     endtask
+
+    //==========================================================================
+    // Trace + Performance Counter Helpers
+    //==========================================================================
+
+    localparam int TRACE_STALL_BIT = 128;
+
+    virtual task get_trace_status(output logic [5:0] write_ptr,
+                                  output logic [5:0] entry_count);
+        write_ptr = $root.rv32i_tb_top.dut.register_block_inst.rv32i_dbg_trace_wptr;
+        entry_count = $root.rv32i_tb_top.dut.register_block_inst.rv32i_dbg_trace_count;
+    endtask
+
+    virtual task read_trace_entry_extended(input logic [5:0] entry_addr,
+                                           output logic [191:0] trace_data);
+        @(posedge $root.rv32i_tb_top.clk);
+        $root.rv32i_tb_top.dut.register_block_inst.trace_addr_reg <= {26'b0, entry_addr};
+        @(posedge $root.rv32i_tb_top.clk);
+        trace_data = $root.rv32i_tb_top.dut.register_block_inst.rv32i_dbg_trace_data;
+    endtask
+
+    virtual task scan_trace_for_stall(output bit stall_found);
+        logic [5:0] write_ptr;
+        logic [5:0] entry_count;
+        logic [5:0] addr;
+        logic [191:0] trace_data;
+
+        stall_found = 1'b0;
+        get_trace_status(write_ptr, entry_count);
+
+        for (int i = 0; i < entry_count; i++) begin
+            if (write_ptr >= (i + 1)) begin
+                addr = write_ptr - i - 1;
+            end else begin
+                addr = 6'd64 - (i - write_ptr) - 1;
+            end
+
+            read_trace_entry_extended(addr, trace_data);
+            if (trace_data[TRACE_STALL_BIT]) begin
+                stall_found = 1'b1;
+            end
+        end
+    endtask
+
+    virtual function int read_perf_stall_count();
+        return $root.rv32i_tb_top.dut.register_block_inst.rv32i_perf_stall_count;
+    endfunction
     
     //==========================================================================
     // Result Checking
