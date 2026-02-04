@@ -43,6 +43,22 @@ module vexriscv_wrapper (
     input  logic        rv32i_cpu_halt,     // Stop CPU execution
     output logic        rv32i_cpu_halted,   // CPU is halted
     output logic        rv32i_cpu_break,    // EBREAK detected
+
+    //=================================================================
+    // Performance Counters (exposed via Register_Block)
+    //=================================================================
+    output logic [31:0] rv32i_perf_cycle_count,
+    output logic [31:0] rv32i_perf_insn_count,
+    output logic [31:0] rv32i_perf_stall_count,
+    output logic [31:0] rv32i_perf_flush_count,
+
+    //=================================================================
+    // Trace Buffer Interface (exposed via Register_Block)
+    //=================================================================
+    input  logic [5:0]  rv32i_dbg_trace_addr,  // Trace entry index
+    output logic [191:0] rv32i_dbg_trace_data, // Trace entry data
+    output logic [5:0]  rv32i_dbg_trace_wptr,  // Write pointer
+    output logic [5:0]  rv32i_dbg_trace_count, // Entry count
     
     //=================================================================
     // LED Output (memory-mapped at 0x407C)
@@ -98,6 +114,13 @@ module vexriscv_wrapper (
     logic        led_reg_we;
     logic [31:0] led_reg_rdata;
     logic [31:0] led_register;
+
+    // Debug outputs from VexRiscv core
+    logic [31:0] debug_pc;
+    logic [31:0] debug_instruction;
+    logic        debug_writeBack_regWrite;
+    logic [4:0]  debug_writeBack_regAddr;
+    logic [31:0] debug_writeBack_regData;
     
     // Tie off unused interrupts
     assign timerInterrupt    = 1'b0;
@@ -120,6 +143,29 @@ module vexriscv_wrapper (
             $display("[%0t] [VexRiscv] IBus RSP: PC=0x%08X INST=0x%08X", $time, iBus_rsp_payload_pc, iBus_rsp_payload_inst);
         end
     end
+
+    //=================================================================
+    // Trace Buffer + Performance Counters
+    //=================================================================
+
+    localparam int TRACE_DEPTH = 64;
+    localparam int TRACE_PTR_WIDTH = 6;
+
+    logic [191:0] trace_buffer [0:TRACE_DEPTH-1];
+    logic [TRACE_PTR_WIDTH-1:0] trace_wptr;
+    logic [TRACE_PTR_WIDTH-1:0] trace_count;
+    logic stall_seen;
+    logic flush_seen;
+
+    // Debug signals from CPU core
+    logic debug_writeBack_fire;
+    logic debug_stall_any;
+    logic debug_flush_any;
+
+    // Expose trace buffer state
+    assign rv32i_dbg_trace_wptr = trace_wptr;
+    assign rv32i_dbg_trace_count = trace_count;
+    assign rv32i_dbg_trace_data = trace_buffer[rv32i_dbg_trace_addr];
     
     //=================================================================
     // VexRiscv CPU Core
@@ -156,7 +202,17 @@ module vexriscv_wrapper (
         .softwareInterrupt(softwareInterrupt),
         
         // Fetcher control (UART system specific)
-        .fetcher_halt(fetcher_halt_req)
+        .fetcher_halt(fetcher_halt_req),
+
+        // Debug outputs
+        .debug_pc(debug_pc),
+        .debug_instruction(debug_instruction),
+        .debug_writeBack_regWrite(debug_writeBack_regWrite),
+        .debug_writeBack_regAddr(debug_writeBack_regAddr),
+        .debug_writeBack_regData(debug_writeBack_regData),
+        .debug_writeBack_fire(debug_writeBack_fire),
+        .debug_stall_any(debug_stall_any),
+        .debug_flush_any(debug_flush_any)
     );
     
     //=================================================================
@@ -229,6 +285,73 @@ module vexriscv_wrapper (
         .break_pc(break_pc),
         .clear_break(clear_break)
     );
+
+    //=================================================================
+    // Performance Counter Logic
+    //=================================================================
+
+    always_ff @(posedge clk) begin
+        if (rst || cpu_reset) begin
+            rv32i_perf_cycle_count <= 32'h0;
+            rv32i_perf_insn_count <= 32'h0;
+            rv32i_perf_stall_count <= 32'h0;
+            rv32i_perf_flush_count <= 32'h0;
+        end else begin
+            if (cpu_running) begin
+                rv32i_perf_cycle_count <= rv32i_perf_cycle_count + 1'b1;
+                if (debug_writeBack_fire) begin
+                    rv32i_perf_insn_count <= rv32i_perf_insn_count + 1'b1;
+                end
+                if (debug_stall_any) begin
+                    rv32i_perf_stall_count <= rv32i_perf_stall_count + 1'b1;
+                end
+                if (debug_flush_any) begin
+                    rv32i_perf_flush_count <= rv32i_perf_flush_count + 1'b1;
+                end
+            end
+        end
+    end
+
+    //=================================================================
+    // Trace Buffer Write Logic
+    //=================================================================
+
+    always_ff @(posedge clk) begin
+        if (rst || cpu_reset) begin
+            trace_wptr <= '0;
+            trace_count <= '0;
+            stall_seen <= 1'b0;
+            flush_seen <= 1'b0;
+        end else begin
+            if (cpu_running) begin
+                if (debug_stall_any) begin
+                    stall_seen <= 1'b1;
+                end
+                if (debug_flush_any) begin
+                    flush_seen <= 1'b1;
+                end
+
+                if (debug_writeBack_fire) begin
+                    trace_buffer[trace_wptr] <= '0;
+                    trace_buffer[trace_wptr][127:96] <= debug_pc;
+                    trace_buffer[trace_wptr][95:64] <= debug_instruction;
+                    trace_buffer[trace_wptr][63:32] <= debug_writeBack_regData;
+                    trace_buffer[trace_wptr][31:27] <= debug_writeBack_regAddr;
+                    trace_buffer[trace_wptr][130] <= debug_writeBack_regWrite;
+                    trace_buffer[trace_wptr][129] <= flush_seen;
+                    trace_buffer[trace_wptr][128] <= stall_seen;
+
+                    trace_wptr <= trace_wptr + 1'b1;
+                    if (trace_count != 6'd63) begin
+                        trace_count <= trace_count + 1'b1;
+                    end
+
+                    stall_seen <= 1'b0;
+                    flush_seen <= 1'b0;
+                end
+            end
+        end
+    end
     
     //=================================================================
     // EBREAK Monitor

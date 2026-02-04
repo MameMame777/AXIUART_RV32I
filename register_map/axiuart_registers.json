@@ -174,7 +174,7 @@
     {
       "name": "DBG_BP_CTRL",
       "offset": "0x1250",
-      "access": "RW/RO",
+      "access": "RW",
       "width_bits": 32,
       "reset": "0x00000000",
       "description": "Breakpoint control: [3:0]=bp_enable(RW), [7:4]=bp_hit_flags(RO), cleared on cpu_run"
@@ -278,10 +278,26 @@
     {
       "name": "DBG_RESET_CTRL",
       "offset": "0x1298",
-      "access": "RW/RO",
+      "access": "RW",
       "width_bits": 32,
       "reset": "0x00000000",
       "description": "Debug reset control: [0]=soft_reset(W1P), [1]=reset_done(RO), [2]=cpu_step(W1P)"
+    },
+    {
+      "name": "TRACE_DATA_HI2",
+      "offset": "0x129C",
+      "access": "RO",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Trace entry data [159:128]: extended trace flags"
+    },
+    {
+      "name": "TRACE_DATA_HI3",
+      "offset": "0x12A0",
+      "access": "RO",
+      "width_bits": 32,
+      "reset": "0x00000000",
+      "description": "Trace entry data [191:160]: extended trace upper"
     },
     {
       "name": "REVISION",

@@ -554,6 +554,53 @@ class vexriscv_base_test extends uvm_test;
                 $sformatf("write_regfile_backdoor: Register x%0d out of range (0-31)", reg_num))
         end
     endtask
+
+    //==========================================================================
+    // Trace + Performance Counter Helpers
+    //==========================================================================
+
+    localparam int TRACE_STALL_BIT = 128;
+
+    virtual task get_trace_status(output logic [5:0] write_ptr,
+                                  output logic [5:0] entry_count);
+        write_ptr = $root.rv32i_tb_top.dut.register_block_inst.rv32i_dbg_trace_wptr;
+        entry_count = $root.rv32i_tb_top.dut.register_block_inst.rv32i_dbg_trace_count;
+    endtask
+
+    virtual task read_trace_entry_extended(input logic [5:0] entry_addr,
+                                           output logic [191:0] trace_data);
+        @(posedge $root.rv32i_tb_top.clk);
+        $root.rv32i_tb_top.dut.register_block_inst.trace_addr_reg <= {26'b0, entry_addr};
+        @(posedge $root.rv32i_tb_top.clk);
+        trace_data = $root.rv32i_tb_top.dut.register_block_inst.rv32i_dbg_trace_data;
+    endtask
+
+    virtual task scan_trace_for_stall(output bit stall_found);
+        logic [5:0] write_ptr;
+        logic [5:0] entry_count;
+        logic [5:0] addr;
+        logic [191:0] trace_data;
+
+        stall_found = 1'b0;
+        get_trace_status(write_ptr, entry_count);
+
+        for (int i = 0; i < entry_count; i++) begin
+            if (write_ptr >= (i + 1)) begin
+                addr = write_ptr - i - 1;
+            end else begin
+                addr = 6'd64 - (i - write_ptr) - 1;
+            end
+
+            read_trace_entry_extended(addr, trace_data);
+            if (trace_data[TRACE_STALL_BIT]) begin
+                stall_found = 1'b1;
+            end
+        end
+    endtask
+
+    virtual function int read_perf_stall_count();
+        return $root.rv32i_tb_top.dut.register_block_inst.rv32i_perf_stall_count;
+    endfunction
     
     //==========================================================================
     // Result Checking
