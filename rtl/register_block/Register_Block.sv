@@ -60,7 +60,7 @@ module Register_Block #(
     
     // RV32I trace buffer interface
     output logic [5:0]  rv32i_dbg_trace_addr,  // Trace entry index
-    input  logic [127:0] rv32i_dbg_trace_data, // Trace entry data
+    input  logic [191:0] rv32i_dbg_trace_data, // Trace entry data
     input  logic [5:0]  rv32i_dbg_trace_wptr,  // Write pointer
     input  logic [5:0]  rv32i_dbg_trace_count, // Entry count
     
@@ -111,6 +111,8 @@ module Register_Block #(
     localparam bit [11:0] REG_TRACE_DATA_HI1  = 12'h290;  // 0x1290 - Trace data [127:96]
     localparam bit [11:0] REG_TRACE_STATUS    = 12'h294;  // 0x1294 - Trace status [5:0]=wptr [13:8]=count [16]=full
     localparam bit [11:0] REG_DBG_RESET_CTRL  = 12'h298;  // 0x1298 - Reset control [0]=soft_reset(W1P) [1]=done(RO) [2]=step(W1P)
+    localparam bit [11:0] REG_TRACE_DATA_HI2  = 12'h29C;  // 0x129C - Trace data [159:128]
+    localparam bit [11:0] REG_TRACE_DATA_HI3  = 12'h2A0;  // 0x12A0 - Trace data [191:160]
 
     // Register storage
     logic [31:0] control_reg;      // RW - Control register
@@ -871,13 +873,21 @@ module Register_Block #(
                 REG_TRACE_DATA_HI1: begin
                     read_data = rv32i_dbg_trace_data[127:96];
                 end
+
+                REG_TRACE_DATA_HI2: begin
+                    read_data = rv32i_dbg_trace_data[159:128];
+                end
+
+                REG_TRACE_DATA_HI3: begin
+                    read_data = rv32i_dbg_trace_data[191:160];
+                end
                 
                 REG_TRACE_STATUS: begin
                     read_data[5:0] = rv32i_dbg_trace_wptr;
                     read_data[7:6] = '0;
                     read_data[13:8] = rv32i_dbg_trace_count;
                     read_data[15:14] = '0;
-                    read_data[16] = (rv32i_dbg_trace_count == 6'd64);  // Full flag
+                    read_data[16] = (rv32i_dbg_trace_count == 6'd63);  // Full flag
                     read_data[31:17] = '0;
                 end
                 

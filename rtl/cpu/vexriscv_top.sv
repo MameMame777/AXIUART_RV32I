@@ -74,7 +74,10 @@ module vexriscv_top
     output logic [31:0] debug_instruction,
     output logic        debug_writeBack_regWrite,
     output logic [4:0]  debug_writeBack_regAddr,
-    output logic [31:0] debug_writeBack_regData
+    output logic [31:0] debug_writeBack_regData,
+    output logic        debug_writeBack_fire,
+    output logic        debug_stall_any,
+    output logic        debug_flush_any
 );
 
     //==========================================================================
@@ -1193,5 +1196,10 @@ module vexriscv_top
     assign debug_writeBack_regWrite = RegFilePlugin_regFileWrite_valid;
     assign debug_writeBack_regAddr = RegFilePlugin_regFileWrite_payload_address;
     assign debug_writeBack_regData = RegFilePlugin_regFileWrite_payload_data;
+    assign debug_writeBack_fire = writeBack_arbitration_isFiring;
+    assign debug_stall_any = decode_arbitration_isStuck || execute_arbitration_isStuck ||
+                             memory_arbitration_isStuck || writeBack_arbitration_isStuck;
+    assign debug_flush_any = decode_arbitration_flushIt || execute_arbitration_flushIt ||
+                             memory_arbitration_flushIt || writeBack_arbitration_flushIt;
 
 endmodule : vexriscv_top

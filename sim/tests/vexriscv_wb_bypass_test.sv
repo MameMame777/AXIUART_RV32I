@@ -25,7 +25,7 @@
 //
 // Pass/Fail Criteria:
 //   - Correct register value
-//   - Cycle count = 5 (old config would be 6 with stall)
+//   - No stall detected in trace (old config would stall)
 //==============================================================================
 
 class vexriscv_wb_bypass_test extends vexriscv_base_test;
@@ -45,7 +45,10 @@ class vexriscv_wb_bypass_test extends vexriscv_base_test;
     
     virtual task run_phase(uvm_phase phase);
         bit [31:0] x2_val;
-        int cycle_count;
+        int perf_stall_start;
+        int perf_stall_end;
+        int perf_stall_delta;
+        bit stall_found;
         bit test_passed;
         
         phase.raise_objection(this);
@@ -64,28 +67,32 @@ class vexriscv_wb_bypass_test extends vexriscv_base_test;
         write_memory_backdoor(32'h80000010, 32'h00100073);  // EBREAK
         
         start_cpu();
+
+        perf_stall_start = read_perf_stall_count();
         
-        cycle_count = 0;
         repeat(25) begin
             @(posedge $root.rv32i_tb_top.clk);
-            cycle_count++;
         end
         
         halt_cpu();
+        perf_stall_end = read_perf_stall_count();
+        perf_stall_delta = perf_stall_end - perf_stall_start;
         read_cpu_reg(2, x2_val);
+
+        scan_trace_for_stall(stall_found);
         
-        // Key test: cycle count should be ~5, NOT 6
-        test_passed = (x2_val == 6) && (cycle_count <= 15);
+        // Key test: no stall detected (bypassWriteBackBuffer should avoid stall)
+        test_passed = (x2_val == 6) && (!stall_found);
         
         if (test_passed) begin
             `uvm_info(get_type_name(), 
-                $sformatf("PASS: x2=%0d, cycles=%0d (bypassWriteBackBuffer WORKING!)", 
-                          x2_val, cycle_count), 
+                $sformatf("PASS: x2=%0d, stall_delta=%0d (bypassWriteBackBuffer WORKING!)", 
+                          x2_val, perf_stall_delta), 
                 UVM_NONE)
         end else begin
             `uvm_error(get_type_name(), 
-                $sformatf("FAIL: x2=%0d (exp:6), cycles=%0d (bypassWriteBackBuffer issue?)", 
-                          x2_val, cycle_count))
+                $sformatf("FAIL: x2=%0d (exp:6), stall=%0d, stall_delta=%0d (bypassWriteBackBuffer issue?)", 
+                          x2_val, stall_found, perf_stall_delta))
         end
         
         phase.drop_objection(this);

@@ -70,6 +70,18 @@ module AXIUART_Top #(
     logic        rv32i_cpu_halted;      // CPU halted status
     logic        rv32i_cpu_break;       // EBREAK detected
     logic [3:0]  rv32i_led;             // LED output from RV32I
+
+    // RV32I performance counters
+    logic [31:0] rv32i_perf_cycle_count;
+    logic [31:0] rv32i_perf_insn_count;
+    logic [31:0] rv32i_perf_stall_count;
+    logic [31:0] rv32i_perf_flush_count;
+
+    // RV32I trace buffer interface
+    logic [5:0]  rv32i_dbg_trace_addr;
+    logic [191:0] rv32i_dbg_trace_data;
+    logic [5:0]  rv32i_dbg_trace_wptr;
+    logic [5:0]  rv32i_dbg_trace_count;
     
     // Flow control signals
     logic        rx_fifo_full;
@@ -208,7 +220,19 @@ module AXIUART_Top #(
         .rv32i_cpu_run(rv32i_cpu_run),
         .rv32i_cpu_halt(rv32i_cpu_halt),
         .rv32i_cpu_halted(rv32i_cpu_halted),
-        .rv32i_cpu_break(rv32i_cpu_break)
+        .rv32i_cpu_break(rv32i_cpu_break),
+
+        // RV32I performance counters
+        .rv32i_perf_cycle_count(rv32i_perf_cycle_count),
+        .rv32i_perf_insn_count(rv32i_perf_insn_count),
+        .rv32i_perf_stall_count(rv32i_perf_stall_count),
+        .rv32i_perf_flush_count(rv32i_perf_flush_count),
+
+        // RV32I trace buffer interface
+        .rv32i_dbg_trace_addr(rv32i_dbg_trace_addr),
+        .rv32i_dbg_trace_data(rv32i_dbg_trace_data),
+        .rv32i_dbg_trace_wptr(rv32i_dbg_trace_wptr),
+        .rv32i_dbg_trace_count(rv32i_dbg_trace_count)
     );
 
     // --------------------------------------------------------------------
@@ -231,6 +255,18 @@ module AXIUART_Top #(
         .rv32i_cpu_halt(rv32i_cpu_halt),
         .rv32i_cpu_halted(rv32i_cpu_halted),
         .rv32i_cpu_break(rv32i_cpu_break),
+
+        // Performance counters
+        .rv32i_perf_cycle_count(rv32i_perf_cycle_count),
+        .rv32i_perf_insn_count(rv32i_perf_insn_count),
+        .rv32i_perf_stall_count(rv32i_perf_stall_count),
+        .rv32i_perf_flush_count(rv32i_perf_flush_count),
+
+        // Trace buffer interface
+        .rv32i_dbg_trace_addr(rv32i_dbg_trace_addr),
+        .rv32i_dbg_trace_data(rv32i_dbg_trace_data),
+        .rv32i_dbg_trace_wptr(rv32i_dbg_trace_wptr),
+        .rv32i_dbg_trace_count(rv32i_dbg_trace_count),
         
         // LED output (MMIO at 0x407C)
         .rv32i_led(rv32i_led)
