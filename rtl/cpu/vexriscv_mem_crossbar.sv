@@ -180,7 +180,9 @@ module vexriscv_mem_crossbar (
     assign dbus_fifo_full  = (dbus_fifo_count == 2'd2);
     
     // DBus command handshake: Accept when FIFO not full
-    assign dBus_cmd_ready = !dbus_fifo_full && !cpu_halted;
+    // Remove cpu_halted gating - VexRiscv handles halt internally via control logic
+    // The cpu_halted check was preventing in-flight transactions from completing (Issue #46)
+    assign dBus_cmd_ready = !dbus_fifo_full;
     assign dbus_fifo_push = dBus_cmd_valid && dBus_cmd_ready;
     assign dbus_fifo_din  = '{
         wr:      dBus_cmd_payload_wr,
@@ -290,7 +292,8 @@ module vexriscv_mem_crossbar (
     logic        dbus_was_read;
 
     // FIFO pop signals
-    assign dbus_fifo_pop = (dbus_state == DBUS_IDLE) && !dbus_fifo_empty && !cpu_halted;
+    // Remove cpu_halted gating - in-flight transactions must complete even after halt (Issue #46)
+    assign dbus_fifo_pop = (dbus_state == DBUS_IDLE) && !dbus_fifo_empty;
     assign dbus_fifo_pop_done = (dbus_state == DBUS_RESPOND);  // Count decrements when response sent
     
     always_ff @(posedge clk) begin
