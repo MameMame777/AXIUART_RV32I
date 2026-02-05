@@ -409,13 +409,17 @@ module vexriscv_mem_crossbar (
             ram_a_we        = dbg_mem_we;
             ram_a_wdata     = dbg_mem_wdata;
             ram_a_byte_addr = {dbg_mem_addr, 2'b00};
-        end else if (ibus_state == IBUS_IDLE && ibus_fifo_pop) begin
-            // IBus read
+        end else if ((ibus_state == IBUS_IDLE && ibus_fifo_pop) ||
+                     (ibus_state == IBUS_READ_WAIT)) begin
+            // IBus read - keep address stable during IBUS_READ_WAIT for BRAM output latency
+            // Use ibus_pc_buf during READ_WAIT since it was registered in previous cycle
             ram_a_en        = 1'b1;
-            ram_a_addr      = 11'((ibus_fifo_dout.pc - 32'h80000000) >> 2);  // Subtract base, convert to word addr, mask to 11-bit
+            ram_a_addr      = (ibus_state == IBUS_IDLE) ? 
+                              11'((ibus_fifo_dout.pc - 32'h80000000) >> 2) :
+                              11'((ibus_pc_buf - 32'h80000000) >> 2);
             ram_a_we        = 4'b0000;
             ram_a_wdata     = 32'h0;
-            ram_a_byte_addr = ibus_fifo_dout.pc;
+            ram_a_byte_addr = (ibus_state == IBUS_IDLE) ? ibus_fifo_dout.pc : ibus_pc_buf;
         end else begin
             // Idle
             ram_a_en        = 1'b0;
@@ -430,6 +434,26 @@ module vexriscv_mem_crossbar (
     // Port B Multiplexer (DBus / Debug)
     //=================================================================
     
+    // Register the DBus FIFO output for use during DBUS_ACCESS state
+    logic [31:0] dbus_addr_buf;
+    logic [3:0]  dbus_mask_buf;
+    logic [31:0] dbus_data_buf;
+    logic        dbus_wr_buf;
+    
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            dbus_addr_buf <= 32'h0;
+            dbus_mask_buf <= 4'b0000;
+            dbus_data_buf <= 32'h0;
+            dbus_wr_buf   <= 1'b0;
+        end else if (dbus_fifo_pop) begin
+            dbus_addr_buf <= dbus_fifo_dout.address;
+            dbus_mask_buf <= dbus_fifo_dout.mask;
+            dbus_data_buf <= dbus_fifo_dout.data;
+            dbus_wr_buf   <= dbus_fifo_dout.wr;
+        end
+    end
+    
     always_comb begin
         if (cpu_halted && (dbg_state != DBG_IDLE)) begin
             // Debug access (fallback to Port B if needed)
@@ -438,13 +462,18 @@ module vexriscv_mem_crossbar (
             ram_b_we        = 4'b0000;
             ram_b_wdata     = 32'h0;
             ram_b_byte_addr = 32'h0;
-        end else if (dbus_state == DBUS_IDLE && dbus_fifo_pop) begin
-            // DBus access
+        end else if ((dbus_state == DBUS_IDLE && dbus_fifo_pop) ||
+                     (dbus_state == DBUS_ACCESS)) begin
+            // DBus access - keep address stable during DBUS_ACCESS for BRAM output latency
             ram_b_en        = 1'b1;
-            ram_b_addr      = 11'((dbus_fifo_dout.address - 32'h80000000) >> 2);  // Subtract base, convert to word addr, mask to 11-bit
-            ram_b_we        = dbus_fifo_dout.wr ? dbus_fifo_dout.mask : 4'b0000;
-            ram_b_wdata     = dbus_fifo_dout.data;
-            ram_b_byte_addr = dbus_fifo_dout.address;
+            ram_b_addr      = (dbus_state == DBUS_IDLE) ?
+                              11'((dbus_fifo_dout.address - 32'h80000000) >> 2) :
+                              11'((dbus_addr_buf - 32'h80000000) >> 2);
+            ram_b_we        = (dbus_state == DBUS_IDLE) ?
+                              (dbus_fifo_dout.wr ? dbus_fifo_dout.mask : 4'b0000) :
+                              4'b0000;  // Only write on first cycle
+            ram_b_wdata     = (dbus_state == DBUS_IDLE) ? dbus_fifo_dout.data : dbus_data_buf;
+            ram_b_byte_addr = (dbus_state == DBUS_IDLE) ? dbus_fifo_dout.address : dbus_addr_buf;
         end else begin
             // Idle
             ram_b_en        = 1'b0;

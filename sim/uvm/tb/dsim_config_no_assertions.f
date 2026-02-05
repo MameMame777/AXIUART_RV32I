@@ -47,21 +47,19 @@
 # RTL Design Files - Register Block (project-specific)
 ../../../rtl/register_block/Register_Block.sv
 
-# RTL Design Files - CPU core (modular pipeline architecture)
-../../../rtl/cpu/rv32i_isa_pkg.sv
-../../../rtl/cpu/rv32i_pipeline_pkg.sv
-../../../rtl/cpu/rv32i_if.sv
-../../../rtl/cpu/rv32i_id.sv
-../../../rtl/cpu/rv32i_hazard.sv
-../../../rtl/cpu/rv32i_ex.sv
-../../../rtl/cpu/rv32i_mem.sv
-../../../rtl/cpu/rv32i_wb.sv
-../../../rtl/cpu/rv32i_csr.sv
-../../../rtl/cpu/rv32i_top.sv
-../../../rtl/cpu/rv32i_trace_buffer.sv
+# RTL Design Files - VexRiscv Generated CPU Core (SpinalHDL)
+../../../rtl/cpu/VexRiscv.v
 
-# RTL Design Files - CPU core (legacy monolithic - archived 2026-01-05)
-# ../../../rtl/cpu/rv32i_core.sv
+# RTL Design Files - VexRiscv Wrapper Infrastructure
+../../../rtl/vexriscvwrap/vexriscv_ibus_adapter.sv
+../../../rtl/vexriscvwrap/vexriscv_dbus_adapter.sv
+../../../rtl/vexriscvwrap/vexriscv_debug_bridge.sv
+../../../rtl/vexriscvwrap/vexriscv_trace_probe.sv
+../../../rtl/vexriscvwrap/vexriscv_blockram.sv
+../../../rtl/vexriscvwrap/vexriscv_ebreak_monitor.sv
+../../../rtl/vexriscvwrap/vexriscv_mem_crossbar.sv
+../../../rtl/vexriscvwrap/vexriscv_control.sv
+../../../rtl/vexriscvwrap/vexriscv_wrapper.sv
 
 # Top Level
 ../../../rtl/AXIUART_Top.sv

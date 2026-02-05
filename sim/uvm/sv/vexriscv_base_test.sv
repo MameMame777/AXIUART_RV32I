@@ -524,8 +524,8 @@ class vexriscv_base_test extends uvm_test;
         
         // Check register number range (x0-x31)
         if (reg_num >= 0 && reg_num < 32) begin
-            // Hierarchical path: $root → rv32i_tb_top → dut (AXIUART_Top) → vexriscv_inst → cpu_core → u_regfile → regfile array
-            return $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.u_regfile.regfile[reg_num];
+            // Hierarchical path for generated VexRiscv: cpu_core → RegFilePlugin_regFile array
+            return $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.RegFilePlugin_regFile[reg_num];
         end else begin
             `uvm_error(get_type_name(), 
                 $sformatf("read_regfile_backdoor: Register x%0d out of range (0-31)", reg_num))
@@ -542,8 +542,8 @@ class vexriscv_base_test extends uvm_test;
                 `uvm_warning(get_type_name(), 
                     "write_regfile_backdoor: Attempting to write x0 (hardwired to zero)")
             end else begin
-                // Hierarchical path: $root → rv32i_tb_top → dut (AXIUART_Top) → vexriscv_inst → cpu_core → u_regfile → regfile array
-                $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.u_regfile.regfile[reg_num] = value;
+                // Hierarchical path for generated VexRiscv: cpu_core → RegFilePlugin_regFile array
+                $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.RegFilePlugin_regFile[reg_num] = value;
                 
                 `uvm_info(get_type_name(), 
                     $sformatf("Write backdoor: x%0d = 0x%08X", reg_num, value), 

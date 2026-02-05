@@ -1,5 +1,5 @@
 # RV32I Core UVM Compilation File List for DSIM
-# Updated: 2026-01-02 - UVM Environment Added
+# Updated: 2026-02-06 - Migrated to VexRiscv Generated RTL
 
 # Timescale
 -timescale 1ns/1ps
@@ -8,17 +8,25 @@
 -uvm
 
 # Include directories
-+incdir+../../../rtl/cpu
++incdir+../../../rtl/vexriscvwrap
 +incdir+../../../rtl/interfaces
 +incdir+../../../sim/assertions
 +incdir+../sv
 +incdir+../../tests
 
-# RTL - ISA Package (must be compiled first)
-../../../rtl/cpu/rv32i_isa_pkg.sv
+# RTL Design Files - VexRiscv Generated CPU Core (SpinalHDL)
+../../../rtl/cpu/VexRiscv.v
 
-# RTL - Core (includes trace buffer internally, no separate module needed)
-../../../rtl/cpu/rv32i_core.sv
+# RTL Design Files - VexRiscv Wrapper Infrastructure
+../../../rtl/vexriscvwrap/vexriscv_ibus_adapter.sv
+../../../rtl/vexriscvwrap/vexriscv_dbus_adapter.sv
+../../../rtl/vexriscvwrap/vexriscv_debug_bridge.sv
+../../../rtl/vexriscvwrap/vexriscv_trace_probe.sv
+../../../rtl/vexriscvwrap/vexriscv_blockram.sv
+../../../rtl/vexriscvwrap/vexriscv_ebreak_monitor.sv
+../../../rtl/vexriscvwrap/vexriscv_mem_crossbar.sv
+../../../rtl/vexriscvwrap/vexriscv_control.sv
+../../../rtl/vexriscvwrap/vexriscv_wrapper.sv
 
 # UVM Components (must be compiled in dependency order)
 # Transaction must come before monitor/scoreboard
