@@ -1,37 +1,28 @@
 # DSIM Configuration for RV32I CPU UVM Tests
-# Updated: 2026-01-02 - RV32I UVM Environment
+# Updated: 2026-02-06 - Migrated to VexRiscv Generated RTL
 
 # Note: -timescale and -uvm are provided on command line, do not duplicate here
 
 # Include directories
-+incdir+../../../rtl/cpu
++incdir+../../../rtl/vexriscvwrap
 +incdir+../../../rtl/interfaces
 +incdir+../../../sim/assertions
 +incdir+../sv
 +incdir+../../tests
 
-# RTL - ISA Package (must be compiled first)
-../../../rtl/cpu/rv32i_isa_pkg.sv
+# RTL Design Files - VexRiscv Generated CPU Core (SpinalHDL)
+../../../rtl/cpu/VexRiscv.v
 
-# RTL - Pipeline Package (types for modular architecture)
-../../../rtl/cpu/rv32i_pipeline_pkg.sv
-
-# RTL - Modular Pipeline Stages
-../../../rtl/cpu/rv32i_if.sv
-../../../rtl/cpu/rv32i_id.sv
-../../../rtl/cpu/rv32i_hazard.sv
-../../../rtl/cpu/rv32i_ex.sv
-../../../rtl/cpu/rv32i_mem.sv
-../../../rtl/cpu/rv32i_wb.sv
-
-# RTL - CSR Module
-../../../rtl/cpu/rv32i_csr.sv
-
-# RTL - Top Level Integration
-../../../rtl/cpu/rv32i_top.sv
-
-# RTL - Trace Buffer
-../../../rtl/cpu/rv32i_trace_buffer.sv
+# RTL Design Files - VexRiscv Wrapper Infrastructure
+../../../rtl/vexriscvwrap/vexriscv_ibus_adapter.sv
+../../../rtl/vexriscvwrap/vexriscv_dbus_adapter.sv
+../../../rtl/vexriscvwrap/vexriscv_debug_bridge.sv
+../../../rtl/vexriscvwrap/vexriscv_trace_probe.sv
+../../../rtl/vexriscvwrap/vexriscv_blockram.sv
+../../../rtl/vexriscvwrap/vexriscv_ebreak_monitor.sv
+../../../rtl/vexriscvwrap/vexriscv_mem_crossbar.sv
+../../../rtl/vexriscvwrap/vexriscv_control.sv
+../../../rtl/vexriscvwrap/vexriscv_wrapper.sv
 
 # NOTE: Old monolithic rv32i_core.sv archived to rtl/cpu/archive/ (2026-01-05)
 # Use modular architecture (rv32i_top.sv) instead

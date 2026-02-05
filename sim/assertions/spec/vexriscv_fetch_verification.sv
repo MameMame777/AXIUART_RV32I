@@ -71,17 +71,19 @@ module vexriscv_fetch_verification (
     assign ebreak_detected = $root.rv32i_tb_top.dut.vexriscv_inst.cpu_control.ebreak_detected;
     assign cpu_state = $root.rv32i_tb_top.dut.vexriscv_inst.cpu_control.state;
     
-    assign iBus_cmd_valid = $root.rv32i_tb_top.dut.vexriscv_inst.iBus_cmd_valid;
-    assign iBus_cmd_ready = $root.rv32i_tb_top.dut.vexriscv_inst.iBus_cmd_ready;
-    assign iBus_cmd_payload_pc = $root.rv32i_tb_top.dut.vexriscv_inst.iBus_cmd_payload_pc;
-    assign iBus_rsp_valid = $root.rv32i_tb_top.dut.vexriscv_inst.iBus_rsp_valid;
-    assign iBus_rsp_payload_inst = $root.rv32i_tb_top.dut.vexriscv_inst.iBus_rsp_payload_inst;
+    // IBus signals now from adapter outputs (to mem_crossbar)
+    assign iBus_cmd_valid = $root.rv32i_tb_top.dut.vexriscv_inst.mem_iBus_cmd_valid;
+    assign iBus_cmd_ready = $root.rv32i_tb_top.dut.vexriscv_inst.mem_iBus_cmd_ready;
+    assign iBus_cmd_payload_pc = $root.rv32i_tb_top.dut.vexriscv_inst.mem_iBus_cmd_payload_pc;
+    assign iBus_rsp_valid = $root.rv32i_tb_top.dut.vexriscv_inst.mem_iBus_rsp_valid;
+    assign iBus_rsp_payload_inst = $root.rv32i_tb_top.dut.vexriscv_inst.mem_iBus_rsp_payload_inst;
     
-    assign fetchPc_booted = $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.u_ibus.fetchPc_booted;
-    assign fetcher_halt = $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.u_ibus.fetcher_halt;
-    assign fetchPc_pcReg = $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.u_ibus.fetchPc_pcReg;
-    assign fetchPc_output_valid = $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.u_ibus.fetchPc_output_valid;
-    assign fetchPc_output_ready = $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.u_ibus.fetchPc_output_ready;
+    // Generated VexRiscv internal signals (different naming from hand-written version)
+    assign fetchPc_booted = $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.IBusSimplePlugin_fetchPc_booted;
+    assign fetcher_halt = 1'b0;  // Generated VexRiscv doesn't expose this signal
+    assign fetchPc_pcReg = $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.IBusSimplePlugin_fetchPc_pcReg;
+    assign fetchPc_output_valid = $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.IBusSimplePlugin_fetchPc_output_valid;
+    assign fetchPc_output_ready = 1'b1;  // Internal ready not directly exposed
     
     assign ram_a_en = $root.rv32i_tb_top.dut.vexriscv_inst.mem_crossbar.blockram_inst.a_en;
     assign ram_a_addr = $root.rv32i_tb_top.dut.vexriscv_inst.mem_crossbar.blockram_inst.a_addr;

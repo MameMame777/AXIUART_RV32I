@@ -149,6 +149,10 @@ module vexriscv_control (
             end
             
             STATE_HALTED: begin
+                // Keep CPU in reset while halted to prevent instruction fetch
+                // before program is loaded. CPU will be released from reset
+                // when transitioning to RUNNING state.
+                cpu_reset  = 1'b1;
                 cpu_halted = 1'b1;
             end
             
