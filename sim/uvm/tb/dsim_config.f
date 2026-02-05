@@ -49,25 +49,19 @@
 # RTL Design Files - Register Block (project-specific)
 ../../../rtl/register_block/Register_Block.sv
 
-# RTL Design Files - VexRiscv CPU (GenSmallAndProductive)
-../../../rtl/cpu/vexriscv_pkg.sv
-../../../rtl/cpu/vexriscv_regfile.sv
-../../../rtl/cpu/vexriscv_stream_fifo.sv
-../../../rtl/cpu/vexriscv_ibus_simple.sv
-../../../rtl/cpu/vexriscv_dbus_simple.sv
-../../../rtl/cpu/vexriscv_hazard_simple.sv
-../../../rtl/cpu/vexriscv_branch.sv
-../../../rtl/cpu/vexriscv_csr.sv
-../../../rtl/cpu/vexriscv_execute.sv
-../../../rtl/cpu/vexriscv_decoder_unoptimized.sv
-../../../rtl/cpu/vexriscv_top.sv
+# RTL Design Files - VexRiscv Generated CPU Core (SpinalHDL)
+../../../rtl/cpu/VexRiscv.v
 
-# RTL Design Files - VexRiscv UART Integration
-../../../rtl/cpu/vexriscv_blockram.sv
-../../../rtl/cpu/vexriscv_ebreak_monitor.sv
-../../../rtl/cpu/vexriscv_mem_crossbar.sv
-../../../rtl/cpu/vexriscv_control.sv
-../../../rtl/cpu/vexriscv_wrapper.sv
+# RTL Design Files - VexRiscv Wrapper Infrastructure
+../../../rtl/vexriscvwrap/vexriscv_ibus_adapter.sv
+../../../rtl/vexriscvwrap/vexriscv_dbus_adapter.sv
+../../../rtl/vexriscvwrap/vexriscv_debug_bridge.sv
+../../../rtl/vexriscvwrap/vexriscv_trace_probe.sv
+../../../rtl/vexriscvwrap/vexriscv_blockram.sv
+../../../rtl/vexriscvwrap/vexriscv_ebreak_monitor.sv
+../../../rtl/vexriscvwrap/vexriscv_mem_crossbar.sv
+../../../rtl/vexriscvwrap/vexriscv_control.sv
+../../../rtl/vexriscvwrap/vexriscv_wrapper.sv
 
 # Top Level
 ../../../rtl/AXIUART_Top.sv

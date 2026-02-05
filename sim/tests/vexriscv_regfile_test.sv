@@ -106,7 +106,7 @@ class vexriscv_regfile_test extends vexriscv_base_test;
     virtual task load_test_program();
         // Program: Register file test sequence
         // Address 0x80000000: ADDI x1, x0, 1    (0x00100093)
-        // Address 0x80000004: ADDI x2, x2, 1    (0x00110113)
+        // Address 0x80000004: ADDI x2, x0, 1    (0x00100113) - Note: reads from x0, not x2
         // Address 0x80000008: ADDI x3, x1, 2    (0x00208193)
         // Address 0x8000000C: ADDI x0, x0, 5    (0x00500013)
         // Address 0x80000010: NOP (loop)        (0x00000013)
@@ -116,7 +116,7 @@ class vexriscv_regfile_test extends vexriscv_base_test;
         
         // Write instructions via backdoor (using CPU address space)
         write_memory_backdoor(32'h80000000, 32'h00100093);  // ADDI x1, x0, 1
-        write_memory_backdoor(32'h80000004, 32'h00110113);  // ADDI x2, x2, 1
+        write_memory_backdoor(32'h80000004, 32'h00100113);  // ADDI x2, x0, 1 (fixed: was x2, x2, 1)
         write_memory_backdoor(32'h80000008, 32'h00208193);  // ADDI x3, x1, 2
         write_memory_backdoor(32'h8000000C, 32'h00500013);  // ADDI x0, x0, 5
         write_memory_backdoor(32'h80000010, 32'h00000013);  // NOP (infinite loop)
@@ -124,7 +124,7 @@ class vexriscv_regfile_test extends vexriscv_base_test;
         // Verify BRAM content directly
         $display("[%0t] BRAM[0] = 0x%08X (expected 0x00100093)", $time, 
                  $root.rv32i_tb_top.dut.vexriscv_inst.mem_crossbar.blockram_inst.mem[0]);
-        $display("[%0t] BRAM[1] = 0x%08X (expected 0x00110113)", $time, 
+        $display("[%0t] BRAM[1] = 0x%08X (expected 0x00100113)", $time, 
                  $root.rv32i_tb_top.dut.vexriscv_inst.mem_crossbar.blockram_inst.mem[1]);
         $display("[%0t] BRAM[2] = 0x%08X (expected 0x00208193)", $time, 
                  $root.rv32i_tb_top.dut.vexriscv_inst.mem_crossbar.blockram_inst.mem[2]);
@@ -151,14 +151,19 @@ class vexriscv_regfile_test extends vexriscv_base_test;
             cycle_count++;
             
             // Monitor pipeline WriteBack stage signals
+            // Note: Generated VexRiscv uses different signal names than hand-written version
             wb_valid = $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.writeBack_arbitration_isValid;
             wb_firing = $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.writeBack_arbitration_isFiring;
-            regfile_write_valid = $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.RegFilePlugin_regFileWrite_valid;
+            regfile_write_valid = $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.lastStageRegFileWrite_valid;
             
-            // Log first register write
+            // Log first register write with destination register details
             if (regfile_write_valid && cycle_count <= 35) begin
                 $display("[%0t] [PIPELINE] Cycle %0d: WriteBack stage active (wb_valid=%0b, wb_firing=%0b, reg_write=%0b)",
                          $time, cycle_count, wb_valid, wb_firing, regfile_write_valid);
+                // Debug: Show which register is being written and what value
+                $display("[%0t] [DEBUG] Write x%0d = 0x%08X", $time,
+                         $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.lastStageRegFileWrite_payload_address,
+                         $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.lastStageRegFileWrite_payload_data);
             end
             
             // Read current PC (implementation-specific)
@@ -191,11 +196,23 @@ class vexriscv_regfile_test extends vexriscv_base_test;
         
         `uvm_info(get_type_name(), "Verifying register values...", UVM_MEDIUM)
         
+        // Debug: Print register file contents directly
+        $display("[DEBUG] RegFile[0] = 0x%08X", $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.RegFilePlugin_regFile[0]);
+        $display("[DEBUG] RegFile[1] = 0x%08X", $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.RegFilePlugin_regFile[1]);
+        $display("[DEBUG] RegFile[2] = 0x%08X", $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.RegFilePlugin_regFile[2]);
+        $display("[DEBUG] RegFile[3] = 0x%08X", $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.RegFilePlugin_regFile[3]);
+        
         // Read registers
         read_cpu_reg(0, x0_val);
         read_cpu_reg(1, x1_val);
         read_cpu_reg(2, x2_val);
         read_cpu_reg(3, x3_val);
+        
+        // Debug: Print what backdoor function returns
+        $display("[DEBUG] read_cpu_reg(0) = 0x%08X", x0_val);
+        $display("[DEBUG] read_cpu_reg(1) = 0x%08X", x1_val);
+        $display("[DEBUG] read_cpu_reg(2) = 0x%08X", x2_val);
+        $display("[DEBUG] read_cpu_reg(3) = 0x%08X", x3_val);
         
         // Check x0 = 0 (hardwired zero)
         if (x0_val != 32'h00000000) begin
