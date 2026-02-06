@@ -8,7 +8,8 @@
 #   -Seed N           Random seed (default: 1)
 #   -CompileOnly      Compile only, do not run
 #   -RunOnly          Run only (use existing compiled image)
-#   -CleanupDays N    Auto-delete logs older than N days before run (0=disable)
+#   -CleanupDays N    Auto-delete logs older than N days before run (0=disable, default=7)
+#   -KeepRecent N     Keep only N most recent log sets per test (0=disable, default=5)
 #==============================================================================
 
 param(
@@ -26,7 +27,9 @@ param(
 
     [switch]$RunOnly,
 
-    [int]$CleanupDays = 0,
+    [int]$CleanupDays = 7,
+
+    [int]$KeepRecent = 5,
 
     [switch]$Help
 )
@@ -48,7 +51,8 @@ Options:
   -Seed N           Random seed (default: 1)
   -CompileOnly      Compile only
   -RunOnly          Run only
-  -CleanupDays N    Auto-delete logs older than N days (0=disable)
+  -CleanupDays N    Auto-delete logs older than N days (0=disable, default=7)
+  -KeepRecent N     Keep only N most recent log sets per test (0=disable, default=5)
   -Help             Show this help
 "@
     exit 0
@@ -100,6 +104,11 @@ function Setup-Environment {
     if ($CleanupDays -gt 0) {
         Cleanup-OldLogs -Days $CleanupDays
     }
+
+    # Per-test log retention cleanup
+    if ($KeepRecent -gt 0) {
+        Cleanup-PerTestLogs -Keep $KeepRecent
+    }
 }
 
 # Cleanup old log files
@@ -137,6 +146,48 @@ function Cleanup-OldLogs {
     if ($deletedCount -gt 0) {
         $sizeMB = [math]::Round($totalSize / 1MB, 2)
         Write-Host "[Cleanup] Deleted $deletedCount files older than $Days days ($sizeMB MB)"
+    }
+}
+
+# Cleanup per-test logs keeping only the N most recent sets
+function Cleanup-PerTestLogs {
+    param([int]$Keep)
+
+    $deletedCount = 0
+    $totalSize = 0
+
+    foreach ($dir in @($LogDir, $WaveDir)) {
+        if (-not (Test-Path $dir)) { continue }
+
+        $files = Get-ChildItem -Path $dir -File
+        # Group files by test name (strip timestamp suffix)
+        $groups = $files | Group-Object {
+            if ($_.BaseName -match '^(.+?)_\d{8}_\d{6}') {
+                $Matches[1]
+            } else {
+                $_.BaseName
+            }
+        }
+
+        foreach ($group in $groups) {
+            if ($group.Count -le $Keep) { continue }
+
+            # Sort by LastWriteTime descending, skip the newest $Keep
+            $toDelete = $group.Group |
+                Sort-Object LastWriteTime -Descending |
+                Select-Object -Skip $Keep
+
+            foreach ($file in $toDelete) {
+                $totalSize += $file.Length
+                Remove-Item -Path $file.FullName -Force -ErrorAction SilentlyContinue
+                $deletedCount++
+            }
+        }
+    }
+
+    if ($deletedCount -gt 0) {
+        $sizeMB = [math]::Round($totalSize / 1MB, 2)
+        Write-Host "[Cleanup] Deleted $deletedCount excess log files (keeping $Keep most recent per test, $sizeMB MB freed)"
     }
 }
 
