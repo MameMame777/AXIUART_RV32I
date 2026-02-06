@@ -102,10 +102,8 @@ module vexriscv_trace_probe (
         if (rst || cpu_reset) begin
             wr_ptr <= '0;
             entry_count <= '0;
-            // Initialize buffer
-            for (int i = 0; i < TRACE_DEPTH; i++) begin
-                trace_buffer[i] <= '0;
-            end
+            // Note: trace_buffer not reset (reduces synthesis complexity)
+            // Old entries are overwritten as new data arrives
         end else if (cpu_running && writeBack_arbitration_isFiring) begin
             // Format trace entry
             trace_buffer[wr_ptr] <= '0;
@@ -130,7 +128,15 @@ module vexriscv_trace_probe (
     // Output Assignments
     //=================================================================
     
-    assign trace_data  = trace_buffer[trace_addr];
+    // Register output to break timing path (fixes #57: -0.805ns WNS)
+    always_ff @(posedge clk) begin
+        if (rst || cpu_reset) begin
+            trace_data <= '0;
+        end else begin
+            trace_data <= trace_buffer[trace_addr];
+        end
+    end
+    
     assign trace_wptr  = wr_ptr;
     assign trace_count = entry_count;
     
