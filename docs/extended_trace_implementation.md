@@ -2,13 +2,16 @@
 
 **Date:** 2026-01-11  
 **Feature:** Extended trace buffer for enhanced RV32I CPU debugging  
-**Status:** ✅ IMPLEMENTATION COMPLETE
+**Status:** ✅ IMPLEMENTATION COMPLETE  
+**Updated:** 2026-02-07 - Applied timing fix (Issue #57)
 
 ---
 
 ## Overview
 
 Implemented extended trace buffer system to enable efficient debugging of RV32I CPU bugs. The trace now captures source operand values, forwarding control signals, and pipeline state flags, making bugs like the Line 6 ADD failure immediately visible without wave form analysis.
+
+> **⚠️ Timing Fix (2026-02-07)**: The trace buffer output has been registered to meet 125MHz timing constraints. This introduces a **1-cycle read latency** on the debug trace interface. This latency does not affect functional behavior as trace reads are performed via the debug interface, not in the CPU critical path. See [timing_violation_analysis_20260206.md](timing_violation_analysis_20260206.md#8-implementation-register-output-fix-issue-57) for details.
 
 ## Implementation Details
 
