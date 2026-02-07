@@ -59,6 +59,12 @@ $Stage1Tests = @(
     "vexriscv_dbus_access_test"
 )
 
+# Stage 2 tests (ISA compliance via upstream hex files)
+$Stage2Tests = @(
+    "vexriscv_isa_add_test",
+    "vexriscv_isa_addi_test"
+)
+
 # Show help
 if ($Help) {
     Write-Host @"
@@ -80,6 +86,11 @@ Available Stage 1 tests:
     foreach ($t in $Stage1Tests) {
         Write-Host "  - $t"
     }
+    Write-Host ""
+    Write-Host "Available Stage 2 tests (ISA compliance):"
+    foreach ($t in $Stage2Tests) {
+        Write-Host "  - $t"
+    }
     exit 0
 }
 
@@ -91,8 +102,9 @@ if ($Tests.Count -gt 0) {
 } elseif ($Stage -gt 0) {
     switch ($Stage) {
         1 { $TestsToRun = $Stage1Tests }
+        2 { $TestsToRun = $Stage2Tests }
         default {
-            Write-Error "Unknown stage: $Stage"
+            Write-Error "Unknown stage: $Stage (available: 1, 2)"
             exit 1
         }
     }
