@@ -3,7 +3,9 @@
 # Usage: .\run_regression.ps1 [options]
 #
 # Options:
-#   -Stage N          Run specific stage tests (1, 2, etc.)
+#   -Suite NAME       Run a named suite from regression_tests.json
+#                     (e.g., smoke, full, vexriscv_stage1, cpu_basic)
+#   -Stage N          Run specific stage tests (maps to suite via JSON)
 #   -Tests NAME[]     Run specific tests (array)
 #   -Waves            Enable waveform capture for all tests
 #   -Verbosity LVL    UVM verbosity (UVM_LOW, UVM_MEDIUM, UVM_DEBUG)
@@ -14,6 +16,8 @@
 #==============================================================================
 
 param(
+    [string]$Suite = "",
+
     [int]$Stage = 0,
 
     [string[]]$Tests = @(),
@@ -45,33 +49,48 @@ if ($Tests.Count -eq 1 -and $Tests[0] -match ",") {
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $Workspace = Split-Path -Parent $ScriptDir
 
-# Stage 1 tests
-$Stage1Tests = @(
-    "vexriscv_regfile_test",
-    "vexriscv_alu_test",
-    "vexriscv_pipeline_flow_test",
-    "vexriscv_ibus_fetch_test",
-    "vexriscv_memory_access_test",
-    "vexriscv_ex_bypass_test",
-    "vexriscv_mem_bypass_test",
-    "vexriscv_wb_bypass_test",
-    "vexriscv_load_use_stall_test",
-    "vexriscv_dbus_access_test"
-)
+# Load regression_tests.json (Single Source of Truth)
+$RegressionJsonPath = Join-Path $Workspace "sim\regression_tests.json"
+if (-not (Test-Path $RegressionJsonPath)) {
+    Write-Error "regression_tests.json not found at: $RegressionJsonPath"
+    exit 1
+}
+$RegressionConfig = Get-Content $RegressionJsonPath -Raw | ConvertFrom-Json
 
-# Stage 2 tests (ISA compliance via upstream hex files)
-$Stage2Tests = @(
-    "vexriscv_isa_add_test",
-    "vexriscv_isa_addi_test"
-)
+# Resolve suite name to test list from JSON
+function Get-SuiteTests {
+    param([string]$SuiteName)
+
+    $suites = $RegressionConfig.regression_suites
+    $suite = $suites.$SuiteName
+    if ($null -eq $suite) {
+        $availableSuites = ($suites.PSObject.Properties | Where-Object {
+            -not $_.Value.disabled
+        } | ForEach-Object { $_.Name }) -join ", "
+        Write-Error "Unknown suite: '$SuiteName'. Available suites: $availableSuites"
+        exit 1
+    }
+    if ($suite.disabled) {
+        Write-Error "Suite '$SuiteName' is disabled: $($suite.description)"
+        exit 1
+    }
+    return @($suite.tests | ForEach-Object { $_.name })
+}
 
 # Show help
 if ($Help) {
+    $availableSuites = $RegressionConfig.regression_suites.PSObject.Properties |
+        Where-Object { -not $_.Value.disabled } |
+        ForEach-Object {
+            $count = @($_.Value.tests).Count
+            "  {0,-25} {1} ({2} tests)" -f $_.Name, $_.Value.description, $count
+        }
     Write-Host @"
 Usage: .\run_regression.ps1 [options]
 
 Options:
-  -Stage N          Run specific stage tests (1, 2, etc.)
+  -Suite NAME       Run a named suite from regression_tests.json
+  -Stage N          Run specific stage tests (maps to suite via JSON)
   -Tests NAME[]     Run specific tests (array)
   -Waves            Enable waveform capture
   -Verbosity LVL    UVM verbosity (UVM_LOW, UVM_MEDIUM, UVM_DEBUG)
@@ -81,15 +100,10 @@ Options:
   -KeepRecent N     Keep only N most recent log sets per test (0=disable, default=5)
   -Help             Show this help
 
-Available Stage 1 tests:
+Available suites:
 "@
-    foreach ($t in $Stage1Tests) {
-        Write-Host "  - $t"
-    }
-    Write-Host ""
-    Write-Host "Available Stage 2 tests (ISA compliance):"
-    foreach ($t in $Stage2Tests) {
-        Write-Host "  - $t"
+    foreach ($s in $availableSuites) {
+        Write-Host $s
     }
     exit 0
 }
@@ -99,18 +113,24 @@ $TestsToRun = @()
 
 if ($Tests.Count -gt 0) {
     $TestsToRun = $Tests
+} elseif ($Suite -ne "") {
+    $TestsToRun = Get-SuiteTests -SuiteName $Suite
 } elseif ($Stage -gt 0) {
-    switch ($Stage) {
-        1 { $TestsToRun = $Stage1Tests }
-        2 { $TestsToRun = $Stage2Tests }
-        default {
-            Write-Error "Unknown stage: $Stage (available: 1, 2)"
-            exit 1
-        }
+    # Map stage number to suite name via JSON stage_mapping
+    $stageKey = "$Stage"
+    $suiteName = $RegressionConfig.stage_mapping.$stageKey
+    if ($null -eq $suiteName) {
+        Write-Error "Unknown stage: $Stage. No mapping found in regression_tests.json"
+        exit 1
     }
+    $TestsToRun = Get-SuiteTests -SuiteName $suiteName
 } else {
-    # Default: run all Stage 1 tests
-    $TestsToRun = $Stage1Tests
+    # Default: run Stage 1 suite (backward compatible)
+    $defaultSuite = $RegressionConfig.stage_mapping."1"
+    if ($null -eq $defaultSuite) {
+        $defaultSuite = "vexriscv_stage1"
+    }
+    $TestsToRun = Get-SuiteTests -SuiteName $defaultSuite
 }
 
 # Directories
