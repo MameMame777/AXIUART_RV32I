@@ -111,6 +111,11 @@
 ../../tests/vexriscv_ibus_fetch_test.sv
 ../../tests/vexriscv_dbus_access_test.sv
 
+# VexRiscv Stage 2 ISA Tests (Issue #50)
+../../tests/vexriscv_isa_test.sv
+../../tests/vexriscv_isa_add_test.sv
+../../tests/vexriscv_isa_addi_test.sv
+
 # Issue #13 Investigation - LED MMIO via UART-AXI path
 ../../tests/vexriscv_led_uart_test.sv
 

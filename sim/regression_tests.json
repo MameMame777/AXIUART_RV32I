@@ -174,6 +174,25 @@
         }
       ]
     },
+    "vexriscv_isa_smoke": {
+      "description": "VexRiscv Stage 2 ISA smoke tests (upstream hex, tohost monitoring)",
+      "tests": [
+        {
+          "name": "vexriscv_isa_add_test",
+          "description": "rv32ui-p-add: ADD instruction ISA compliance",
+          "timeout": 120,
+          "expected_duration": 15,
+          "notes": "Upstream VexRiscv ISA test, tohost=1 means PASS"
+        },
+        {
+          "name": "vexriscv_isa_addi_test",
+          "description": "rv32ui-p-addi: ADDI instruction ISA compliance",
+          "timeout": 120,
+          "expected_duration": 15,
+          "notes": "Upstream VexRiscv ISA test, tohost=1 means PASS"
+        }
+      ]
+    },
     "cpu_basic": {
       "description": "RV32I CPU basic verification",
       "tests": [
@@ -382,6 +401,7 @@
     "rv32i_cpu": ["rv32i_basic_test", "rv32i_debug_load_test"],
     "rv32i_debug": ["rv32i_ebreak_simple_test", "rv32i_breakpoint_test"],
     "rv32i_pipeline": ["rv32i_wb_forward_timing_test", "rv32i_load_use_stall_test"],
+    "vexriscv_isa": ["vexriscv_isa_add_test", "vexriscv_isa_addi_test"],
     "archived_td4": ["axiuart_cpu_simple_mem_test", "axiuart_cpu_memory_test", "axiuart_cpu_debug_test", "axiuart_cpu_mmio_led_test", "axiuart_cpu_br_test"]
   },
   "default_config": {
