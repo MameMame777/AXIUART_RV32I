@@ -470,6 +470,68 @@ Cycle N+1: Decode reads x1 from register file OR buffer
 
 ---
 
+---
+
+## Signal Reference & Timing
+
+- **Top-level 命令/データバス（IBus / DBus）:** `iBus_cmd_valid`, `iBus_cmd_ready`, `iBus_cmd_payload_pc`, `iBus_rsp_valid`, `iBus_rsp_payload_inst`, `iBus_rsp_payload_error` — 命令フェッチの有効/受理ハンドシェイクと命令ペイロード。
+- **データバス主要信号:** `dBus_cmd_valid`, `dBus_cmd_ready`, `dBus_cmd_payload_wr`, `dBus_cmd_payload_mask`, `dBus_cmd_payload_address`, `dBus_cmd_payload_data`, `dBus_cmd_payload_size`, `dBus_rsp_ready`, `dBus_rsp_data`, `dBus_rsp_error` — ロード/ストアの有効/受理、書き込みビットマスク、応答データ。
+- **デバッグ:** `debug_bus_cmd_valid`, `debug_bus_cmd_ready`, `debug_bus_cmd_payload_wr`, `debug_bus_cmd_payload_address`, `debug_bus_cmd_payload_data`, `debug_bus_rsp_data`, `debug_resetOut`。
+- **クロック／リセット:** `clk`, `reset`（同期アクティブ高）。
+
+- **パイプライン内部（設計上の概念的信号）:** `isValid`, `isStuck`, `isFiring`（各ステージの調停信号）、`WB->RegFile` 書き戻し、`WB_Buffer`（`bypassWriteBackBuffer` による WB バッファの有効化により追加される `{valid, address, data}` バッファ）。
+
+### 重要動作ポイント（信号の振る舞い）
+
+- レジスタファイルは同期読み（`RegFilePlugin` の `SYNC`）のため、デコード段でのレジスタ読みは1サイクル遅延を伴う。これを補うために `HazardSimplePlugin` がフォワーディングとストールを制御する。
+- フォワーディング優先度は `EX > MEM > WB buffer > WB > RegFile`。WB と DECODE の同一サイクル競合は `WB_Buffer` が優先的に提供される。
+- ロード→使用（load-use）ハザードは基本的にストールで解決される（ロードはメモリ応答が必要なため）。
+- 分岐は `EXECUTE` で解決され、予測器は無効のため命令は1〜2命令分フラッシュされ得る。
+- シフタは `LightShifterPlugin` により逐次シフト（1〜32サイクル）を行うため長シフトはマルチサイクルになる。
+- 多くの例外検出（アラインメントやアクセスフォルト等）は軽量化のため無効化されている（設計上のトレードオフ）。
+
+### パイプラインタイミング例（概念図）
+
+下は典型的な命令フロー／ハザード時の簡易タイミング図（Mermaidを利用）。横軸は時間（サイクル）、縦にパイプラインステージを並べています。
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant IBus as IBus
+  participant DE as DECODE
+  participant EX as EXECUTE
+  participant M as MEMORY
+  participant WB as WRITEBACK
+  participant WBB as WB_Buffer
+
+  Note over IBus,DE: Cycle 0
+  IBus->>DE: iBus_rsp_payload_inst (valid)
+  Note over DE: DE reads operands (may sample WBB)
+
+  Note over DE,EX: Cycle 1
+  DE->>EX: instruction proceeds (isFiring)
+  activate EX
+  EX->>M: ALU result / load request
+  deactivate EX
+
+  Note over M,WB: Cycle 2
+  M->>WB: memory response (load data) or store ack
+  WB->>WBB: capture writeback into WB_Buffer (if enabled)
+
+  Note over DE: Cycle 3 (subsequent decode)
+  DE->>WBB: read-forward request (if decode needs WB result)
+  WBB-->>DE: forwarded data (higher priority than RegFile)
+
+  %% load-use stall example
+  Note over EX,M: If EX issues load
+  EX->>M: load cmd (valid)
+  M-->>EX: response arrives next cycle -> DE must stall if following instruction needs loaded reg
+```
+
+上図は抽象化された概念図です。実際の信号名やタイミングは `rtl/cpu/VexRiscv.v` のポートおよび各プラグインの実装に準拠します。
+
+---
+
 ## Related Documentation
 
 - **[Pipeline Operation](vexriscv_pipeline_operation.md)** - Detailed 4-stage pipeline flow
