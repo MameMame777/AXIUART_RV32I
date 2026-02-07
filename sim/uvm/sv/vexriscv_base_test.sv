@@ -60,9 +60,12 @@ class vexriscv_base_test extends uvm_test;
         
         // Get configuration from command line
         if (!uvm_config_db#(string)::get(this, "", "hex_file", hex_file_path)) begin
-            `uvm_info(get_type_name(), 
-                "No hex_file specified via +UVM_CONFIG, will use default", 
-                UVM_MEDIUM)
+            // Try +HEX_FILE=<path> plusarg (for ISA tests)
+            if (!$value$plusargs("HEX_FILE=%s", hex_file_path)) begin
+                `uvm_info(get_type_name(),
+                    "No hex_file specified via config_db or +HEX_FILE, will use default",
+                    UVM_MEDIUM)
+            end
         end
         
         if (!uvm_config_db#(int)::get(this, "", "timeout_cycles", timeout_cycles)) begin
@@ -135,11 +138,10 @@ class vexriscv_base_test extends uvm_test;
             $sformatf("Loading hex file: %s (translate=%0d)", hex_path, translate_addr), 
             UVM_LOW)
         
-        // Get workspace root
-        workspace_root = "e:\\Nautilus\\workspace\\fpgawork\\AXIUART_RV32I";
-        
-        // Build full path
-        full_hex_path = {workspace_root, "\\", hex_path};
+        // Build full path relative to simulation directory (sim/uvm/tb/)
+        // Going 3 levels up reaches the workspace root
+        workspace_root = "../../..";
+        full_hex_path = {workspace_root, "/", hex_path};
         
         // Build Python command to load hex file
         python_cmd = $sformatf(
