@@ -17,8 +17,12 @@ class axiuart_cpu_simple_mem_test extends axiuart_base_test;
     localparam bit [31:0] CPU_MEM_CTRL     = axiuart_reg_pkg::REG_CPU_MEM_CTRL;
     
     // CPU_MEM_CTRL bits (check actual bitfield from REG_CPU_MEM_CTRL definition)
-    localparam bit [31:0] MEM_RD_REQ = 32'h0000_0010;  // Bit 4: read request
-    localparam bit [31:0] MEM_WR_REQ = 32'h0000_0020;  // Bit 5: write request
+    localparam bit [31:0] MEM_RD_REQ    = 32'h0000_0010;  // Bit 4: read request
+    localparam bit [31:0] MEM_WR_REQ    = 32'h0000_0020;  // Bit 5: write request
+    localparam bit [31:0] MEM_BE_FULL   = 32'h0000_000F;  // Bits[3:0]: full word byte enables
+    localparam bit [31:0] MEM_HALT      = 32'h0000_0100;  // Bit 8: halt CPU (must stay SET during debug access)
+    localparam int        CTRL_BUSY_BIT   = 6;            // Bit 6: busy flag
+    localparam int        CTRL_HALTED_BIT = 9;            // Bit 9: CPU is halted (read-only)
     
     function new(string name = "axiuart_cpu_simple_mem_test", uvm_component parent = null);
         super.new(name, parent);
@@ -60,6 +64,9 @@ class axiuart_cpu_simple_mem_test extends axiuart_base_test;
     
     // Write to CPU memory (32-bit word address and data for RV32I)
     task write_mem_debug(input bit [10:0] word_addr, input bit [31:0] data);
+        bit [31:0] ctrl_val;
+        int timeout;
+        
         `uvm_info(get_type_name(), 
             $sformatf(">>> WRITE: word_addr=0x%03X data=0x%08X", word_addr, data), UVM_LOW)
         
@@ -74,17 +81,32 @@ class axiuart_cpu_simple_mem_test extends axiuart_base_test;
         `uvm_info(get_type_name(), "  - Write data set", UVM_MEDIUM)
         #1us;
         
-        // Trigger write
-        write_reg(CPU_MEM_CTRL, MEM_WR_REQ);
-        `uvm_info(get_type_name(), "  - Write triggered (bit 1)", UVM_LOW)
-        #20us;  // Extra time for completion
+        // Trigger write with byte enables AND keep halt bit set
+        write_reg(CPU_MEM_CTRL, MEM_WR_REQ | MEM_BE_FULL | MEM_HALT);
+        `uvm_info(get_type_name(), "  - Write triggered (WR_REQ + BE + HALT)", UVM_LOW)
+        
+        // Wait for completion (poll BUSY bit)
+        timeout = 0;
+        forever begin
+            #50ns;
+            read_reg(CPU_MEM_CTRL, ctrl_val);
+            if (ctrl_val[CTRL_BUSY_BIT] === 1'b0) break;
+            timeout++;
+            if (timeout > 200) begin
+                `uvm_error(get_type_name(),
+                    $sformatf("Timeout writing to memory word_addr 0x%03X", word_addr))
+                break;
+            end
+        end
         
         `uvm_info(get_type_name(), "  - Write complete", UVM_LOW)
     endtask
     
     // Read from CPU memory - Scoreboard will verify response
     task read_mem_debug(input bit [10:0] word_addr);
+        bit [31:0] ctrl_val;
         bit [31:0] dummy_data;
+        int timeout;
         
         `uvm_info(get_type_name(), 
             $sformatf("<<< READ: word_addr=0x%03X", word_addr), UVM_LOW)
@@ -95,10 +117,23 @@ class axiuart_cpu_simple_mem_test extends axiuart_base_test;
         `uvm_info(get_type_name(), "  - Address set", UVM_MEDIUM)
         #1us;
         
-        // Trigger read
-        write_reg(CPU_MEM_CTRL, MEM_RD_REQ);
-        `uvm_info(get_type_name(), "  - Read triggered (bit 0)", UVM_LOW)
-        #20us;  // Extra time for completion
+        // Trigger read (keep halt bit set)
+        write_reg(CPU_MEM_CTRL, MEM_RD_REQ | MEM_HALT);
+        `uvm_info(get_type_name(), "  - Read triggered (RD_REQ + HALT)", UVM_LOW)
+        
+        // Wait for completion (poll BUSY bit)
+        timeout = 0;
+        forever begin
+            #50ns;
+            read_reg(CPU_MEM_CTRL, ctrl_val);
+            if (ctrl_val[CTRL_BUSY_BIT] === 1'b0) break;
+            timeout++;
+            if (timeout > 200) begin
+                `uvm_error(get_type_name(),
+                    $sformatf("Timeout reading from memory word_addr 0x%03X", word_addr))
+                break;
+            end
+        end
         
         // Read result (Scoreboard will verify automatically)
         read_reg(CPU_MEM_RDATA, dummy_data);
@@ -121,6 +156,21 @@ class axiuart_cpu_simple_mem_test extends axiuart_base_test;
         // Reset DUT
         do_reset();
         #50us;
+        
+        // Verify CPU is halted after reset
+        begin
+            bit [31:0] ctrl_rd;
+            read_reg(CPU_MEM_CTRL, ctrl_rd);
+            if (ctrl_rd[CTRL_HALTED_BIT] !== 1'b1) begin
+                `uvm_info(get_type_name(), "CPU not halted after reset, sending halt command", UVM_LOW)
+                write_reg(CPU_MEM_CTRL, MEM_HALT);
+                #10us;
+                read_reg(CPU_MEM_CTRL, ctrl_rd);
+                if (ctrl_rd[CTRL_HALTED_BIT] !== 1'b1)
+                    `uvm_error(get_type_name(), $sformatf("CPU still not halted! CTRL=0x%08X", ctrl_rd))
+            end
+            `uvm_info(get_type_name(), $sformatf("CPU_MEM_CTRL=0x%08X (halted=%0b)", ctrl_rd, ctrl_rd[CTRL_HALTED_BIT]), UVM_LOW)
+        end
         
         `uvm_info(get_type_name(), "\n--- Note: RV32I CPU debug interface allows memory access anytime ---", UVM_LOW)
         
