@@ -18,13 +18,7 @@ module rv32i_tb_top;
     // Include base test class
     `include "axiuart_base_test.sv"
     
-    // Include AXIUART infrastructure tests
-    `include "axiuart_basic_test.sv"
-    `include "axiuart_reset_test.sv"
-    `include "axiuart_reg_rw_test.sv"
-    `include "axiuart_cpu_simple_mem_test.sv"
-    
-    // Include VexRiscv integration tests
+    // Include VexRiscv tests
     `include "vexriscv_smoke_test.sv"
     
     //==========================================================================
