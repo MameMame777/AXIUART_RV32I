@@ -302,8 +302,8 @@ module vexriscv_wrapper (
     
     vexriscv_mem_crossbar mem_crossbar (
         .clk(clk),
-        .rst(cpu_reset || rst),
-        
+        .rst(rst),
+
         // IBus
         .iBus_cmd_valid(mem_iBus_cmd_valid),
         .iBus_cmd_ready(mem_iBus_cmd_ready),
