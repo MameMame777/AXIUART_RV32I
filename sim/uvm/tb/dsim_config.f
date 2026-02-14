@@ -112,12 +112,19 @@
 ../../tests/vexriscv_dbus_access_test.sv
 
 # VexRiscv Stage 2 ISA Tests (Issue #50)
-../../tests/vexriscv_isa_test.sv
-../../tests/vexriscv_isa_add_test.sv
-../../tests/vexriscv_isa_addi_test.sv
+# ../../tests/vexriscv_isa_test.sv  # TODO: File not yet created
+# ../../tests/vexriscv_isa_add_test.sv  # Depends on vexriscv_isa_test
+# ../../tests/vexriscv_isa_addi_test.sv  # Depends on vexriscv_isa_test
 
 # Issue #13 Investigation - LED MMIO via UART-AXI path
 ../../tests/vexriscv_led_uart_test.sv
+
+# Issue #54 - UART Bridge submodule unit tests
++incdir+../../tests/uart_bridge
+../../tests/uart_bridge/uart_bridge_base_test.sv
+../../tests/uart_bridge/uart_crc8_test.sv
+../../tests/uart_bridge/uart_fifo_sync_test.sv
+../../tests/uart_bridge/uart_frame_parser_test.sv
 
 # Testbench Top Module (includes package and test_lib)
 +incdir+.
