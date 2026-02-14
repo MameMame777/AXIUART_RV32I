@@ -46,6 +46,41 @@
         }
       ]
     },
+    "uart_unit": {
+      "description": "UART Bridge submodule unit tests (Crc8, Frame_Parser, fifo_sync, Uart_Rx, Uart_Tx)",
+      "tests": [
+        {
+          "name": "uart_unit_crc8_test",
+          "description": "Crc8_Calculator known vectors, zero data, all-ones data",
+          "timeout": 60,
+          "expected_duration": 5
+        },
+        {
+          "name": "uart_unit_frame_parser_test",
+          "description": "Frame_Parser valid frame, CRC error, truncated-frame timeout",
+          "timeout": 60,
+          "expected_duration": 10
+        },
+        {
+          "name": "uart_unit_fifo_sync_test",
+          "description": "fifo_sync full/empty boundary and simultaneous read/write",
+          "timeout": 60,
+          "expected_duration": 5
+        },
+        {
+          "name": "uart_unit_uart_rx_test",
+          "description": "Uart_Rx valid frame decode, false-start rejection, soft-reset abort",
+          "timeout": 60,
+          "expected_duration": 6
+        },
+        {
+          "name": "uart_unit_uart_tx_test",
+          "description": "Uart_Tx framing, CTS gate behavior, soft-reset abort",
+          "timeout": 60,
+          "expected_duration": 6
+        }
+      ]
+    },
     "vexriscv_smoke": {
       "description": "VexRiscv Stage 1 smoke tests (3 tests, <20s)",
       "tests": [
@@ -620,12 +655,6 @@
     "infrastructure": ["axiuart_reset_test", "axiuart_basic_test"],
     "register_block": ["axiuart_reg_rw_test"],
     "bram_access": ["axiuart_cpu_simple_mem_test"],
-<<<<<<< HEAD
-    "rv32i_cpu": ["rv32i_basic_test", "rv32i_debug_load_test"],
-    "rv32i_debug": ["rv32i_ebreak_simple_test", "rv32i_breakpoint_test"],
-    "rv32i_pipeline": ["rv32i_wb_forward_timing_test", "rv32i_load_use_stall_test"],
-    "vexriscv_isa": ["vexriscv_isa_add_test", "vexriscv_isa_addi_test"],
-=======
     "rv32i_alu_imm": ["rv32i_basic_imm_test", "rv32i_upper_imm_test", "rv32i_imm_logic_test", "rv32i_shift_imm_test"],
     "rv32i_alu_reg": ["rv32i_reg_alu_test", "rv32i_reg_shift_test"],
     "rv32i_memory": ["rv32i_load_simple_test", "rv32i_store_simple_test"],
@@ -637,7 +666,8 @@
     "vexriscv_hazard": ["vexriscv_ex_bypass_test", "vexriscv_mem_bypass_test", "vexriscv_wb_bypass_test", "vexriscv_load_use_stall_test"],
     "vexriscv_bus": ["vexriscv_dbus_access_test"],
     "vexriscv_integration": ["vexriscv_smoke_test", "vexriscv_led_uart_test"],
->>>>>>> 25cfe9ff5d15d694025c10e9f1f6148311820aa2
+    "vexriscv_isa": ["vexriscv_isa_add_test", "vexriscv_isa_addi_test"],
+    "uart_unit": ["uart_unit_crc8_test", "uart_unit_frame_parser_test", "uart_unit_fifo_sync_test", "uart_unit_uart_rx_test", "uart_unit_uart_tx_test"],
     "archived_td4": ["axiuart_cpu_simple_mem_test", "axiuart_cpu_memory_test", "axiuart_cpu_debug_test", "axiuart_cpu_mmio_led_test", "axiuart_cpu_br_test"]
   },
   "stage_mapping": {

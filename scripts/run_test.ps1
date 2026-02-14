@@ -65,6 +65,22 @@ $LogDir = Join-Path $Workspace "sim\exec\logs"
 $WaveDir = Join-Path $Workspace "sim\exec\wave"
 $ConfigFile = "dsim_config.f"
 $TopModule = "rv32i_tb_top"
+$IsUvmTest = $true
+
+# Test routing (default: full UVM testbench)
+$unitTestRouting = @{
+    "uart_unit_crc8_test" = @{ ConfigFile = "dsim_uart_unit_config.f"; TopModule = "uart_unit_crc8_tb"; IsUvmTest = $false }
+    "uart_unit_frame_parser_test" = @{ ConfigFile = "dsim_uart_unit_config.f"; TopModule = "uart_unit_frame_parser_tb"; IsUvmTest = $false }
+    "uart_unit_fifo_sync_test" = @{ ConfigFile = "dsim_uart_unit_config.f"; TopModule = "uart_unit_fifo_sync_tb"; IsUvmTest = $false }
+    "uart_unit_uart_rx_test" = @{ ConfigFile = "dsim_uart_unit_config.f"; TopModule = "uart_unit_uart_rx_tb"; IsUvmTest = $false }
+    "uart_unit_uart_tx_test" = @{ ConfigFile = "dsim_uart_unit_config.f"; TopModule = "uart_unit_uart_tx_tb"; IsUvmTest = $false }
+}
+
+if ($unitTestRouting.ContainsKey($TestName)) {
+    $ConfigFile = $unitTestRouting[$TestName].ConfigFile
+    $TopModule = $unitTestRouting[$TestName].TopModule
+    $IsUvmTest = $unitTestRouting[$TestName].IsUvmTest
+}
 
 # Setup environment
 function Setup-Environment {
@@ -201,17 +217,22 @@ function Run-Dsim {
     # Build command arguments
     $dsimExe = Join-Path $DsimHome "bin\dsim.exe"
     $args = @(
-        "-uvm", "1.2",
         "-timescale", "1ns/1ps",
         "-f", $ConfigFile,
         "-top", $TopModule,
-        "+UVM_TESTNAME=$TestName",
-        "+UVM_VERBOSITY=$Verbosity",
         "-sv_seed", $Seed,
-        "-l", $logFile,
-        "+UVM_PHASE_TRACE",
-        "+UVM_OBJECTION_TRACE"
+        "-l", $logFile
     )
+
+    if ($IsUvmTest) {
+        $args += @(
+            "-uvm", "1.2",
+            "+UVM_TESTNAME=$TestName",
+            "+UVM_VERBOSITY=$Verbosity",
+            "+UVM_PHASE_TRACE",
+            "+UVM_OBJECTION_TRACE"
+        )
+    }
 
     if ($Waves) {
         $args += @("-waves", $waveFile)
@@ -255,6 +276,8 @@ function Run-Dsim {
     $uvmErrors = 0
     $uvmFatals = 0
     $testPass = $false
+    $simErrors = 0
+    $simFatals = 0
 
     if (Test-Path $logFile) {
         $logContent = Get-Content $logFile
@@ -267,6 +290,12 @@ function Run-Dsim {
             if ($line -match "^\s*UVM_FATAL\s*:\s*(\d+)") {
                 $uvmFatals = [int]$Matches[1]
             }
+            if ($line -match '^=E:|\$error') {
+                $simErrors++
+            }
+            if ($line -match '^=F:|\$fatal|TEST FAILED') {
+                $simFatals++
+            }
             if ($line -match "TEST PASSED|PASS:\s") {
                 $testPass = $true
             }
@@ -274,8 +303,14 @@ function Run-Dsim {
 
         Write-Host "UVM Errors: $uvmErrors"
         Write-Host "UVM Fatals: $uvmFatals"
+        if ($simErrors -gt 0) {
+            Write-Host "Sim Errors: $simErrors"
+        }
+        if ($simFatals -gt 0) {
+            Write-Host "Sim Fatals: $simFatals"
+        }
 
-        if ($uvmErrors -eq 0 -and $uvmFatals -eq 0 -and $exitCode -eq 0) {
+        if ($uvmErrors -eq 0 -and $uvmFatals -eq 0 -and $simErrors -eq 0 -and $simFatals -eq 0 -and $exitCode -eq 0) {
             Write-Host "Status: PASS"
             $testPass = $true
         } else {
