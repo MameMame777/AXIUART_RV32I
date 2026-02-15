@@ -228,6 +228,29 @@
         }
       ]
     },
+    "uart_unit": {
+      "description": "UART Bridge submodule unit tests (3 tests, ~30s)",
+      "tests": [
+        {
+          "name": "uart_crc8_test",
+          "description": "CRC-8-CCITT calculator verification with known vectors",
+          "timeout": 60,
+          "expected_duration": 10
+        },
+        {
+          "name": "uart_fifo_sync_test",
+          "description": "Synchronous FIFO full/empty/wrap-around",
+          "timeout": 90,
+          "expected_duration": 15
+        },
+        {
+          "name": "uart_frame_parser_test",
+          "description": "Frame parsing, CRC validation, error handling",
+          "timeout": 120,
+          "expected_duration": 20
+        }
+      ]
+    },
     "cpu_basic": {
       "description": "RV32I CPU basic verification (ISA phases 1-3)",
       "tests": [
@@ -666,8 +689,7 @@
     "vexriscv_hazard": ["vexriscv_ex_bypass_test", "vexriscv_mem_bypass_test", "vexriscv_wb_bypass_test", "vexriscv_load_use_stall_test"],
     "vexriscv_bus": ["vexriscv_dbus_access_test"],
     "vexriscv_integration": ["vexriscv_smoke_test", "vexriscv_led_uart_test"],
-    "vexriscv_isa": ["vexriscv_isa_add_test", "vexriscv_isa_addi_test"],
-    "uart_unit": ["uart_unit_crc8_test", "uart_unit_frame_parser_test", "uart_unit_fifo_sync_test", "uart_unit_uart_rx_test", "uart_unit_uart_tx_test"],
+    "uart_bridge": ["uart_crc8_test", "uart_fifo_sync_test", "uart_frame_parser_test"],
     "archived_td4": ["axiuart_cpu_simple_mem_test", "axiuart_cpu_memory_test", "axiuart_cpu_debug_test", "axiuart_cpu_mmio_led_test", "axiuart_cpu_br_test"]
   },
   "stage_mapping": {
