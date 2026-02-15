@@ -36,7 +36,8 @@ class vexriscv_isa_test extends vexriscv_base_test;
         use_tohost_checking = 1;
 
         // ISA tests may take longer than unit tests (e.g., rv32ui-p-add takes ~1924 cycles)
-        timeout_cycles = 10000;
+        // Load/store tests with data sections need more cycles due to memory latency
+        timeout_cycles = 50000;
 
         // Auto-start CPU after hex load (already default=1 in base)
         auto_start_cpu = 1;
