@@ -603,6 +603,29 @@
         }
       ]
     },
+    "vexriscv_exception": {
+      "description": "VexRiscv exception and CSR tests (Issue #52)",
+      "tests": [
+        {
+          "name": "rv32i_perfcount_test",
+          "description": "Performance counter CSRs (mcycle, minstret)",
+          "timeout": 60,
+          "expected_duration": 10
+        },
+        {
+          "name": "rv32i_ebreak_simple_test",
+          "description": "EBREAK CSR verification (mepc, mcause, mtvec)",
+          "timeout": 60,
+          "expected_duration": 15
+        },
+        {
+          "name": "rv32i_exception_handler_test",
+          "description": "Full trap handler (EBREAK + ECALL)",
+          "timeout": 120,
+          "expected_duration": 30
+        }
+      ]
+    },
     "cpu_led": {
       "description": "RV32I LED MMIO verification",
       "tests": [

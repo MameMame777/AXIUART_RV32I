@@ -81,6 +81,12 @@ if ($unitTestRouting.ContainsKey($TestName)) {
     $TopModule = $unitTestRouting[$TestName].TopModule
     $IsUvmTest = $unitTestRouting[$TestName].IsUvmTest
 }
+# RV32I/VexRiscv tests use dedicated configuration
+elseif ($TestName -match '^(rv32i_|vexriscv_)') {
+    $ConfigFile = "dsim_config_rv32i.f"
+    $TopModule = "rv32i_tb_top"
+    $IsUvmTest = $true
+}
 
 # Setup environment
 function Setup-Environment {
