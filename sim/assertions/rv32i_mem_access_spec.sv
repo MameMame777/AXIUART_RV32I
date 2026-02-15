@@ -30,14 +30,14 @@ module rv32i_mem_access_spec (
     input logic [31:0] ram_wdata_mem,    // CPU write data
     
     // Port B (Debug/external access)
-    input logic [10:0] dbg_mem_addr,
+    input logic [11:0] dbg_mem_addr,
     input logic [31:0] dbg_mem_wdata,
     input logic [31:0] dbg_mem_rdata,
     input logic [3:0]  dbg_mem_we,
     input logic        dbg_mem_re,
     
     // Register Block memory interface
-    input logic [10:0] rv32i_mem_addr,
+    input logic [11:0] rv32i_mem_addr,
     input logic [31:0] rv32i_mem_wdata,
     input logic [31:0] rv32i_mem_rdata,
     input logic [3:0]  rv32i_mem_we,

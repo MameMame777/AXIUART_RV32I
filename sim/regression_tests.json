@@ -228,6 +228,233 @@
         }
       ]
     },
+    "vexriscv_isa_rv32i": {
+      "description": "VexRiscv Stage 2 full RV32I ISA tests (37 upstream tests, Issue #51)",
+      "tests": [
+        {
+          "name": "vexriscv_isa_add_test",
+          "description": "rv32ui-p-add: ADD instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_addi_test",
+          "description": "rv32ui-p-addi: ADDI instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_sub_test",
+          "description": "rv32ui-p-sub: SUB instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_and_test",
+          "description": "rv32ui-p-and: AND instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_andi_test",
+          "description": "rv32ui-p-andi: ANDI instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_or_test",
+          "description": "rv32ui-p-or: OR instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_ori_test",
+          "description": "rv32ui-p-ori: ORI instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_xor_test",
+          "description": "rv32ui-p-xor: XOR instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_xori_test",
+          "description": "rv32ui-p-xori: XORI instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_lui_test",
+          "description": "rv32ui-p-lui: LUI instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_sll_test",
+          "description": "rv32ui-p-sll: SLL instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_slli_test",
+          "description": "rv32ui-p-slli: SLLI instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_srl_test",
+          "description": "rv32ui-p-srl: SRL instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_srli_test",
+          "description": "rv32ui-p-srli: SRLI instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_sra_test",
+          "description": "rv32ui-p-sra: SRA instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_srai_test",
+          "description": "rv32ui-p-srai: SRAI instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_slt_test",
+          "description": "rv32ui-p-slt: SLT instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_slti_test",
+          "description": "rv32ui-p-slti: SLTI instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_sltu_test",
+          "description": "rv32ui-p-sltu: SLTU instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_sltiu_test",
+          "description": "rv32ui-p-sltiu: SLTIU instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_beq_test",
+          "description": "rv32ui-p-beq: BEQ instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_bne_test",
+          "description": "rv32ui-p-bne: BNE instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_blt_test",
+          "description": "rv32ui-p-blt: BLT instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_bge_test",
+          "description": "rv32ui-p-bge: BGE instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_bltu_test",
+          "description": "rv32ui-p-bltu: BLTU instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_bgeu_test",
+          "description": "rv32ui-p-bgeu: BGEU instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_jal_test",
+          "description": "rv32ui-p-jal: JAL instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_jalr_test",
+          "description": "rv32ui-p-jalr: JALR instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_auipc_test",
+          "description": "rv32ui-p-auipc: AUIPC instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_lw_test",
+          "description": "rv32ui-p-lw: LW instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_lh_test",
+          "description": "rv32ui-p-lh: LH instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_lhu_test",
+          "description": "rv32ui-p-lhu: LHU instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_lb_test",
+          "description": "rv32ui-p-lb: LB instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_lbu_test",
+          "description": "rv32ui-p-lbu: LBU instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_sw_test",
+          "description": "rv32ui-p-sw: SW instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_sh_test",
+          "description": "rv32ui-p-sh: SH instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_sb_test",
+          "description": "rv32ui-p-sb: SB instruction",
+          "timeout": 120,
+          "expected_duration": 15
+        }
+      ]
+    },
     "uart_unit": {
       "description": "UART Bridge submodule unit tests (3 tests, ~30s)",
       "tests": [
@@ -629,6 +856,228 @@
           "description": "VexRiscv LED+UART integration",
           "timeout": 180,
           "expected_duration": 30
+        },
+        {
+          "name": "vexriscv_isa_add_test",
+          "description": "ISA: ADD",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_addi_test",
+          "description": "ISA: ADDI",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_sub_test",
+          "description": "ISA: SUB",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_and_test",
+          "description": "ISA: AND",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_andi_test",
+          "description": "ISA: ANDI",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_or_test",
+          "description": "ISA: OR",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_ori_test",
+          "description": "ISA: ORI",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_xor_test",
+          "description": "ISA: XOR",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_xori_test",
+          "description": "ISA: XORI",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_lui_test",
+          "description": "ISA: LUI",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_sll_test",
+          "description": "ISA: SLL",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_slli_test",
+          "description": "ISA: SLLI",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_srl_test",
+          "description": "ISA: SRL",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_srli_test",
+          "description": "ISA: SRLI",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_sra_test",
+          "description": "ISA: SRA",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_srai_test",
+          "description": "ISA: SRAI",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_slt_test",
+          "description": "ISA: SLT",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_slti_test",
+          "description": "ISA: SLTI",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_sltu_test",
+          "description": "ISA: SLTU",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_sltiu_test",
+          "description": "ISA: SLTIU",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_beq_test",
+          "description": "ISA: BEQ",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_bne_test",
+          "description": "ISA: BNE",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_blt_test",
+          "description": "ISA: BLT",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_bge_test",
+          "description": "ISA: BGE",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_bltu_test",
+          "description": "ISA: BLTU",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_bgeu_test",
+          "description": "ISA: BGEU",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_jal_test",
+          "description": "ISA: JAL",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_jalr_test",
+          "description": "ISA: JALR",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_auipc_test",
+          "description": "ISA: AUIPC",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_lw_test",
+          "description": "ISA: LW",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_lh_test",
+          "description": "ISA: LH",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_lhu_test",
+          "description": "ISA: LHU",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_lb_test",
+          "description": "ISA: LB",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_lbu_test",
+          "description": "ISA: LBU",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_sw_test",
+          "description": "ISA: SW",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_sh_test",
+          "description": "ISA: SH",
+          "timeout": 120,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_isa_sb_test",
+          "description": "ISA: SB",
+          "timeout": 120,
+          "expected_duration": 15
         }
       ]
     },
@@ -688,12 +1137,14 @@
     "vexriscv_core": ["vexriscv_regfile_test", "vexriscv_alu_test", "vexriscv_pipeline_flow_test", "vexriscv_ibus_fetch_test", "vexriscv_memory_access_test"],
     "vexriscv_hazard": ["vexriscv_ex_bypass_test", "vexriscv_mem_bypass_test", "vexriscv_wb_bypass_test", "vexriscv_load_use_stall_test"],
     "vexriscv_bus": ["vexriscv_dbus_access_test"],
+    "vexriscv_isa_rv32i": ["vexriscv_isa_add_test", "vexriscv_isa_addi_test", "vexriscv_isa_sub_test", "vexriscv_isa_and_test", "vexriscv_isa_andi_test", "vexriscv_isa_or_test", "vexriscv_isa_ori_test", "vexriscv_isa_xor_test", "vexriscv_isa_xori_test", "vexriscv_isa_lui_test", "vexriscv_isa_sll_test", "vexriscv_isa_slli_test", "vexriscv_isa_srl_test", "vexriscv_isa_srli_test", "vexriscv_isa_sra_test", "vexriscv_isa_srai_test", "vexriscv_isa_slt_test", "vexriscv_isa_slti_test", "vexriscv_isa_sltu_test", "vexriscv_isa_sltiu_test", "vexriscv_isa_beq_test", "vexriscv_isa_bne_test", "vexriscv_isa_blt_test", "vexriscv_isa_bge_test", "vexriscv_isa_bltu_test", "vexriscv_isa_bgeu_test", "vexriscv_isa_jal_test", "vexriscv_isa_jalr_test", "vexriscv_isa_auipc_test", "vexriscv_isa_lw_test", "vexriscv_isa_lh_test", "vexriscv_isa_lhu_test", "vexriscv_isa_lb_test", "vexriscv_isa_lbu_test", "vexriscv_isa_sw_test", "vexriscv_isa_sh_test", "vexriscv_isa_sb_test"],
     "vexriscv_integration": ["vexriscv_smoke_test", "vexriscv_led_uart_test"],
     "uart_bridge": ["uart_crc8_test", "uart_fifo_sync_test", "uart_frame_parser_test"],
     "archived_td4": ["axiuart_cpu_simple_mem_test", "axiuart_cpu_memory_test", "axiuart_cpu_debug_test", "axiuart_cpu_mmio_led_test", "axiuart_cpu_br_test"]
   },
   "stage_mapping": {
-    "1": "vexriscv_stage1"
+    "1": "vexriscv_stage1",
+    "2": "vexriscv_isa_rv32i"
   },
   "default_config": {
     "verbosity": "UVM_LOW",
@@ -715,15 +1166,17 @@
       "cpu_debug": "RV32I debug features (EBREAK, breakpoints)",
       "cpu_exception": "RV32I exception handling and performance counters",
       "cpu_led": "RV32I LED MMIO verification",
-      "full": "Complete regression before commits - all 37 active tests",
+      "vexriscv_isa_rv32i": "VexRiscv Stage 2 full RV32I ISA (37 tests, <20 min)",
+      "full": "Complete regression before commits - all 74 active tests",
       "td4_archive": "Historical TD4 tests (disabled, not runnable)"
     },
-    "active_test_count": 37,
+    "active_test_count": 74,
     "archived_test_count": 5,
-    "total_test_classes": 42,
-    "last_updated": "2026-02-07",
+    "total_test_classes": 79,
+    "last_updated": "2026-02-15",
     "migration_status": "TD4→RV32I migration complete (2025-01-03)",
     "recent_changes": [
+      "2026-02-15: Issue #51 - full RV32I ISA suite (37 tests), full suite updated to 74 tests",
       "2026-02-07: Issue #49 - full suite updated to 37 tests, -Suite support added to run_regression.ps1",
       "2026-01-05: WB forwarding timing & load-use stall tests added"
     ]

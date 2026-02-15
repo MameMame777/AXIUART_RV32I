@@ -11,9 +11,9 @@
 //   - Waveform logging: $display transactions for debugging
 //
 // Memory Map (VexRiscv standard 0x80000000 base):
-//   0x80000000-0x80001FFF: Block RAM (8KB)
+//   0x80000000-0x80003FFF: Block RAM (16KB)
 //   0x8000407C:            LED register (MMIO)
-//   Debug interface uses word addresses (0-2047) independent of CPU address space
+//   Debug interface uses word addresses (0-4095) independent of CPU address space
 //
 // Port Allocation:
 //   - Port A: IBus (instruction fetch) or Debug (when halted)
@@ -69,7 +69,7 @@ module vexriscv_mem_crossbar (
     //=================================================================
     // Debug Interface (UART access when halted)
     //=================================================================
-    input  logic [10:0] dbg_mem_addr,              // Word address (0-2047)
+    input  logic [11:0] dbg_mem_addr,              // Word address (0-4095 for 16KB)
     input  logic [31:0] dbg_mem_wdata,
     output logic [31:0] dbg_mem_rdata,
     input  logic [3:0]  dbg_mem_we,                // Byte write enables
@@ -91,7 +91,7 @@ module vexriscv_mem_crossbar (
     
     // Port A wires (IBus / Debug)
     logic        ram_a_en;
-    logic [10:0] ram_a_addr;
+    logic [11:0] ram_a_addr;
     logic [3:0]  ram_a_we;
     logic [31:0] ram_a_wdata;
     logic [31:0] ram_a_rdata;
@@ -100,7 +100,7 @@ module vexriscv_mem_crossbar (
     
     // Port B wires (DBus / Debug)
     logic        ram_b_en;
-    logic [10:0] ram_b_addr;
+    logic [11:0] ram_b_addr;
     logic [3:0]  ram_b_we;
     logic [31:0] ram_b_wdata;
     logic [31:0] ram_b_rdata;
@@ -415,15 +415,15 @@ module vexriscv_mem_crossbar (
             // Use ibus_pc_buf during READ_WAIT since it was registered in previous cycle
             ram_a_en        = 1'b1;
             ram_a_addr      = (ibus_state == IBUS_IDLE) ? 
-                              11'((ibus_fifo_dout.pc - 32'h80000000) >> 2) :
-                              11'((ibus_pc_buf - 32'h80000000) >> 2);
+                              12'((ibus_fifo_dout.pc - 32'h80000000) >> 2) :
+                              12'((ibus_pc_buf - 32'h80000000) >> 2);
             ram_a_we        = 4'b0000;
             ram_a_wdata     = 32'h0;
             ram_a_byte_addr = (ibus_state == IBUS_IDLE) ? ibus_fifo_dout.pc : ibus_pc_buf;
         end else begin
             // Idle
             ram_a_en        = 1'b0;
-            ram_a_addr      = 11'h000;
+            ram_a_addr      = 12'h000;
             ram_a_we        = 4'b0000;
             ram_a_wdata     = 32'h0;
             ram_a_byte_addr = 32'h0;
@@ -458,7 +458,7 @@ module vexriscv_mem_crossbar (
         if (cpu_halted && (dbg_state != DBG_IDLE)) begin
             // Debug access (fallback to Port B if needed)
             ram_b_en        = 1'b0;  // Debug uses Port A primarily
-            ram_b_addr      = 11'h000;
+            ram_b_addr      = 12'h000;
             ram_b_we        = 4'b0000;
             ram_b_wdata     = 32'h0;
             ram_b_byte_addr = 32'h0;
@@ -467,8 +467,8 @@ module vexriscv_mem_crossbar (
             // DBus access - keep address stable during DBUS_ACCESS for BRAM output latency
             ram_b_en        = 1'b1;
             ram_b_addr      = (dbus_state == DBUS_IDLE) ?
-                              11'((dbus_fifo_dout.address - 32'h80000000) >> 2) :
-                              11'((dbus_addr_buf - 32'h80000000) >> 2);
+                              12'((dbus_fifo_dout.address - 32'h80000000) >> 2) :
+                              12'((dbus_addr_buf - 32'h80000000) >> 2);
             ram_b_we        = (dbus_state == DBUS_IDLE) ?
                               (dbus_fifo_dout.wr ? dbus_fifo_dout.mask : 4'b0000) :
                               4'b0000;  // Only write on first cycle
@@ -477,7 +477,7 @@ module vexriscv_mem_crossbar (
         end else begin
             // Idle
             ram_b_en        = 1'b0;
-            ram_b_addr      = 11'h000;
+            ram_b_addr      = 12'h000;
             ram_b_we        = 4'b0000;
             ram_b_wdata     = 32'h0;
             ram_b_byte_addr = 32'h0;
@@ -489,7 +489,7 @@ module vexriscv_mem_crossbar (
     //=================================================================
     
     vexriscv_blockram #(
-        .ADDR_WIDTH(11),
+        .ADDR_WIDTH(12),
         .DATA_WIDTH(32)
     ) blockram_inst (
         .clk(clk),
