@@ -34,7 +34,7 @@ module vexriscv_wrapper (
     //=================================================================
     // Debug Memory Interface (from Register_Block via AXIUART)
     //=================================================================
-    input  logic [10:0] rv32i_mem_addr,     // Word address (0-2047)
+    input  logic [11:0] rv32i_mem_addr,     // Word address (0-4095 for 16KB)
     input  logic [31:0] rv32i_mem_wdata,    // Write data
     output logic [31:0] rv32i_mem_rdata,    // Read data
     input  logic [3:0]  rv32i_mem_we,       // Byte write enables

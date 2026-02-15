@@ -18,10 +18,10 @@ class axiuart_scoreboard extends uvm_scoreboard;
     // Register write tracking: address -> expected data
     bit [31:0] write_shadow_regs[bit [31:0]];
     
-    // CPU Memory Debug tracking (32-bit words, 11-bit word address)
-    bit [31:0] cpu_memory_shadow[bit [10:0]];  // Shadow memory: 2048 words × 32-bit
-    bit [10:0] pending_cpu_mem_addr;            // Current CPU_MEM_ADDR value (word address)
-    bit [10:0] cpu_mem_read_queue[$];          // Queue of word addresses for pending reads
+    // CPU Memory Debug tracking (32-bit words, 12-bit word address)
+    bit [31:0] cpu_memory_shadow[bit [11:0]];  // Shadow memory: 4096 words × 32-bit
+    bit [11:0] pending_cpu_mem_addr;            // Current CPU_MEM_ADDR value (word address)
+    bit [11:0] cpu_mem_read_queue[$];          // Queue of word addresses for pending reads
     int cpu_memory_match_count;
     int cpu_memory_mismatch_count;
     int cpu_memory_write_count;
@@ -127,7 +127,7 @@ class axiuart_scoreboard extends uvm_scoreboard;
     virtual function void track_write_transaction(uart_transaction trans);
         // Track CPU memory debug operations
         if (trans.address == axiuart_reg_pkg::REG_CPU_MEM_ADDR) begin
-            pending_cpu_mem_addr = trans.data[12:2];  // Convert byte address to word address
+            pending_cpu_mem_addr = trans.data[13:2];  // Convert byte address to word address
             `uvm_info("SCOREBOARD", 
                 $sformatf("CPU_MEM_ADDR set: 0x%03X (word address from byte address 0x%08X)", 
                           pending_cpu_mem_addr, trans.data), 
@@ -168,7 +168,7 @@ class axiuart_scoreboard extends uvm_scoreboard;
         if (trans.address == axiuart_reg_pkg::REG_CPU_MEM_RDATA) begin
             bit [31:0] expected_mem_data;
             bit [31:0] actual_mem_data;
-            bit [10:0] read_addr;  // 11-bit word address (0x000-0x7FF)
+            bit [11:0] read_addr;  // 12-bit word address (0x000-0xFFF)
             
             cpu_memory_read_count++;
             actual_mem_data = trans.read_response_data;  // Full 32-bit value
