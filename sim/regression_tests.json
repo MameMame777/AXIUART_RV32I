@@ -46,6 +46,41 @@
         }
       ]
     },
+    "uart_unit": {
+      "description": "UART Bridge submodule unit tests (Crc8, Frame_Parser, fifo_sync, Uart_Rx, Uart_Tx)",
+      "tests": [
+        {
+          "name": "uart_unit_crc8_test",
+          "description": "Crc8_Calculator known vectors, zero data, all-ones data",
+          "timeout": 60,
+          "expected_duration": 5
+        },
+        {
+          "name": "uart_unit_frame_parser_test",
+          "description": "Frame_Parser valid frame, CRC error, truncated-frame timeout",
+          "timeout": 60,
+          "expected_duration": 10
+        },
+        {
+          "name": "uart_unit_fifo_sync_test",
+          "description": "fifo_sync full/empty boundary and simultaneous read/write",
+          "timeout": 60,
+          "expected_duration": 5
+        },
+        {
+          "name": "uart_unit_uart_rx_test",
+          "description": "Uart_Rx valid frame decode, false-start rejection, soft-reset abort",
+          "timeout": 60,
+          "expected_duration": 6
+        },
+        {
+          "name": "uart_unit_uart_tx_test",
+          "description": "Uart_Tx framing, CTS gate behavior, soft-reset abort",
+          "timeout": 60,
+          "expected_duration": 6
+        }
+      ]
+    },
     "vexriscv_smoke": {
       "description": "VexRiscv Stage 1 smoke tests (3 tests, <20s)",
       "tests": [
