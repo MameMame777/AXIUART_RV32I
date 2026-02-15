@@ -38,7 +38,7 @@
 - **Hazard Plugin**: bypassExecute, bypassMemory, bypassWriteBack, **bypassWriteBackBuffer** (critical fix)
 - **Reset Vector**: 0x00000000 (custom, not standard 0x80000000)
 - **Target Frequency**: 125MHz @ Zynq-7020
-- **Memory**: 8KB dual-port BlockRAM (0x0000_0000 - 0x0000_1FFF)
+- **Memory**: 16KB dual-port BlockRAM (0x0000_0000 - 0x0000_3FFF)
 
 **Key Difference from Existing Tests**:
 - Previous tests targeted custom 6-stage RV32I core
@@ -1057,24 +1057,26 @@ Get-ChildItem sim\tests\vexriscv*.sv
 
 | Category | Tests | Pass Rate | Duration | Status |
 |----------|-------|-----------|----------|--------|
-| Smoke | 3 | 100% | <15s | ⏳ Pending |
-| Hazard | 4 | 100% | <25s | ⏳ Pending |
-| Bus Protocol | 2 | 100% | <15s | ⏳ Pending |
-| **Total** | **9** | **100%** | **<60s** | ⏳ Pending |
+| Smoke | 3 | 100% | ~14s each | ✅ Complete |
+| Hazard | 4 | 100% | ~14s each | ✅ Complete |
+| Bus Protocol | 2 | 100% | ~14s each | ✅ Complete |
+| **Total** | **9** | **100%** | **~2 min** | ✅ Complete |
 
 ### 7.2 Stage 2 Success (Integration)
 
 | Suite | Tests | Pass Rate | Duration | Status |
 |-------|-------|-----------|----------|--------|
-| ALU & Logic | 10 | 100% | <2 min | ⏳ Pending |
-| Shifts | 6 | 100% | <3 min | ⏳ Pending |
-| Comparisons | 4 | 100% | <2 min | ⏳ Pending |
-| Branches | 6 | 100% | <4 min | ⏳ Pending |
-| Jumps | 3 | 100% | <2 min | ⏳ Pending |
-| Load/Store | 9 | 100% | <5 min | ⏳ Pending |
+| ALU & Logic | 10 | 100% | ~2.5 min | ✅ Complete |
+| Shifts | 6 | 100% | ~1.5 min | ✅ Complete |
+| Comparisons | 4 | 100% | ~1 min | ✅ Complete |
+| Branches | 6 | 100% | ~1.5 min | ✅ Complete |
+| Jumps | 3 | 100% | ~45s | ✅ Complete |
+| Load/Store | 8 | 100% | ~2 min | ✅ Complete |
 | Exception | 3 | 100% | <1 min | ⏳ Pending |
 | Compliance | 40+ | 100% | <20 min | ⏳ Pending |
-| **Total** | **81+** | **100%** | **<40 min** | ⏳ Pending |
+| **Total** | **37/81+** | **100%** | **~9 min** | 🔄 In Progress |
+
+**Note**: BRAM expanded from 8KB to 16KB to accommodate load/store test data sections (Issue #51).
 
 ### 7.3 Stage 3 Success (Assertions)
 
@@ -1171,6 +1173,11 @@ Get-ChildItem sim\tests\vexriscv*.sv
 
 ---
 
-**Document Status**: ✅ Complete  
-**Next Action**: Create Python hex loader and UVM base test class  
-**Review Date**: 2026-02-01
+**Document Status**: 🔄 Updated
+**Last Updated**: 2026-02-15
+**Recent Changes**:
+- Stage 1: All 9 unit tests passing (Issue #50)
+- Stage 2: All 37 RV32I ISA tests passing (Issue #51)
+- BRAM expanded from 8KB to 16KB for load/store test data sections
+- ISA test framework: `vexriscv_isa_test.sv` base class + 37 individual test classes
+- Regression suite: `vexriscv_isa_rv32i` (37 tests, ~9 min total)

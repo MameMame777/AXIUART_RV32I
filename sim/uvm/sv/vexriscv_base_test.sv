@@ -174,7 +174,7 @@ class vexriscv_base_test extends uvm_test;
         bit [31:0] base_addr, offset_addr, full_addr, data;
         int byte_count, record_type;
         bit [7:0] byte_data;
-        logic [10:0] word_addr;
+        logic [11:0] word_addr;
         int bytes_loaded = 0;
         int lines_processed = 0;
         
@@ -226,9 +226,9 @@ class vexriscv_base_test extends uvm_test;
                             full_addr = full_addr - 32'h8000_0000;
                         end
                         
-                        // Validate address range (8KB BRAM = 0x0000-0x1FFF)
-                        if (full_addr < 32'h0000_2000) begin
-                            word_addr = full_addr[12:2];
+                        // Validate address range (16KB BRAM = 0x0000-0x3FFF)
+                        if (full_addr < 32'h0000_4000) begin
+                            word_addr = full_addr[13:2];
                             
                             // Direct backdoor write to BRAM
                             $root.rv32i_tb_top.dut.vexriscv_inst.mem_crossbar.blockram_inst.mem[word_addr] = data;
@@ -241,7 +241,7 @@ class vexriscv_base_test extends uvm_test;
                                 UVM_HIGH)
                         end else begin
                             `uvm_warning(get_type_name(), 
-                                $sformatf("Address 0x%08X out of BRAM range (0x0000-0x1FFF), skipping", full_addr))
+                                $sformatf("Address 0x%08X out of BRAM range (0x0000-0x3FFF), skipping", full_addr))
                         end
                     end
                 end
@@ -483,14 +483,14 @@ class vexriscv_base_test extends uvm_test;
         // Backdoor memory read from VexRiscv BlockRAM
         // Returns 1 if address valid, 0 otherwise
         
-        // Check address range (8KB = 0x0000-0x1FFF)
-        if (addr < 32'h0000_2000) begin
+        // Check address range (16KB = 0x0000-0x3FFF)
+        if (addr < 32'h0000_4000) begin
             // Hierarchical path: $root → rv32i_tb_top → dut (AXIUART_Top) → vexriscv_inst → mem_crossbar → blockram_inst → mem array
-            data = $root.rv32i_tb_top.dut.vexriscv_inst.mem_crossbar.blockram_inst.mem[addr[12:2]];
+            data = $root.rv32i_tb_top.dut.vexriscv_inst.mem_crossbar.blockram_inst.mem[addr[13:2]];
             return 1;
         end else begin
-            `uvm_warning(get_type_name(), 
-                $sformatf("read_memory_backdoor: Address 0x%08X out of range (0x0000-0x1FFF)", addr))
+            `uvm_warning(get_type_name(),
+                $sformatf("read_memory_backdoor: Address 0x%08X out of range (0x0000-0x3FFF)", addr))
             data = 32'h00000000;
             return 0;
         end
@@ -498,10 +498,10 @@ class vexriscv_base_test extends uvm_test;
     
     virtual task write_memory_backdoor(bit [31:0] addr, bit [31:0] data);
         // Backdoor memory write to VexRiscv BlockRAM
-        logic [10:0] word_addr;
-        
-        // Check address range (0x80000000-0x80001FFF = 8KB)
-        if (addr >= 32'h8000_0000 && addr < 32'h8000_2000) begin
+        logic [11:0] word_addr;
+
+        // Check address range (0x80000000-0x80003FFF = 16KB)
+        if (addr >= 32'h8000_0000 && addr < 32'h8000_4000) begin
             // Convert CPU address to BRAM word address
             word_addr = (addr - 32'h8000_0000) >> 2;
             
@@ -513,7 +513,7 @@ class vexriscv_base_test extends uvm_test;
                 UVM_DEBUG)
         end else begin
             `uvm_error(get_type_name(), 
-                $sformatf("write_memory_backdoor: Address 0x%08X out of range (0x80000000-0x80001FFF)", addr))
+                $sformatf("write_memory_backdoor: Address 0x%08X out of range (0x80000000-0x80003FFF)", addr))
         end
     endtask
     

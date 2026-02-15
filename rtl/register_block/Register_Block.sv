@@ -30,7 +30,7 @@ module Register_Block #(
     input  logic [7:0]  fifo_status,           // FIFO status flags
     
     // RV32I CPU debug memory interface (32-bit, word-addressed)
-    output logic [10:0] rv32i_mem_addr,        // Word address (0-2047 for 8KB)
+    output logic [11:0] rv32i_mem_addr,        // Word address (0-4095 for 16KB)
     output logic [31:0] rv32i_mem_wdata,       // Write data
     input  logic [31:0] rv32i_mem_rdata,       // Read data
     output logic [3:0]  rv32i_mem_we,          // Byte write enables
@@ -357,9 +357,9 @@ module Register_Block #(
     logic [31:0] latched_mem_addr;
     logic [31:0] latched_mem_wdata;
     
-    // RV32I memory interface (Option A: mask address to 11 bits for 8KB = 2048 words)
+    // RV32I memory interface (12 bits for 16KB = 4096 words)
     // Use latched values during BUSY to prevent register overwrites from affecting ongoing operations
-    assign rv32i_mem_addr = rv32i_mem_busy ? latched_mem_addr[12:2] : cpu_mem_addr_reg[12:2];
+    assign rv32i_mem_addr = rv32i_mem_busy ? latched_mem_addr[13:2] : cpu_mem_addr_reg[13:2];
     assign rv32i_mem_wdata = rv32i_mem_busy ? latched_mem_wdata : cpu_mem_wdata_reg;
     // rv32i_mem_we and rv32i_mem_re assigned below in sequential logic
     
