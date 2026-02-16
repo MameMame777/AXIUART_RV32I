@@ -19,7 +19,7 @@ module rv32i_tb_top;
     `include "axiuart_test_pkg.sv"
 
     // Include VexRiscv tests
-    `include "vexriscv_smoke_test.sv"
+    // `include "vexriscv_smoke_test.sv"  // TODO: File not yet created
     
     //==========================================================================
     // CLOCK GENERATION

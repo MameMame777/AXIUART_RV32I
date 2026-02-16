@@ -35,7 +35,7 @@ module register_block_cpu_mem_assertions #(
     input wire                  axi_wready,
     
     // CPU Memory Debug Interface (monitored)
-    input wire [10:0]  rv32i_mem_addr,   // Word address to rv32i_core
+    input wire [11:0]  rv32i_mem_addr,   // Word address to rv32i_core
     input wire [31:0]  rv32i_mem_wdata,  // Write data to rv32i_core
     input wire [31:0]  rv32i_mem_rdata,  // Read data from rv32i_core
     input wire [3:0]   rv32i_mem_we,     // Byte write enable
@@ -78,14 +78,14 @@ module register_block_cpu_mem_assertions #(
     //==========================================================================
     // Write Tracking State
     //==========================================================================
-    logic [10:0] expected_addr;   // Expected word address (from cpu_mem_addr_reg[12:2])
+    logic [11:0] expected_addr;   // Expected word address (from cpu_mem_addr_reg[13:2])
     logic [31:0] expected_wdata;  // Expected write data
     logic        write_pending;   // Write operation in progress
     logic        read_pending;    // Read operation in progress
     
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            expected_addr     <= 11'h000;
+            expected_addr     <= 12'h000;
             expected_wdata    <= 32'h0000_0000;
             write_pending     <= 1'b0;
             read_pending      <= 1'b0;
@@ -95,7 +95,7 @@ module register_block_cpu_mem_assertions #(
             if (is_write_to_reg(REG_CPU_MEM_CTRL) && axi_wvalid && axi_wready && 
                 axi_wstrb[0] && axi_wdata[5]) begin
                 write_pending  <= 1'b1;
-                expected_addr  <= cpu_mem_addr_reg[12:2];  // Capture word address at WRITE_REQ trigger
+                expected_addr  <= cpu_mem_addr_reg[13:2];  // Capture word address at WRITE_REQ trigger
                 expected_wdata <= cpu_mem_wdata_reg;       // Capture write data at WRITE_REQ trigger
             end else if (write_pending && !rv32i_mem_busy) begin
                 write_pending <= 1'b0;
@@ -106,7 +106,7 @@ module register_block_cpu_mem_assertions #(
             if (is_write_to_reg(REG_CPU_MEM_CTRL) && axi_wvalid && axi_wready && 
                 axi_wstrb[0] && axi_wdata[4]) begin
                 read_pending  <= 1'b1;
-                expected_addr <= cpu_mem_addr_reg[12:2];  // Capture word address at READ_REQ trigger
+                expected_addr <= cpu_mem_addr_reg[13:2];  // Capture word address at READ_REQ trigger
             end else if (read_pending && !rv32i_mem_busy) begin
                 read_pending <= 1'b0;
             end
@@ -115,18 +115,18 @@ module register_block_cpu_mem_assertions #(
     
     //==========================================================================
     // Assertion 1: Address Register Consistency (DISABLED - checked by Assertion 7/9)
-    // NOTE: RTL uses mux: rv32i_mem_addr = rv32i_mem_busy ? latched_mem_addr[12:2] : cpu_mem_addr_reg[12:2]
+    // NOTE: RTL uses mux: rv32i_mem_addr = rv32i_mem_busy ? latched_mem_addr[12:2] : cpu_mem_addr_reg[13:2]
     // This assertion would fail during BUSY cycles when latched address is used.
     // Address correctness is verified by ast_write_addr_match and ast_read_addr_match instead.
     //==========================================================================
     // property addr_register_consistency;
     //     @(posedge clk) disable iff (!rst_n)
-    //     (rv32i_mem_addr == cpu_mem_addr_reg[12:2]);
+    //     (rv32i_mem_addr == cpu_mem_addr_reg[13:2]);
     // endproperty
     // 
     // ast_addr_consistency: assert property (addr_register_consistency)
     //     else $error("[CPU_MEM_ADDR] Address inconsistency: rv32i_mem_addr=0x%03X, expected=0x%03X (from cpu_mem_addr_reg=0x%08X)",
-    //                 rv32i_mem_addr, cpu_mem_addr_reg[12:2], cpu_mem_addr_reg);
+    //                 rv32i_mem_addr, cpu_mem_addr_reg[13:2], cpu_mem_addr_reg);
     
     //==========================================================================
     // Assertion 2: Write Data Register Consistency (DISABLED - checked by Assertion 8)
@@ -364,11 +364,11 @@ module register_block_cpu_mem_assertions #(
             if (is_write_to_reg(REG_CPU_MEM_CTRL) && axi_wvalid && axi_wready && axi_wstrb[0]) begin
                 if (axi_wdata[5]) begin
                     $display("[HW_CTRL_WRITE_REQ] Time=%0t cpu_mem_addr_reg=0x%08X (word_addr=0x%03X) cpu_mem_wdata_reg=0x%08X", 
-                             $time, cpu_mem_addr_reg, cpu_mem_addr_reg[12:2], cpu_mem_wdata_reg);
+                             $time, cpu_mem_addr_reg, cpu_mem_addr_reg[13:2], cpu_mem_wdata_reg);
                 end
                 if (axi_wdata[4]) begin
                     $display("[HW_CTRL_READ_REQ] Time=%0t cpu_mem_addr_reg=0x%08X (word_addr=0x%03X)", 
-                             $time, cpu_mem_addr_reg, cpu_mem_addr_reg[12:2]);
+                             $time, cpu_mem_addr_reg, cpu_mem_addr_reg[13:2]);
                 end
             end
             

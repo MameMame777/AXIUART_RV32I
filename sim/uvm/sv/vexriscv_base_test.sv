@@ -72,12 +72,8 @@ class vexriscv_base_test extends uvm_test;
             timeout_cycles = 10000;  // Default
         end
         
-        `uvm_info(get_type_name(), 
-            $sformatf("VexRiscv Base Test Configuration:\n" +
-                      "  hex_file_path:    %s\n" +
-                      "  tohost_addr:      0x%08X\n" +
-                      "  timeout_cycles:   %0d\n" +
-                      "  auto_start_cpu:   %0d",
+        `uvm_info(get_type_name(),
+            $sformatf("VexRiscv Base Test Configuration:\n  hex_file_path:    %s\n  tohost_addr:      0x%08X\n  timeout_cycles:   %0d\n  auto_start_cpu:   %0d",
                       hex_file_path, tohost_addr, timeout_cycles, auto_start_cpu),
             UVM_LOW)
     endfunction
@@ -174,7 +170,7 @@ class vexriscv_base_test extends uvm_test;
         bit [31:0] base_addr, offset_addr, full_addr, data;
         int byte_count, record_type;
         bit [7:0] byte_data;
-        logic [10:0] word_addr;
+        logic [11:0] word_addr;
         int bytes_loaded = 0;
         int lines_processed = 0;
         
@@ -226,9 +222,9 @@ class vexriscv_base_test extends uvm_test;
                             full_addr = full_addr - 32'h8000_0000;
                         end
                         
-                        // Validate address range (8KB BRAM = 0x0000-0x1FFF)
-                        if (full_addr < 32'h0000_2000) begin
-                            word_addr = full_addr[12:2];
+                        // Validate address range (16KB BRAM = 0x0000-0x3FFF)
+                        if (full_addr < 32'h0000_4000) begin
+                            word_addr = full_addr[13:2];
                             
                             // Direct backdoor write to BRAM
                             $root.rv32i_tb_top.dut.vexriscv_inst.mem_crossbar.blockram_inst.mem[word_addr] = data;
@@ -241,7 +237,7 @@ class vexriscv_base_test extends uvm_test;
                                 UVM_HIGH)
                         end else begin
                             `uvm_warning(get_type_name(), 
-                                $sformatf("Address 0x%08X out of BRAM range (0x0000-0x1FFF), skipping", full_addr))
+                                $sformatf("Address 0x%08X out of BRAM range (0x0000-0x3FFF), skipping", full_addr))
                         end
                     end
                 end
@@ -483,14 +479,14 @@ class vexriscv_base_test extends uvm_test;
         // Backdoor memory read from VexRiscv BlockRAM
         // Returns 1 if address valid, 0 otherwise
         
-        // Check address range (8KB = 0x0000-0x1FFF)
-        if (addr < 32'h0000_2000) begin
+        // Check address range (16KB = 0x0000-0x3FFF)
+        if (addr < 32'h0000_4000) begin
             // Hierarchical path: $root → rv32i_tb_top → dut (AXIUART_Top) → vexriscv_inst → mem_crossbar → blockram_inst → mem array
-            data = $root.rv32i_tb_top.dut.vexriscv_inst.mem_crossbar.blockram_inst.mem[addr[12:2]];
+            data = $root.rv32i_tb_top.dut.vexriscv_inst.mem_crossbar.blockram_inst.mem[addr[13:2]];
             return 1;
         end else begin
-            `uvm_warning(get_type_name(), 
-                $sformatf("read_memory_backdoor: Address 0x%08X out of range (0x0000-0x1FFF)", addr))
+            `uvm_warning(get_type_name(),
+                $sformatf("read_memory_backdoor: Address 0x%08X out of range (0x0000-0x3FFF)", addr))
             data = 32'h00000000;
             return 0;
         end
@@ -498,10 +494,10 @@ class vexriscv_base_test extends uvm_test;
     
     virtual task write_memory_backdoor(bit [31:0] addr, bit [31:0] data);
         // Backdoor memory write to VexRiscv BlockRAM
-        logic [10:0] word_addr;
-        
-        // Check address range (0x80000000-0x80001FFF = 8KB)
-        if (addr >= 32'h8000_0000 && addr < 32'h8000_2000) begin
+        logic [11:0] word_addr;
+
+        // Check address range (0x80000000-0x80003FFF = 16KB)
+        if (addr >= 32'h8000_0000 && addr < 32'h8000_4000) begin
             // Convert CPU address to BRAM word address
             word_addr = (addr - 32'h8000_0000) >> 2;
             
@@ -513,7 +509,7 @@ class vexriscv_base_test extends uvm_test;
                 UVM_DEBUG)
         end else begin
             `uvm_error(get_type_name(), 
-                $sformatf("write_memory_backdoor: Address 0x%08X out of range (0x80000000-0x80001FFF)", addr))
+                $sformatf("write_memory_backdoor: Address 0x%08X out of range (0x80000000-0x80003FFF)", addr))
         end
     endtask
     
@@ -556,6 +552,171 @@ class vexriscv_base_test extends uvm_test;
                 $sformatf("write_regfile_backdoor: Register x%0d out of range (0-31)", reg_num))
         end
     endtask
+
+    //==========================================================================
+    // CSR Access Helpers (for VexRiscv Exception/Interrupt Tests)
+    //==========================================================================
+
+    virtual function bit [31:0] read_csr_backdoor(bit [11:0] csr_addr);
+        // Backdoor CSR read from VexRiscv CSR registers
+        // Returns CSR value based on address
+
+        case (csr_addr)
+            12'h300: begin  // mstatus
+                return $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.CsrPlugin_mstatus_MIE |
+                       ($root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.CsrPlugin_mstatus_MPIE << 7) |
+                       ($root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.CsrPlugin_mstatus_MPP << 11);
+            end
+
+            12'h304: begin  // mie (Machine Interrupt Enable)
+                return {20'b0,
+                        $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.CsrPlugin_mie_MEIE, 7'b0,
+                        $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.CsrPlugin_mie_MTIE, 3'b0};
+            end
+
+            12'h305: begin  // mtvec
+                return {$root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.CsrPlugin_mtvec_base, 2'b00};
+            end
+
+            12'h341: begin  // mepc
+                return $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.CsrPlugin_mepc;
+            end
+
+            12'h342: begin  // mcause
+                return {$root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.CsrPlugin_mcause_interrupt,
+                        27'b0,
+                        $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.CsrPlugin_mcause_exceptionCode};
+            end
+
+            12'h344: begin  // mip (Machine Interrupt Pending)
+                return {20'b0,
+                        $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.CsrPlugin_mip_MEIP, 7'b0,
+                        $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.CsrPlugin_mip_MTIP, 3'b0};
+            end
+
+            12'hB00: begin  // mcycle (lower 32 bits)
+                return $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.CsrPlugin_mcycle[31:0];
+            end
+
+            12'hB80: begin  // mcycleh (upper 32 bits)
+                return $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.CsrPlugin_mcycle[63:32];
+            end
+
+            12'hB02: begin  // minstret (lower 32 bits)
+                return $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.CsrPlugin_minstret[31:0];
+            end
+
+            12'hB82: begin  // minstreth (upper 32 bits)
+                return $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.CsrPlugin_minstret[63:32];
+            end
+
+            default: begin
+                `uvm_warning(get_type_name(),
+                    $sformatf("read_csr_backdoor: Unsupported CSR address 0x%03X", csr_addr))
+                return 32'h00000000;
+            end
+        endcase
+    endfunction
+
+    virtual task write_csr_backdoor(bit [11:0] csr_addr, bit [31:0] value);
+        // Backdoor CSR write to VexRiscv CSR registers
+        // Note: Some CSRs are read-only (mcause, mcycle, minstret)
+
+        case (csr_addr)
+            12'h305: begin  // mtvec (writable)
+                $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.CsrPlugin_mtvec_base = value[31:2];
+                `uvm_info(get_type_name(),
+                    $sformatf("CSR write backdoor: mtvec = 0x%08X", {value[31:2], 2'b00}),
+                    UVM_DEBUG)
+            end
+
+            12'h341: begin  // mepc (writable)
+                $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.CsrPlugin_mepc = value;
+                `uvm_info(get_type_name(),
+                    $sformatf("CSR write backdoor: mepc = 0x%08X", value),
+                    UVM_DEBUG)
+            end
+
+            12'h342: begin  // mcause (read-only in VexRiscv)
+                `uvm_warning(get_type_name(),
+                    "write_csr_backdoor: mcause is read-only, cannot write via backdoor")
+            end
+
+            default: begin
+                `uvm_warning(get_type_name(),
+                    $sformatf("write_csr_backdoor: Unsupported or read-only CSR address 0x%03X", csr_addr))
+            end
+        endcase
+    endtask
+
+    virtual task wait_for_trap(int timeout_cycles = 1000);
+        // Wait for exception trap signal pulse
+        int elapsed = 0;
+
+        `uvm_info(get_type_name(),
+            "Waiting for exception trap signal",
+            UVM_MEDIUM)
+
+        fork
+            begin
+                // Wait for exception_trap pulse
+                @(posedge $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.CsrPlugin_exception);
+                `uvm_info(get_type_name(),
+                    $sformatf("Exception trap detected at cycle %0d", elapsed),
+                    UVM_LOW)
+            end
+
+            begin
+                // Timeout watchdog
+                repeat(timeout_cycles) @(posedge $root.rv32i_tb_top.clk);
+                `uvm_error(get_type_name(),
+                    $sformatf("Timeout waiting for exception trap after %0d cycles", timeout_cycles))
+            end
+        join_any
+        disable fork;
+    endtask
+
+    virtual function bit verify_csr_state(bit [31:0] exp_mepc,
+                                          bit [3:0] exp_mcause_code,
+                                          bit exp_mcause_interrupt = 0);
+        // Verify CSR state after exception
+        bit [31:0] act_mepc, act_mcause;
+        bit [3:0] act_mcause_code;
+        bit act_mcause_interrupt;
+        bit pass = 1;
+
+        act_mepc = read_csr_backdoor(12'h341);
+        act_mcause = read_csr_backdoor(12'h342);
+        act_mcause_interrupt = act_mcause[31];
+        act_mcause_code = act_mcause[3:0];
+
+        `uvm_info(get_type_name(),
+            $sformatf("CSR Verification:\n  mepc:               0x%08X (expected: 0x%08X) %s\n  mcause.interrupt:   %0d (expected: %0d) %s\n  mcause.code:        %0d (expected: %0d) %s",
+                      act_mepc, exp_mepc, (act_mepc == exp_mepc) ? "✓" : "✗",
+                      act_mcause_interrupt, exp_mcause_interrupt, (act_mcause_interrupt == exp_mcause_interrupt) ? "✓" : "✗",
+                      act_mcause_code, exp_mcause_code, (act_mcause_code == exp_mcause_code) ? "✓" : "✗"),
+            UVM_LOW)
+
+        if (act_mepc != exp_mepc) begin
+            `uvm_error(get_type_name(),
+                $sformatf("mepc mismatch: expected 0x%08X, got 0x%08X", exp_mepc, act_mepc))
+            pass = 0;
+        end
+
+        if (act_mcause_interrupt != exp_mcause_interrupt) begin
+            `uvm_error(get_type_name(),
+                $sformatf("mcause.interrupt mismatch: expected %0d, got %0d", exp_mcause_interrupt, act_mcause_interrupt))
+            pass = 0;
+        end
+
+        if (act_mcause_code != exp_mcause_code) begin
+            `uvm_error(get_type_name(),
+                $sformatf("mcause.code mismatch: expected %0d, got %0d", exp_mcause_code, act_mcause_code))
+            pass = 0;
+        end
+
+        return pass;
+    endfunction
 
     //==========================================================================
     // Trace + Performance Counter Helpers
@@ -618,10 +779,8 @@ class vexriscv_base_test extends uvm_test;
                     "==================================================\n  TEST PASSED\n==================================================", 
                     UVM_NONE)
             end else if (tohost_value != 0) begin
-                `uvm_error(get_type_name(), 
-                    $sformatf("==================================================\n" +
-                              "  TEST FAILED (tohost = 0x%08X)\n" +
-                              "==================================================", 
+                `uvm_error(get_type_name(),
+                    $sformatf("==================================================\n  TEST FAILED (tohost = 0x%08X)\n==================================================",
                               tohost_value))
             end else begin
                 `uvm_warning(get_type_name(), 

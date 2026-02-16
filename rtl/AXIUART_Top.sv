@@ -59,7 +59,7 @@ module AXIUART_Top #(
     // --------------------------------------------------------------------
     // RV32I CPU debug wiring (Register_Block <-> RV32I CPU)
     // --------------------------------------------------------------------
-    logic [10:0] rv32i_mem_addr;        // Word address from Register_Block
+    logic [11:0] rv32i_mem_addr;        // Word address from Register_Block (16KB)
     logic [31:0] rv32i_mem_wdata;       // Write data to RV32I RAM
     logic [31:0] rv32i_mem_rdata;       // Read data from RV32I RAM
     logic [3:0]  rv32i_mem_we;          // Byte write enables

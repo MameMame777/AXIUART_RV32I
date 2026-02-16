@@ -13,50 +13,38 @@
 `ifndef RV32I_TEST_PKG_SV
 `define RV32I_TEST_PKG_SV
 
-// UVM Components (must be included in dependency order)
-`include "rv32i_transaction.sv"
-`include "rv32i_monitor.sv"
-`include "rv32i_scoreboard.sv"
-`include "rv32i_env.sv"
+// UVM Components (not needed for VexRiscv tests - use vexriscv_base_test instead)
+// `include "rv32i_transaction.sv"  // Old UVM components - not used
+// `include "rv32i_monitor.sv"  // Old UVM components - not used
+// `include "rv32i_scoreboard.sv"  // Old UVM components - not used
+// `include "rv32i_env.sv"  // Old UVM components - not used
 
 // Test classes (base first, then derived)
-`include "rv32i_base_test.sv"
-`include "rv32i_basic_test.sv"
-`include "rv32i_basic_imm_test.sv"  // Test 1.1: Basic immediate instructions (2026-01-14)
-`include "rv32i_upper_imm_test.sv"  // Test 1.2: Upper immediate instructions (2026-01-15)
-`include "rv32i_imm_logic_test.sv"  // Test 1.3: Immediate arithmetic/logic (2026-01-16)
-`include "rv32i_shift_imm_test.sv"  // Test 1.4: Shift immediate (2026-01-16)
-`include "rv32i_reg_alu_test.sv"    // Test 2.1: R-type register ALU (2026-01-16)
-`include "rv32i_reg_shift_test.sv"   // Test 2.3: R-type register shift (2026-01-17)
-// `include "rv32i_hazard_test.sv"          // File not present
-// `include "rv32i_load_store_test.sv"      // File not present
-// `include "rv32i_branch_test.sv"          // File not present
-// `include "rv32i_jump_test.sv"            // File not present
-`include "rv32i_debug_load_test.sv"
-`include "rv32i_ebreak_simple_test.sv"
-`include "rv32i_breakpoint_test.sv"
-`include "rv32i_perfcount_test.sv"
+// Note: Only include tests that exist (Issue #52 implementation)
+// `include "rv32i_base_test.sv"  // Old base test - replaced by vexriscv_base_test
+// `include "rv32i_basic_test.sv"  // File not present
+// `include "rv32i_basic_imm_test.sv"  // File not present
+// `include "rv32i_upper_imm_test.sv"  // File not present
+// `include "rv32i_imm_logic_test.sv"  // File not present
+// `include "rv32i_shift_imm_test.sv"  // File not present
+// `include "rv32i_reg_alu_test.sv"  // File not present
+// `include "rv32i_reg_shift_test.sv"  // File not present
+// `include "rv32i_debug_load_test.sv"  // File not present
 
-// Exception handling tests
+// Exception and CSR tests (Issue #52 - verified to exist)
+`include "rv32i_perfcount_test.sv"
+`include "rv32i_ebreak_simple_test.sv"
 `include "rv32i_exception_handler_test.sv"
 
-// Pipeline timing and forwarding tests (2026-01-05)
-`include "rv32i_wb_forward_timing_test.sv"
-
-// LED MMIO tests (2026-01-05)
-`include "rv32i_led_mmio_simple_test.sv"
-`include "rv32i_led_complex_pattern_test.sv"
-`include "rv32i_led_fast_pattern_test.sv"
-`include "rv32i_minimal_led_test.sv"
-
-// Branch debug tests (2026-01-05)
-// `include "rv32i_bne_loop_test.sv"        // File not present
-
-// Comprehensive test - All 40 RV32I instructions (2026-01-06)
-`include "rv32i_comprehensive_test.sv"
-
-// Simple isolated instruction tests (2026-01-12)
-`include "rv32i_store_simple_test.sv"
-`include "rv32i_load_simple_test.sv"
+// Other tests (commented out - files not present)
+// `include "rv32i_breakpoint_test.sv"
+// `include "rv32i_wb_forward_timing_test.sv"
+// `include "rv32i_led_mmio_simple_test.sv"
+// `include "rv32i_led_complex_pattern_test.sv"
+// `include "rv32i_led_fast_pattern_test.sv"
+// `include "rv32i_minimal_led_test.sv"
+// `include "rv32i_comprehensive_test.sv"
+// `include "rv32i_store_simple_test.sv"
+// `include "rv32i_load_simple_test.sv"
 
 `endif // RV32I_TEST_PKG_SV
