@@ -45,8 +45,20 @@ module vexriscv_wrapper (
     //=================================================================
     input  logic        rv32i_cpu_run,      // Start CPU execution
     input  logic        rv32i_cpu_halt,     // Stop CPU execution
+    input  logic        rv32i_cpu_step,     // Single-step pulse
     output logic        rv32i_cpu_halted,   // CPU is halted
     output logic        rv32i_cpu_break,    // EBREAK detected
+
+    //=================================================================
+    // Breakpoint / Register Snapshot Interface
+    //=================================================================
+    input  logic [3:0]  rv32i_dbg_bp_enable,
+    input  logic [31:0] rv32i_dbg_bp_addr [0:3],
+    output logic [3:0]  rv32i_dbg_bp_hit,
+    input  logic [4:0]  rv32i_dbg_rf_addr,
+    output logic [31:0] rv32i_dbg_rf_rdata,
+    input  logic        rv32i_dbg_soft_reset,
+    output logic        rv32i_dbg_reset_done,
 
     //=================================================================
     // Performance Counters (exposed via Register_Block)
@@ -143,7 +155,13 @@ module vexriscv_wrapper (
     
     logic        cpu_reset;
     logic        cpu_running;
-    logic        ctrl_cpu_halted;  // From control FSM
+    logic        cpu_effective_halted;
+    logic        cpu_boot_hold_reset;
+    logic        cpu_run_pulse;
+    logic        rv32i_cpu_run_d;
+    logic        cpu_control_reset;
+    logic        cpu_control_running;
+    logic        ctrl_cpu_halted;
     logic        dbg_cpu_halted;   // From debug bridge
     
     // EBREAK monitor
@@ -160,8 +178,28 @@ module vexriscv_wrapper (
     logic [31:0] led_reg_rdata;
     logic [31:0] led_register;
     
-    // CPU halted is combination of control FSM and debug bridge
-    assign rv32i_cpu_halted = ctrl_cpu_halted;
+    // Debug bridge is the control owner for run/halt/step/reset.
+    // Keep core in reset until first RUN pulse so code load completes deterministically.
+    always_ff @(posedge clk) begin
+        if (rst || rv32i_dbg_soft_reset || debug_resetOut) begin
+            rv32i_cpu_run_d <= 1'b0;
+            cpu_boot_hold_reset <= 1'b1;
+        end else begin
+            rv32i_cpu_run_d <= rv32i_cpu_run;
+            if (rv32i_cpu_run && !rv32i_cpu_run_d) begin
+                cpu_boot_hold_reset <= 1'b0;
+            end
+        end
+    end
+
+    assign cpu_run_pulse = rv32i_cpu_run && !rv32i_cpu_run_d;
+    assign cpu_effective_halted = dbg_cpu_halted || ebreak_detected;
+    assign rv32i_cpu_halted = cpu_effective_halted;
+    assign rv32i_cpu_break = ebreak_detected;
+    assign cpu_running = ~cpu_effective_halted;
+    assign cpu_reset = cpu_boot_hold_reset || rv32i_dbg_soft_reset || debug_resetOut;
+    assign clear_break = cpu_run_pulse;
+    assign rv32i_dbg_reset_done = ~cpu_reset;
     
     //=================================================================
     // VexRiscv Generated CPU Core
@@ -276,15 +314,14 @@ module vexriscv_wrapper (
         // Register Block interface
         .reg_cpu_run(rv32i_cpu_run),
         .reg_cpu_halt(rv32i_cpu_halt),
-        .reg_cpu_reset(1'b0),  // External reset not used
+        .reg_cpu_step(rv32i_cpu_step),
+        .reg_cpu_reset(rv32i_dbg_soft_reset),
         .reg_cpu_halted(dbg_cpu_halted),
-        .reg_debug_resetOut(),  // Not connected
+        .reg_debug_resetOut(),
         
-        // Breakpoints (not used currently)
-        .reg_bp0_enable(1'b0),
-        .reg_bp0_address(32'h0),
-        .reg_bp1_enable(1'b0),
-        .reg_bp1_address(32'h0),
+        // Breakpoints
+        .reg_bp_enable(rv32i_dbg_bp_enable),
+        .reg_bp_address(rv32i_dbg_bp_addr),
         
         // VexRiscv Debug Bus
         .debug_bus_cmd_valid(debug_bus_cmd_valid),
@@ -341,32 +378,28 @@ module vexriscv_wrapper (
     );
     
     //=================================================================
-    // CPU Control Module
+    // CPU Control Module (kept for assertion hierarchy compatibility)
     //=================================================================
-    
+
     vexriscv_control cpu_control (
         .clk(clk),
         .rst(rst),
-        
-        // UART control
+
         .cpu_run(rv32i_cpu_run),
         .cpu_halt(rv32i_cpu_halt),
-        .cpu_step(1'b0),  // Not implemented
-        
-        // Status
+        .cpu_step(rv32i_cpu_step),
+
         .cpu_halted(ctrl_cpu_halted),
-        .cpu_break(rv32i_cpu_break),
-        
-        // CPU control
-        .cpu_reset(cpu_reset),
-        .cpu_running(cpu_running),
-        
-        // EBREAK
+        .cpu_break(),
+
+        .cpu_reset(cpu_control_reset),
+        .cpu_running(cpu_control_running),
+
         .ebreak_detected(ebreak_detected),
         .break_pc(break_pc),
-        .clear_break(clear_break)
+        .clear_break()
     );
-    
+
     //=================================================================
     // EBREAK Monitor
     //=================================================================
@@ -478,6 +511,23 @@ module vexriscv_wrapper (
     
     assign rv32i_perf_stall_count = stall_count_reg;
     assign rv32i_perf_flush_count = flush_count_reg;
+
+    //=================================================================
+    // Register file snapshot / breakpoint hit reporting
+    //=================================================================
+
+    assign rv32i_dbg_rf_rdata = (rv32i_dbg_rf_addr == 5'd0) ?
+                                32'h0000_0000 : cpu_core.RegFilePlugin_regFile[rv32i_dbg_rf_addr];
+
+    always_comb begin
+        rv32i_dbg_bp_hit = 4'b0000;
+        if (ebreak_detected) begin
+            rv32i_dbg_bp_hit[0] = rv32i_dbg_bp_enable[0] && (break_pc == rv32i_dbg_bp_addr[0]);
+            rv32i_dbg_bp_hit[1] = rv32i_dbg_bp_enable[1] && (break_pc == rv32i_dbg_bp_addr[1]);
+            rv32i_dbg_bp_hit[2] = rv32i_dbg_bp_enable[2] && (break_pc == rv32i_dbg_bp_addr[2]);
+            rv32i_dbg_bp_hit[3] = rv32i_dbg_bp_enable[3] && (break_pc == rv32i_dbg_bp_addr[3]);
+        end
+    end
     
     //=================================================================
     // LED Register (MMIO at 0x8000407C)
