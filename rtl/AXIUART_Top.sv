@@ -67,9 +67,17 @@ module AXIUART_Top #(
     
     logic        rv32i_cpu_run;         // CPU run signal from Register_Block
     logic        rv32i_cpu_halt;        // CPU halt signal from Register_Block
+    logic        rv32i_cpu_step;        // CPU step pulse from Register_Block
     logic        rv32i_cpu_halted;      // CPU halted status
     logic        rv32i_cpu_break;       // EBREAK detected
     logic [3:0]  rv32i_led;             // LED output from RV32I
+    logic [3:0]  rv32i_dbg_bp_enable;   // Breakpoint enable mask
+    logic [31:0] rv32i_dbg_bp_addr [0:3]; // Breakpoint addresses
+    logic [3:0]  rv32i_dbg_bp_hit;      // Breakpoint hit flags
+    logic [4:0]  rv32i_dbg_rf_addr;     // Register file read address
+    logic [31:0] rv32i_dbg_rf_rdata;    // Register file read data
+    logic        rv32i_dbg_soft_reset;  // CPU soft reset pulse
+    logic        rv32i_dbg_reset_done;  // CPU reset done status
 
     // RV32I performance counters
     logic [31:0] rv32i_perf_cycle_count;
@@ -219,8 +227,14 @@ module AXIUART_Top #(
         .rv32i_mem_re(rv32i_mem_re),
         .rv32i_cpu_run(rv32i_cpu_run),
         .rv32i_cpu_halt(rv32i_cpu_halt),
+        .rv32i_cpu_step(rv32i_cpu_step),
         .rv32i_cpu_halted(rv32i_cpu_halted),
         .rv32i_cpu_break(rv32i_cpu_break),
+
+        // RV32I hardware breakpoint interface
+        .rv32i_dbg_bp_enable(rv32i_dbg_bp_enable),
+        .rv32i_dbg_bp_addr(rv32i_dbg_bp_addr),
+        .rv32i_dbg_bp_hit(rv32i_dbg_bp_hit),
 
         // RV32I performance counters
         .rv32i_perf_cycle_count(rv32i_perf_cycle_count),
@@ -228,11 +242,19 @@ module AXIUART_Top #(
         .rv32i_perf_stall_count(rv32i_perf_stall_count),
         .rv32i_perf_flush_count(rv32i_perf_flush_count),
 
+        // RV32I register file snapshot interface
+        .rv32i_dbg_rf_addr(rv32i_dbg_rf_addr),
+        .rv32i_dbg_rf_rdata(rv32i_dbg_rf_rdata),
+
         // RV32I trace buffer interface
         .rv32i_dbg_trace_addr(rv32i_dbg_trace_addr),
         .rv32i_dbg_trace_data(rv32i_dbg_trace_data),
         .rv32i_dbg_trace_wptr(rv32i_dbg_trace_wptr),
-        .rv32i_dbg_trace_count(rv32i_dbg_trace_count)
+        .rv32i_dbg_trace_count(rv32i_dbg_trace_count),
+
+        // RV32I software reset interface
+        .rv32i_dbg_soft_reset(rv32i_dbg_soft_reset),
+        .rv32i_dbg_reset_done(rv32i_dbg_reset_done)
     );
 
     // --------------------------------------------------------------------
@@ -253,8 +275,14 @@ module AXIUART_Top #(
         // CPU control (from Register_Block via UART)
         .rv32i_cpu_run(rv32i_cpu_run),
         .rv32i_cpu_halt(rv32i_cpu_halt),
+        .rv32i_cpu_step(rv32i_cpu_step),
         .rv32i_cpu_halted(rv32i_cpu_halted),
         .rv32i_cpu_break(rv32i_cpu_break),
+
+        // Hardware breakpoints
+        .rv32i_dbg_bp_enable(rv32i_dbg_bp_enable),
+        .rv32i_dbg_bp_addr(rv32i_dbg_bp_addr),
+        .rv32i_dbg_bp_hit(rv32i_dbg_bp_hit),
 
         // Performance counters
         .rv32i_perf_cycle_count(rv32i_perf_cycle_count),
@@ -262,11 +290,19 @@ module AXIUART_Top #(
         .rv32i_perf_stall_count(rv32i_perf_stall_count),
         .rv32i_perf_flush_count(rv32i_perf_flush_count),
 
+        // Register file snapshot
+        .rv32i_dbg_rf_addr(rv32i_dbg_rf_addr),
+        .rv32i_dbg_rf_rdata(rv32i_dbg_rf_rdata),
+
         // Trace buffer interface
         .rv32i_dbg_trace_addr(rv32i_dbg_trace_addr),
         .rv32i_dbg_trace_data(rv32i_dbg_trace_data),
         .rv32i_dbg_trace_wptr(rv32i_dbg_trace_wptr),
         .rv32i_dbg_trace_count(rv32i_dbg_trace_count),
+
+        // Debug soft reset
+        .rv32i_dbg_soft_reset(rv32i_dbg_soft_reset),
+        .rv32i_dbg_reset_done(rv32i_dbg_reset_done),
         
         // LED output (MMIO at 0x407C)
         .rv32i_led(rv32i_led)
