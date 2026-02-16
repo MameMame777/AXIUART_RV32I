@@ -113,13 +113,61 @@
 ../../tests/vexriscv_control_test.sv
 ../../tests/vexriscv_debug_bridge_test.sv
 
-# VexRiscv Stage 2 ISA Tests (Issue #50)
+# VexRiscv Stage 2 ISA Tests (Issue #50 base, Issue #51 full RV32I)
 ../../tests/vexriscv_isa_test.sv
+# Subset 1: Arithmetic/Logic (10 tests)
 ../../tests/vexriscv_isa_add_test.sv
 ../../tests/vexriscv_isa_addi_test.sv
+../../tests/vexriscv_isa_sub_test.sv
+../../tests/vexriscv_isa_and_test.sv
+../../tests/vexriscv_isa_andi_test.sv
+../../tests/vexriscv_isa_or_test.sv
+../../tests/vexriscv_isa_ori_test.sv
+../../tests/vexriscv_isa_xor_test.sv
+../../tests/vexriscv_isa_xori_test.sv
+../../tests/vexriscv_isa_lui_test.sv
+# Subset 2: Shifts (6 tests)
+../../tests/vexriscv_isa_sll_test.sv
+../../tests/vexriscv_isa_slli_test.sv
+../../tests/vexriscv_isa_srl_test.sv
+../../tests/vexriscv_isa_srli_test.sv
+../../tests/vexriscv_isa_sra_test.sv
+../../tests/vexriscv_isa_srai_test.sv
+# Subset 3: Compare (4 tests)
+../../tests/vexriscv_isa_slt_test.sv
+../../tests/vexriscv_isa_slti_test.sv
+../../tests/vexriscv_isa_sltu_test.sv
+../../tests/vexriscv_isa_sltiu_test.sv
+# Subset 4: Branch (6 tests)
+../../tests/vexriscv_isa_beq_test.sv
+../../tests/vexriscv_isa_bne_test.sv
+../../tests/vexriscv_isa_blt_test.sv
+../../tests/vexriscv_isa_bge_test.sv
+../../tests/vexriscv_isa_bltu_test.sv
+../../tests/vexriscv_isa_bgeu_test.sv
+# Subset 5: Jump (3 tests)
+../../tests/vexriscv_isa_jal_test.sv
+../../tests/vexriscv_isa_jalr_test.sv
+../../tests/vexriscv_isa_auipc_test.sv
+# Subset 6: Load/Store (8 tests)
+../../tests/vexriscv_isa_lw_test.sv
+../../tests/vexriscv_isa_lh_test.sv
+../../tests/vexriscv_isa_lhu_test.sv
+../../tests/vexriscv_isa_lb_test.sv
+../../tests/vexriscv_isa_lbu_test.sv
+../../tests/vexriscv_isa_sw_test.sv
+../../tests/vexriscv_isa_sh_test.sv
+../../tests/vexriscv_isa_sb_test.sv
 
 # Issue #13 Investigation - LED MMIO via UART-AXI path
 ../../tests/vexriscv_led_uart_test.sv
+
+# Issue #54 - UART Bridge submodule unit tests
++incdir+../../tests/uart_bridge
+../../tests/uart_bridge/uart_bridge_base_test.sv
+../../tests/uart_bridge/uart_crc8_test.sv
+../../tests/uart_bridge/uart_fifo_sync_test.sv
+../../tests/uart_bridge/uart_frame_parser_test.sv
 
 # Testbench Top Module (includes package and test_lib)
 +incdir+.

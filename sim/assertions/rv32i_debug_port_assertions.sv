@@ -18,14 +18,14 @@ module rv32i_debug_port_assertions (
     // Debug interface signals
     input logic [3:0]  dbg_mem_we,      // Debug write enable (byte-wise)
     input logic        dbg_mem_re,      // Debug read enable
-    input logic [10:0] dbg_mem_addr,    // Debug address (word address)
+    input logic [11:0] dbg_mem_addr,    // Debug address (word address)
     input logic [31:0] dbg_mem_wdata,   // Debug write data
     input logic [31:0] dbg_mem_rdata,   // Debug read data
     
     // CPU Port B signals (for conflict detection)
     input logic        cpu_mem_write,   // CPU memory write enable
     input logic        cpu_mem_read,    // CPU memory read enable
-    input logic [10:0] cpu_mem_addr,    // CPU memory address
+    input logic [11:0] cpu_mem_addr,    // CPU memory address
     
     // BRAM Port B enable
     input logic        ram_ena_b
