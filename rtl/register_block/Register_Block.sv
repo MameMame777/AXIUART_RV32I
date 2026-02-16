@@ -88,31 +88,31 @@ module Register_Block #(
     
     // RV32I CPU Memory Access Registers
     localparam bit [11:0] REG_CPU_MEM_ADDR   = (axiuart_reg_pkg::REG_CPU_MEM_ADDR - BASE_ADDR);   // 0x1228
-    localparam bit [11:0] REG_CPU_MEM_WDATA  = (axiuart_reg_pkg::REG_CPU_MEM_WDATA - BASE_ADDR);  // 0x1228
+    localparam bit [11:0] REG_CPU_MEM_WDATA  = (axiuart_reg_pkg::REG_CPU_MEM_WDATA - BASE_ADDR);  // 0x122C
     localparam bit [11:0] REG_CPU_MEM_RDATA  = (axiuart_reg_pkg::REG_CPU_MEM_RDATA - BASE_ADDR);  // 0x1230
     localparam bit [11:0] REG_CPU_MEM_CTRL   = (axiuart_reg_pkg::REG_CPU_MEM_CTRL - BASE_ADDR);   // 0x1234
     
     // RV32I Debug Registers (Hardware Breakpoints, Performance Counters, Trace Buffer, etc.)
-    localparam bit [11:0] REG_DBG_BP0_ADDR    = 12'h240;  // 0x1240 - Breakpoint 0 address
-    localparam bit [11:0] REG_DBG_BP1_ADDR    = 12'h244;  // 0x1244 - Breakpoint 1 address
-    localparam bit [11:0] REG_DBG_BP2_ADDR    = 12'h248;  // 0x1248 - Breakpoint 2 address
-    localparam bit [11:0] REG_DBG_BP3_ADDR    = 12'h24C;  // 0x124C - Breakpoint 3 address
-    localparam bit [11:0] REG_DBG_BP_CTRL     = 12'h250;  // 0x1250 - Breakpoint control [3:0]=enable [7:4]=hit_flags
-    localparam bit [11:0] REG_PERF_CYCLE      = 12'h260;  // 0x1260 - Performance: cycle count
-    localparam bit [11:0] REG_PERF_INSN       = 12'h264;  // 0x1264 - Performance: instruction count
-    localparam bit [11:0] REG_PERF_STALL      = 12'h268;  // 0x1268 - Performance: stall count
-    localparam bit [11:0] REG_PERF_FLUSH      = 12'h26C;  // 0x126C - Performance: flush count
-    localparam bit [11:0] REG_DBG_RF_ADDR     = 12'h270;  // 0x1270 - Register file address [4:0]
-    localparam bit [11:0] REG_DBG_RF_DATA     = 12'h274;  // 0x1274 - Register file data (RO)
-    localparam bit [11:0] REG_TRACE_ADDR      = 12'h280;  // 0x1280 - Trace buffer read address [5:0]
-    localparam bit [11:0] REG_TRACE_DATA_LOW  = 12'h284;  // 0x1284 - Trace data [31:0]
-    localparam bit [11:0] REG_TRACE_DATA_MID  = 12'h288;  // 0x1288 - Trace data [63:32]
-    localparam bit [11:0] REG_TRACE_DATA_HI0  = 12'h28C;  // 0x128C - Trace data [95:64]
-    localparam bit [11:0] REG_TRACE_DATA_HI1  = 12'h290;  // 0x1290 - Trace data [127:96]
-    localparam bit [11:0] REG_TRACE_STATUS    = 12'h294;  // 0x1294 - Trace status [5:0]=wptr [13:8]=count [16]=full
-    localparam bit [11:0] REG_DBG_RESET_CTRL  = 12'h298;  // 0x1298 - Reset control [0]=soft_reset(W1P) [1]=done(RO) [2]=step(W1P)
-    localparam bit [11:0] REG_TRACE_DATA_HI2  = 12'h29C;  // 0x129C - Trace data [159:128]
-    localparam bit [11:0] REG_TRACE_DATA_HI3  = 12'h2A0;  // 0x12A0 - Trace data [191:160]
+    localparam bit [11:0] REG_DBG_BP0_ADDR    = (axiuart_reg_pkg::REG_DBG_BP0_ADDR - BASE_ADDR);      // 0x1240 - Breakpoint 0 address
+    localparam bit [11:0] REG_DBG_BP1_ADDR    = (axiuart_reg_pkg::REG_DBG_BP1_ADDR - BASE_ADDR);      // 0x1244 - Breakpoint 1 address
+    localparam bit [11:0] REG_DBG_BP2_ADDR    = (axiuart_reg_pkg::REG_DBG_BP2_ADDR - BASE_ADDR);      // 0x1248 - Breakpoint 2 address
+    localparam bit [11:0] REG_DBG_BP3_ADDR    = (axiuart_reg_pkg::REG_DBG_BP3_ADDR - BASE_ADDR);      // 0x124C - Breakpoint 3 address
+    localparam bit [11:0] REG_DBG_BP_CTRL     = (axiuart_reg_pkg::REG_DBG_BP_CTRL - BASE_ADDR);       // 0x1250 - Breakpoint control [3:0]=enable [7:4]=hit_flags
+    localparam bit [11:0] REG_PERF_CYCLE      = (axiuart_reg_pkg::REG_PERF_CYCLE_COUNT - BASE_ADDR);  // 0x1260 - Performance: cycle count
+    localparam bit [11:0] REG_PERF_INSN       = (axiuart_reg_pkg::REG_PERF_INSN_COUNT - BASE_ADDR);   // 0x1264 - Performance: instruction count
+    localparam bit [11:0] REG_PERF_STALL      = (axiuart_reg_pkg::REG_PERF_STALL_COUNT - BASE_ADDR);  // 0x1268 - Performance: stall count
+    localparam bit [11:0] REG_PERF_FLUSH      = (axiuart_reg_pkg::REG_PERF_FLUSH_COUNT - BASE_ADDR);  // 0x126C - Performance: flush count
+    localparam bit [11:0] REG_DBG_RF_ADDR     = (axiuart_reg_pkg::REG_DBG_RF_ADDR - BASE_ADDR);       // 0x1270 - Register file address [4:0]
+    localparam bit [11:0] REG_DBG_RF_DATA     = (axiuart_reg_pkg::REG_DBG_RF_DATA - BASE_ADDR);       // 0x1274 - Register file data (RO)
+    localparam bit [11:0] REG_TRACE_ADDR      = (axiuart_reg_pkg::REG_TRACE_READ_ADDR - BASE_ADDR);   // 0x1280 - Trace buffer read address [5:0]
+    localparam bit [11:0] REG_TRACE_DATA_LOW  = (axiuart_reg_pkg::REG_TRACE_DATA_LOW - BASE_ADDR);    // 0x1284 - Trace data [31:0]
+    localparam bit [11:0] REG_TRACE_DATA_MID  = (axiuart_reg_pkg::REG_TRACE_DATA_MID - BASE_ADDR);    // 0x1288 - Trace data [63:32]
+    localparam bit [11:0] REG_TRACE_DATA_HI0  = (axiuart_reg_pkg::REG_TRACE_DATA_HI0 - BASE_ADDR);    // 0x128C - Trace data [95:64]
+    localparam bit [11:0] REG_TRACE_DATA_HI1  = (axiuart_reg_pkg::REG_TRACE_DATA_HI1 - BASE_ADDR);    // 0x1290 - Trace data [127:96]
+    localparam bit [11:0] REG_TRACE_STATUS    = (axiuart_reg_pkg::REG_TRACE_STATUS - BASE_ADDR);      // 0x1294 - Trace status [5:0]=wptr [13:8]=count [16]=full
+    localparam bit [11:0] REG_DBG_RESET_CTRL  = (axiuart_reg_pkg::REG_DBG_RESET_CTRL - BASE_ADDR);    // 0x1298 - Reset control [0]=soft_reset(W1P) [1]=done(RO) [2]=step(W1P)
+    localparam bit [11:0] REG_TRACE_DATA_HI2  = (axiuart_reg_pkg::REG_TRACE_DATA_HI2 - BASE_ADDR);    // 0x129C - Trace data [159:128]
+    localparam bit [11:0] REG_TRACE_DATA_HI3  = (axiuart_reg_pkg::REG_TRACE_DATA_HI3 - BASE_ADDR);    // 0x12A0 - Trace data [191:160]
 
     // Register storage
     logic [31:0] control_reg;      // RW - Control register
@@ -281,6 +281,8 @@ module Register_Block #(
             REG_TX_COUNT, REG_RX_COUNT, REG_FIFO_STAT, REG_VERSION,
             REG_TEST_0, REG_TEST_1, REG_TEST_2, REG_TEST_3, REG_TEST_4,
             REG_CPU_MEM_ADDR, REG_CPU_MEM_WDATA, REG_CPU_MEM_CTRL,
+            REG_DBG_BP0_ADDR, REG_DBG_BP1_ADDR, REG_DBG_BP2_ADDR, REG_DBG_BP3_ADDR,
+            REG_DBG_BP_CTRL, REG_DBG_RF_ADDR, REG_TRACE_ADDR, REG_DBG_RESET_CTRL,
             REG_REVISION: begin
                 within_register_range = 1'b1;
             end
@@ -311,6 +313,12 @@ module Register_Block #(
             REG_TX_COUNT, REG_RX_COUNT, REG_FIFO_STAT, REG_VERSION,
             REG_TEST_0, REG_TEST_1, REG_TEST_2, REG_TEST_3, REG_TEST_4,
             REG_CPU_MEM_ADDR, REG_CPU_MEM_WDATA, REG_CPU_MEM_RDATA, REG_CPU_MEM_CTRL,
+            REG_DBG_BP0_ADDR, REG_DBG_BP1_ADDR, REG_DBG_BP2_ADDR, REG_DBG_BP3_ADDR,
+            REG_DBG_BP_CTRL, REG_PERF_CYCLE, REG_PERF_INSN, REG_PERF_STALL, REG_PERF_FLUSH,
+            REG_DBG_RF_ADDR, REG_DBG_RF_DATA,
+            REG_TRACE_ADDR, REG_TRACE_DATA_LOW, REG_TRACE_DATA_MID,
+            REG_TRACE_DATA_HI0, REG_TRACE_DATA_HI1, REG_TRACE_DATA_HI2, REG_TRACE_DATA_HI3,
+            REG_TRACE_STATUS, REG_DBG_RESET_CTRL,
             REG_REVISION: begin
                 // Valid register found
             end

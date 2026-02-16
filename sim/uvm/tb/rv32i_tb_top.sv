@@ -15,9 +15,9 @@ module rv32i_tb_top;
     import axiuart_pkg::*;
     `include "uvm_macros.svh"
     
-    // Include base test class
-    `include "axiuart_base_test.sv"
-    
+    // Include AXIUART test classes
+    `include "axiuart_test_pkg.sv"
+
     // Include VexRiscv tests
     `include "vexriscv_smoke_test.sv"
     
