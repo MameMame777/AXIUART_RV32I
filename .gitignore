@@ -36,6 +36,7 @@ dsim.env
 
 # Compilation and Temporary Files
 work/
+work_vexriscv/
 modelsim.ini
 transcript
 vsim.wlf
