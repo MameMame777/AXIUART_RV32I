@@ -1,0 +1,24 @@
+{
+  "settings": {
+    "workbench.colorCustomizations": {
+      "statusBar.foreground": "#ffffff",
+      "titleBar.activeForeground": "#ffffff",
+      "statusBar.background": "#16a34a",
+      "titleBar.activeBackground": "#16a34a",
+      "titleBar.inactiveForeground": "#cccccc",
+      "titleBar.inactiveBackground": "#14532d"
+    },
+    "window.title": "${activeEditorShort} - AXIUART_RV32I [Codex]"
+  },
+  "folders": [
+    {
+      "name": "AXIUART_RV32I (Codex)",
+      "path": "codex"
+    }
+  ],
+  "extensions": {
+    "recommendations": [
+      "mshr-h.veriloghdl"
+    ]
+  }
+}
