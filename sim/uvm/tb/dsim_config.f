@@ -110,6 +110,8 @@
 ../../tests/vexriscv_load_use_stall_test.sv
 ../../tests/vexriscv_ibus_fetch_test.sv
 ../../tests/vexriscv_dbus_access_test.sv
+../../tests/vexriscv_control_test.sv
+../../tests/vexriscv_debug_bridge_test.sv
 
 # VexRiscv Stage 2 ISA Tests (Issue #50 base, Issue #51 full RV32I)
 ../../tests/vexriscv_isa_test.sv

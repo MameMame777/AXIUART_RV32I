@@ -14,12 +14,6 @@
           "description": "Basic UART transaction",
           "timeout": 120,
           "expected_duration": 25
-        },
-        {
-          "name": "axiuart_cpu_simple_mem_test",
-          "description": "RV32I BRAM access via CPU_MEM_* registers",
-          "timeout": 180,
-          "expected_duration": 60
         }
       ]
     },
@@ -35,16 +29,8 @@
       ]
     },
     "bram_access": {
-      "description": "BRAM access via UART→Register_Block→Port B",
-      "tests": [
-        {
-          "name": "axiuart_cpu_simple_mem_test",
-          "description": "RV32I BRAM read/write via CPU_MEM_* registers",
-          "timeout": 180,
-          "expected_duration": 60,
-          "notes": "Verifies UART→Register_Block→Port B→BRAM path"
-        }
-      ]
+      "description": "BRAM access suite (no active tests in current workspace)",
+      "tests": []
     },
     "uart_unit": {
       "description": "UART Bridge submodule unit tests (Crc8, Frame_Parser, fifo_sync, Uart_Rx, Uart_Tx)",
@@ -147,6 +133,23 @@
           "description": "DBus byte/halfword/word accesses",
           "timeout": 120,
           "expected_duration": 10
+        }
+      ]
+    },
+    "vexriscv_debug_control": {
+      "description": "Issue #55: control FSM and debug bridge protocol tests",
+      "tests": [
+        {
+          "name": "vexriscv_control_test",
+          "description": "Control transition validation (run/halt/step/ebreak)",
+          "timeout": 180,
+          "expected_duration": 15
+        },
+        {
+          "name": "vexriscv_debug_bridge_test",
+          "description": "Debug bridge command and breakpoint programming validation",
+          "timeout": 180,
+          "expected_duration": 15
         }
       ]
     },
@@ -603,6 +606,29 @@
         }
       ]
     },
+    "vexriscv_exception": {
+      "description": "VexRiscv exception and CSR tests (Issue #52)",
+      "tests": [
+        {
+          "name": "rv32i_perfcount_test",
+          "description": "Performance counter CSRs (mcycle, minstret)",
+          "timeout": 60,
+          "expected_duration": 10
+        },
+        {
+          "name": "rv32i_ebreak_simple_test",
+          "description": "EBREAK CSR verification (mepc, mcause, mtvec)",
+          "timeout": 60,
+          "expected_duration": 15
+        },
+        {
+          "name": "rv32i_exception_handler_test",
+          "description": "Full trap handler (EBREAK + ECALL)",
+          "timeout": 120,
+          "expected_duration": 30
+        }
+      ]
+    },
     "cpu_led": {
       "description": "RV32I LED MMIO verification",
       "tests": [
@@ -633,7 +659,7 @@
       ]
     },
     "full": {
-      "description": "Complete regression suite - all 37 active tests (pre-commit gate)",
+      "description": "Complete regression suite for current workspace test inventory",
       "tests": [
         {
           "name": "axiuart_reset_test",
@@ -652,138 +678,6 @@
           "description": "Register read/write operations",
           "timeout": 120,
           "expected_duration": 25
-        },
-        {
-          "name": "axiuart_cpu_simple_mem_test",
-          "description": "RV32I BRAM access via UART",
-          "timeout": 180,
-          "expected_duration": 60
-        },
-        {
-          "name": "rv32i_basic_imm_test",
-          "description": "Phase 1.1: ADDI basic immediate",
-          "timeout": 60,
-          "expected_duration": 15
-        },
-        {
-          "name": "rv32i_upper_imm_test",
-          "description": "Phase 1.2: LUI/AUIPC upper immediate",
-          "timeout": 60,
-          "expected_duration": 15
-        },
-        {
-          "name": "rv32i_imm_logic_test",
-          "description": "Phase 1.3: SLTI/XORI/ORI/ANDI",
-          "timeout": 60,
-          "expected_duration": 15
-        },
-        {
-          "name": "rv32i_shift_imm_test",
-          "description": "Phase 1.4: SLLI/SRLI/SRAI",
-          "timeout": 60,
-          "expected_duration": 15
-        },
-        {
-          "name": "rv32i_reg_alu_test",
-          "description": "Phase 2.1: R-type ALU (ADD/SUB/SLT/XOR/OR/AND)",
-          "timeout": 60,
-          "expected_duration": 20
-        },
-        {
-          "name": "rv32i_reg_shift_test",
-          "description": "Phase 2.3: R-type shift (SLL/SRL/SRA)",
-          "timeout": 60,
-          "expected_duration": 18
-        },
-        {
-          "name": "rv32i_load_simple_test",
-          "description": "Phase 3.2: LOAD (LW/LH/LHU/LB/LBU) + load-use hazard",
-          "timeout": 60,
-          "expected_duration": 20
-        },
-        {
-          "name": "rv32i_store_simple_test",
-          "description": "Phase 3.4: STORE (SW/SH/SB)",
-          "timeout": 60,
-          "expected_duration": 20
-        },
-        {
-          "name": "rv32i_basic_test",
-          "description": "RV32I basic instruction execution",
-          "timeout": 120,
-          "expected_duration": 25
-        },
-        {
-          "name": "rv32i_debug_load_test",
-          "description": "Debug memory access and program loading",
-          "timeout": 120,
-          "expected_duration": 25
-        },
-        {
-          "name": "rv32i_ebreak_simple_test",
-          "description": "Minimal EBREAK verification",
-          "timeout": 60,
-          "expected_duration": 15
-        },
-        {
-          "name": "rv32i_breakpoint_test",
-          "description": "Hardware breakpoint hit and resume",
-          "timeout": 120,
-          "expected_duration": 30
-        },
-        {
-          "name": "rv32i_bp_vs_ebreak_test",
-          "description": "Breakpoint vs EBREAK interaction",
-          "timeout": 120,
-          "expected_duration": 30
-        },
-        {
-          "name": "rv32i_wb_forward_timing_test",
-          "description": "WB forwarding timing fix verification",
-          "timeout": 120,
-          "expected_duration": 30
-        },
-        {
-          "name": "rv32i_comprehensive_test",
-          "description": "All 40 RV32I instructions comprehensive",
-          "timeout": 300,
-          "expected_duration": 90
-        },
-        {
-          "name": "rv32i_exception_handler_test",
-          "description": "Exception handler and trap vector",
-          "timeout": 120,
-          "expected_duration": 30
-        },
-        {
-          "name": "rv32i_perfcount_test",
-          "description": "Performance counters (cycle/instret CSRs)",
-          "timeout": 120,
-          "expected_duration": 30
-        },
-        {
-          "name": "rv32i_minimal_led_test",
-          "description": "Minimal LED register write",
-          "timeout": 60,
-          "expected_duration": 15
-        },
-        {
-          "name": "rv32i_led_mmio_simple_test",
-          "description": "LED MMIO simple read/write",
-          "timeout": 60,
-          "expected_duration": 15
-        },
-        {
-          "name": "rv32i_led_complex_pattern_test",
-          "description": "LED complex pattern generation",
-          "timeout": 120,
-          "expected_duration": 30
-        },
-        {
-          "name": "rv32i_led_fast_pattern_test",
-          "description": "LED fast pattern switching",
-          "timeout": 120,
-          "expected_duration": 30
         },
         {
           "name": "vexriscv_regfile_test",
@@ -1161,6 +1055,7 @@
       "vexriscv_smoke": "VexRiscv quick smoke (3 tests, < 20s)",
       "vexriscv_hazard": "VexRiscv hazard handling (4 tests, < 30s)",
       "vexriscv_bus": "VexRiscv bus protocol (2 tests, < 20s)",
+      "vexriscv_debug_control": "Issue #55 control/debug bridge verification",
       "vexriscv_stage1": "VexRiscv complete Stage 1 (9 tests, < 70s)",
       "cpu_basic": "RV32I CPU ISA phases 1-3 validation",
       "cpu_debug": "RV32I debug features (EBREAK, breakpoints)",

@@ -4,6 +4,42 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Issue #55: VexRiscv Control / Debug Bridge Verification Coverage** (2026-02-15)
+  - Added dedicated tests:
+    - `sim/tests/vexriscv_control_test.sv`
+    - `sim/tests/vexriscv_debug_bridge_test.sv`
+  - Added missing compatibility files required by current DSIM compile list / TB include path:
+    - `sim/tests/vexriscv_isa_test.sv`
+    - `sim/uvm/tb/vexriscv_smoke_test.sv`
+  - Registered tests in:
+    - `sim/uvm/tb/dsim_config.f`
+    - `sim/regression_tests.json` (`vexriscv_debug_control` suite)
+
+### Changed
+- **Register block debug window enablement**
+  - Extended valid AXI read/write register decode to include breakpoint, register-snapshot, trace, and debug-reset windows.
+  - Aligned local register-offset parameters to generated package constants (`axiuart_reg_pkg`) for consistency.
+  - File: `rtl/register_block/Register_Block.sv`
+
+- **Debug signal plumbing and control ownership updates**
+  - Wired step/breakpoint/register snapshot/reset debug signals through:
+    - `rtl/AXIUART_Top.sv`
+    - `rtl/vexriscvwrap/vexriscv_wrapper.sv`
+  - Expanded debug bridge interface/FSM for step and breakpoint command generation:
+    - `rtl/vexriscvwrap/vexriscv_debug_bridge.sv`
+  - Kept `cpu_control` instance in wrapper for assertion hierarchy compatibility while preserving debug-bridge-driven control behavior.
+
+- **Regression inventory alignment (workspace consistency)**
+  - Updated `sim/uvm/tb/rv32i_tb_top.sv` to include `axiuart_test_pkg.sv` for AXIUART test class registration.
+  - Removed missing-file include from `sim/uvm/tb/axiuart_test_pkg.sv` (`axiuart_cpu_simple_mem_test.sv` no longer present in workspace).
+  - Realigned `sim/regression_tests.json` `full` suite to currently available/compilable tests and updated metadata counts.
+
+### Verification
+- `./scripts/run_test.ps1 vexriscv_control_test -Verbosity UVM_LOW` → PASS
+- `./scripts/run_test.ps1 vexriscv_debug_bridge_test -Verbosity UVM_LOW` → PASS
+- `./scripts/run_regression.ps1 -Suite vexriscv_debug_control -Verbosity UVM_LOW` → PASS (2/2)
+
 ### Fixed
 - **VexRiscv Hazard Module Bug** (2026-01-20)
   - **Issue**: Pipeline stalls indefinitely on first instruction (ADDI x1, x0, 1)
