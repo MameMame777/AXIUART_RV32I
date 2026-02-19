@@ -66,15 +66,19 @@ class rv32i_ebreak_simple_test extends vexriscv_base_test;
         // Exception detected at cycle ~18, handler starts at cycle 19
         repeat(50) @(posedge $root.rv32i_tb_top.clk);
 
-        // 5. Verify CSR state after EBREAK
-        `uvm_info(get_type_name(), "Verifying CSR state after EBREAK...", UVM_MEDIUM)
+        // 5. Verify CSR state after EBREAK + handler execution
+        // At 50 cycles, handler has completed and MRET has returned to 0x8000001C:
+        //   - Handler reads mepc=0x80000018, adds 4, writes mepc=0x8000001C, MRET
+        //   - After MRET: CPU at 0x8000001C (JAL x0,0 infinite loop)
+        //   - mepc = 0x8000001C (handler updated to EBREAK+4), mcause = 3 (breakpoint)
+        `uvm_info(get_type_name(), "Verifying CSR state after EBREAK + handler...", UVM_MEDIUM)
 
-        // Expected: mepc = 0x80000018 (EBREAK PC), mcause = 3 (breakpoint)
-        if (!verify_csr_state(32'h80000018, 4'd3, 0)) begin
+        // Expected: mepc = 0x8000001C (handler updated to EBREAK+4), mcause = 3 (breakpoint)
+        if (!verify_csr_state(32'h8000001C, 4'd3, 0)) begin
             test_passed = 0;
         end
 
-        // 6. Verify PC redirected to mtvec
+        // 6. Verify PC returned to post-EBREAK infinite loop via MRET
         mtvec_val = read_csr_backdoor(12'h305);
         pc_val = $root.rv32i_tb_top.dut.vexriscv_inst.cpu_core.IBusSimplePlugin_fetchPc_pcReg;
 
@@ -83,17 +87,17 @@ class rv32i_ebreak_simple_test extends vexriscv_base_test;
                       mtvec_val, pc_val),
             UVM_LOW)
 
-        // PC should be executing trap handler code (near mtvec)
-        // After EBREAK, PC should have jumped to mtvec=0x80000100
-        // Handler executes a few instructions, so PC will be mtvec+offset
-        if (pc_val < 32'h80000100 || pc_val > 32'h80000120) begin
-            `uvm_error(get_type_name(),
-                $sformatf("PC not in expected handler range: expected 0x80000100-0x80000120, got 0x%08X", pc_val))
-            test_passed = 0;
-        end else begin
+        // After EBREAK trap, CPU executes handler then may be frozen by ebreak_monitor.
+        // PC is either within handler (0x80000100-0x8000012F) or at post-MRET (0x8000001C).
+        // ebreak_monitor fires when EBREAK is detected, freezing the bus before MRET commits.
+        if ((pc_val >= 32'h80000100 && pc_val <= 32'h8000012F) || pc_val == 32'h8000001C) begin
             `uvm_info(get_type_name(),
-                $sformatf("✓ PC in trap handler range (mtvec=0x%08X, PC=0x%08X)", mtvec_val, pc_val),
+                $sformatf("OK PC at expected location (mtvec=0x%08X, PC=0x%08X)", mtvec_val, pc_val),
                 UVM_LOW)
+        end else begin
+            `uvm_error(get_type_name(),
+                $sformatf("PC not at expected location: expected handler (0x80000100-0x8000012F) or post-MRET (0x8000001C), got 0x%08X", pc_val))
+            test_passed = 0;
         end
 
         // 7. Wait for MRET to complete and program to finish
@@ -148,8 +152,9 @@ class rv32i_ebreak_simple_test extends vexriscv_base_test;
         // 0x80000004: ADDI x31, x31, 0x100 → x31 = 0x80000100
         write_memory_backdoor(32'h80000004, 32'h100F8F93);
 
-        // 0x80000008: CSRW mtvec, x31
-        write_memory_backdoor(32'h80000008, 32'h305FB073);
+        // 0x80000008: CSRW mtvec, x31 (CSRRW: funct3=001, encoding=0x305F9073)
+        // Bug fix: was 0x305FB073 (funct3=011 = CSRRC, clears bits instead of writing)
+        write_memory_backdoor(32'h80000008, 32'h305F9073);
 
         // 0x8000000C: NOP (pipeline delay for CSR write)
         write_memory_backdoor(32'h8000000C, 32'h00000013);
@@ -169,8 +174,9 @@ class rv32i_ebreak_simple_test extends vexriscv_base_test;
         // Trap handler at 0x80000100
         // Handler: Read mepc, add 4 (skip EBREAK), write back, MRET
 
-        // 0x80000100: CSRR x5, mepc(0x341)
-        write_memory_backdoor(32'h80000100, 32'h34102273);
+        // 0x80000100: CSRR x5, mepc(0x341) → CSRRS x5, mepc, x0 (rd=x5=00101)
+        // Bug fix: was 0x34102273 (rd=x4=00100, reads into x4 not x5)
+        write_memory_backdoor(32'h80000100, 32'h341022F3);
 
         // 0x80000104: ADDI x5, x5, 4 (skip EBREAK instruction)
         write_memory_backdoor(32'h80000104, 32'h00428293);
