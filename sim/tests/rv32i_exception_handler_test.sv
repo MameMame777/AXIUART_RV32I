@@ -74,6 +74,11 @@ class rv32i_exception_handler_test extends vexriscv_base_test;
     virtual task load_exception_handler_program();
         `uvm_info(get_type_name(), "Loading exception handler test program", UVM_MEDIUM)
 
+        // Clear tohost address before test starts.
+        // BRAM initializes to 0x00000013 (NOP), not 0, so tohost monitoring
+        // would trigger immediately without this clear.
+        write_memory_backdoor(32'h80001000, 32'h00000000);
+
         //======================================================================
         // Main Program (0x80000000)
         //======================================================================
@@ -85,8 +90,9 @@ class rv32i_exception_handler_test extends vexriscv_base_test;
         // 0x80000004: ADDI x31, x31, 0x100 → x31 = 0x80000100
         write_memory_backdoor(32'h80000004, 32'h100F8F93);
 
-        // 0x80000008: CSRW mtvec, x31
-        write_memory_backdoor(32'h80000008, 32'h305FB073);
+        // 0x80000008: CSRW mtvec, x31 (CSRRW: funct3=001, encoding=0x305F9073)
+        // Bug fix: was 0x305FB073 (funct3=011 = CSRRC, clears bits instead of writing)
+        write_memory_backdoor(32'h80000008, 32'h305F9073);
 
         // 0x8000000C: NOP (pipeline delay)
         write_memory_backdoor(32'h8000000C, 32'h00000013);
@@ -114,8 +120,9 @@ class rv32i_exception_handler_test extends vexriscv_base_test;
         //   other              → write tohost=0xBAD, halt
         //======================================================================
 
-        // 0x80000100: CSRR x5, mcause(0x342)
-        write_memory_backdoor(32'h80000100, 32'h34202273);
+        // 0x80000100: CSRR x5, mcause(0x342) → CSRRS x5, mcause, x0 (rd=x5=00101)
+        // Bug fix: was 0x34202273 (rd=x4=00100, reads into x4 not x5)
+        write_memory_backdoor(32'h80000100, 32'h342022F3);
 
         // 0x80000104: ANDI x6, x5, 0xFF (extract exception code)
         write_memory_backdoor(32'h80000104, 32'h0FF2F313);
@@ -123,16 +130,18 @@ class rv32i_exception_handler_test extends vexriscv_base_test;
         // 0x80000108: LI x7, 3 (EBREAK code)
         write_memory_backdoor(32'h80000108, 32'h00300393);
 
-        // 0x8000010C: BEQ x6, x7, handle_ebreak (offset = +12 = 0x0C)
-        // BEQ rs1=x6, rs2=x7, offset=12
-        // offset[12:1] = 12 >> 1 = 6, encoded as: imm[12|10:5]=0, imm[4:1|11]=6
-        write_memory_backdoor(32'h8000010C, 32'h00730663);
+        // 0x8000010C: BEQ x6, x7, handle_ebreak (offset = +16 = 0x10)
+        // handle_ebreak is at 0x8000011C = 0x8000010C + 16
+        // Bug fix: was 0x00730663 (offset=12, reaching test_fail instead of handle_ebreak)
+        write_memory_backdoor(32'h8000010C, 32'h00730863);
 
         // 0x80000110: LI x7, 11 (ECALL code)
         write_memory_backdoor(32'h80000110, 32'h00B00393);
 
-        // 0x80000114: BEQ x6, x7, handle_ecall (offset = +20 = 0x14)
-        write_memory_backdoor(32'h80000114, 32'h00730A63);
+        // 0x80000114: BEQ x6, x7, handle_ecall (offset = +24 = 0x18)
+        // handle_ecall is at 0x8000012C = 0x80000114 + 24
+        // Bug fix: was 0x00730A63 (offset=20, reaching MRET instead of handle_ecall)
+        write_memory_backdoor(32'h80000114, 32'h00730C63);
 
         // 0x80000118: J test_fail (offset = +40 = 0x28)
         write_memory_backdoor(32'h80000118, 32'h0280006F);
@@ -142,8 +151,9 @@ class rv32i_exception_handler_test extends vexriscv_base_test;
         // Read mepc, add 4 (skip EBREAK), write back, MRET
         //----------------------------------------------------------------------
 
-        // 0x8000011C: CSRR x5, mepc
-        write_memory_backdoor(32'h8000011C, 32'h34102273);
+        // 0x8000011C: CSRR x5, mepc → CSRRS x5, mepc, x0 (rd=x5=00101)
+        // Bug fix: was 0x34102273 (rd=x4=00100, reads into x4 not x5)
+        write_memory_backdoor(32'h8000011C, 32'h341022F3);
 
         // 0x80000120: ADDI x5, x5, 4
         write_memory_backdoor(32'h80000120, 32'h00428293);
