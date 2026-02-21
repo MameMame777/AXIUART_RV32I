@@ -153,8 +153,19 @@
         }
       ]
     },
+    "vexriscv_computation_realprog": {
+      "description": "Real-program parity tests from software/exec/computation_test.py",
+      "tests": [
+        {
+          "name": "vexriscv_compute_programs_test",
+          "description": "sum100/fibonacci/bitcount with EBREAK PC and a0 checks",
+          "timeout": 240,
+          "expected_duration": 20
+        }
+      ]
+    },
     "vexriscv_stage1": {
-      "description": "VexRiscv complete Stage 1 (all 9 tests, <70s)",
+      "description": "VexRiscv complete Stage 1 (all 10 tests, <90s)",
       "tests": [
         {
           "name": "vexriscv_regfile_test",
@@ -209,6 +220,12 @@
           "description": "DBus protocol",
           "timeout": 120,
           "expected_duration": 10
+        },
+        {
+          "name": "vexriscv_compute_programs_test",
+          "description": "Real-program parity (sum100/fibonacci/bitcount)",
+          "timeout": 240,
+          "expected_duration": 20
         }
       ]
     },
@@ -1056,7 +1073,7 @@
       "vexriscv_hazard": "VexRiscv hazard handling (4 tests, < 30s)",
       "vexriscv_bus": "VexRiscv bus protocol (2 tests, < 20s)",
       "vexriscv_debug_control": "Issue #55 control/debug bridge verification",
-      "vexriscv_stage1": "VexRiscv complete Stage 1 (9 tests, < 70s)",
+      "vexriscv_stage1": "VexRiscv complete Stage 1 (10 tests, < 90s)",
       "cpu_basic": "RV32I CPU ISA phases 1-3 validation",
       "cpu_debug": "RV32I debug features (EBREAK, breakpoints)",
       "cpu_exception": "RV32I exception handling and performance counters",

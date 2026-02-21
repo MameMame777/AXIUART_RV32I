@@ -46,6 +46,7 @@
 `include "vexriscv_control_test.sv"
 `include "vexriscv_debug_bridge_test.sv"
 `include "vexriscv_led_uart_test.sv"
+`include "vexriscv_compute_programs_test.sv"
 
 //----------------------------------------------------------------------
 // ISA compliance tests (sim/tests/)
