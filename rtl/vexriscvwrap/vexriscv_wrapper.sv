@@ -168,6 +168,12 @@ module vexriscv_wrapper (
     logic        ebreak_detected;
     logic [31:0] break_pc;
     logic        clear_break;
+
+    // EBREAK auto-halt: latch that generates a halt edge for the debug bridge
+    // when EBREAK is first detected, ensuring VexRiscv actually stops.
+    logic        ebreak_prev;
+    logic        ebreak_halt_latch;
+    logic        combined_cpu_halt;
     
     // Memory crossbar debug
     logic        dbg_mem_busy;
@@ -200,6 +206,23 @@ module vexriscv_wrapper (
     assign cpu_reset = cpu_boot_hold_reset || rv32i_dbg_soft_reset || debug_resetOut;
     assign clear_break = cpu_run_pulse;
     assign rv32i_dbg_reset_done = ~cpu_reset;
+
+    // EBREAK auto-halt: on rising edge of ebreak_detected, latch a halt request.
+    // This creates a rising edge on combined_cpu_halt, which the debug bridge
+    // translates into a CTRL_HALT command sent to VexRiscv's DebugPlugin.
+    // Without this, EBREAK only sets a status flag while VexRiscv continues
+    // executing and traps to mtvec, corrupting the register file.
+    always_ff @(posedge clk) begin
+        if (rst || clear_break) begin
+            ebreak_prev       <= 1'b0;
+            ebreak_halt_latch <= 1'b0;
+        end else begin
+            ebreak_prev <= ebreak_detected;
+            if (ebreak_detected && !ebreak_prev)
+                ebreak_halt_latch <= 1'b1;
+        end
+    end
+    assign combined_cpu_halt = rv32i_cpu_halt || ebreak_halt_latch;
     
     //=================================================================
     // VexRiscv Generated CPU Core
@@ -313,7 +336,7 @@ module vexriscv_wrapper (
         
         // Register Block interface
         .reg_cpu_run(rv32i_cpu_run),
-        .reg_cpu_halt(rv32i_cpu_halt),
+        .reg_cpu_halt(combined_cpu_halt),  // combined: explicit halt OR auto-halt on EBREAK
         .reg_cpu_step(rv32i_cpu_step),
         .reg_cpu_reset(rv32i_dbg_soft_reset),
         .reg_cpu_halted(dbg_cpu_halted),
