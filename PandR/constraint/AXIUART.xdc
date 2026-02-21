@@ -124,6 +124,17 @@ set_property CONFIG_VOLTAGE 3.3 [current_design]
 # Internal clock domain constraints if needed for AXI interfaces
 # Note: All internal logic operates on single clock domain in this design
 
+# -----------------------------------------------------------------------------
+# Timing closure helper constraints (Issue #91)
+# -----------------------------------------------------------------------------
+# Routed timing shows setup violations concentrated on two source registers:
+#  1) vexriscv decode_to_execute_INSTRUCTION_reg[23]
+#  2) register_block dbg_rf_addr_reg_reg[3]
+#
+# Apply focused fanout guidance so synthesis/opt can replicate drivers and
+# reduce route-dominated delay without changing functional behavior.
+# Note: XDC does not support `set_max_fanout`; use cell property assignment.
+
 # Maximum delay constraints for critical paths (if timing issues occur)
 # set_max_delay -from [get_pins {uart_bridge_inst/state_reg[*]/C}] -to [get_pins {uart_bridge_inst/axi_*}] 10.0
 

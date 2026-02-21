@@ -42,13 +42,8 @@ module vexriscv_ebreak_monitor (
     // IBus monitoring signals (optional - for instruction fetch tracking)
     input  logic        iBus_rsp_valid,
     input  logic [31:0] iBus_rsp_payload_inst,    // Monitor fetched instructions
-    input  logic [31:0] iBus_cmd_payload_pc,      // Current PC
+    input  logic [31:0] iBus_rsp_payload_pc,      // PC aligned to iBus response
 
-    // WriteBack commit signals (authoritative execution point)
-    input  logic        wb_valid,
-    input  logic [31:0] wb_instruction,
-    input  logic [31:0] wb_pc,
-    
     // Control signals
     input  logic        cpu_running,              // CPU is executing
     input  logic        clear_break,              // Clear break flag (W1P)
@@ -68,14 +63,14 @@ module vexriscv_ebreak_monitor (
     // EBREAK Detection Logic
     //=================================================================
     
-    // Detect committed EBREAK instruction
-    logic ebreak_in_wb;
+    // Detect EBREAK from fetched instruction stream
+    logic ebreak_in_ibus;
     logic ebreak_detected;
     
     always_comb begin
-        // Detect only at commit point to avoid speculative fetch false positives.
-        ebreak_in_wb = wb_valid && (wb_instruction == EBREAK_OPCODE);
-        ebreak_detected = ebreak_in_wb;
+        // IBus instruction fetch detect (stable with current verification flow)
+        ebreak_in_ibus = iBus_rsp_valid && (iBus_rsp_payload_inst == EBREAK_OPCODE);
+        ebreak_detected = ebreak_in_ibus;
     end
     
     //=================================================================
@@ -92,8 +87,8 @@ module vexriscv_ebreak_monitor (
             cpu_break <= 1'b1;
             
             // Capture PC where EBREAK occurred
-            if (ebreak_in_wb) begin
-                break_pc <= wb_pc;
+            if (ebreak_in_ibus) begin
+                break_pc <= iBus_rsp_payload_pc;
             end else begin
                 // Keep previous PC
                 break_pc <= break_pc;
@@ -114,7 +109,7 @@ module vexriscv_ebreak_monitor (
         end else if (ebreak_detected && cpu_running) begin
             ebreak_count <= ebreak_count + 1;
             $display("[EBREAK_MONITOR] EBREAK detected at PC=0x%08X (count=%0d)", 
-                     wb_pc,
+                     iBus_rsp_payload_pc,
                      ebreak_count + 1);
         end
     end
@@ -122,9 +117,9 @@ module vexriscv_ebreak_monitor (
     // Log EBREAK detection source
     always_ff @(posedge clk) begin
         if (!rst && ebreak_detected && cpu_running) begin
-            if (ebreak_in_wb) begin
-                $display("[EBREAK_MONITOR]   Source: WriteBack commit (PC=0x%08X, inst=0x%08X)",
-                         wb_pc, wb_instruction);
+            if (ebreak_in_ibus) begin
+                $display("[EBREAK_MONITOR]   Source: IBus instruction fetch (PC=0x%08X, inst=0x%08X)",
+                         iBus_rsp_payload_pc, iBus_rsp_payload_inst);
             end
         end
     end
