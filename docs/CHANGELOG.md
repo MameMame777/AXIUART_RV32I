@@ -40,6 +40,35 @@ All notable changes to this project will be documented in this file.
 - `./scripts/run_test.ps1 vexriscv_debug_bridge_test -Verbosity UVM_LOW` → PASS
 - `./scripts/run_regression.ps1 -Suite vexriscv_debug_control -Verbosity UVM_LOW` → PASS (2/2)
 
+---
+
+- **Issue #75: CSR Encoding and Exception Handler Bug Fixes** (2026-02-21)
+  - Fixed incorrect CSR encoding in `rv32i_ebreak_simple_test.sv` and `rv32i_exception_handler_test.sv`
+  - Corrected MTVEC/MEPC register address constants to match VexRiscv CSR map
+  - Fixed trap handler logic: EBREAK increments MEPC+4 before MRET; ECALL handler writes tohost=1 for PASS
+  - Files modified:
+    - `sim/tests/rv32i_ebreak_simple_test.sv`
+    - `sim/tests/rv32i_exception_handler_test.sv`
+  - Verification: Both exception tests now compile and execute correctly under DSIM
+
+- **Issue #53: Stage 3 VexRiscv Assertion Modules** (2026-02-21)
+  - Implemented 5 non-intrusive assertion spec modules (observer-only, `ENABLE_ASSERTIONS` guarded):
+    - `sim/assertions/spec/vexriscv_hazard_plugin_spec.sv` — RAW hazard detection, bypass priority, load-use stall, bypassWriteBackBuffer validity
+    - `sim/assertions/spec/vexriscv_pipeline_arbitration_spec.sv` — decode/execute/memory/WB arbitration flags, stall/flush protocol
+    - `sim/assertions/spec/vexriscv_regfile_bypass_spec.sv` — forwarding correctness from EX/MEM/WB stages
+    - `sim/assertions/spec/vexriscv_jump_arbitration_spec.sv` — jump/branch taken vs PC correction protocol
+    - `sim/assertions/spec/vexriscv_stream_fifo_spec.sv` — IBus/DBus stream FIFO handshake protocol
+  - Added corresponding bind files under `sim/assertions/bind/`
+  - Added `sim/uvm/tb/dsim_config_rv32i.f` compile list for RV32I-focused sim runs
+  - All assertion modules reference VexRiscv internal signals via bind; assertions are NEVER embedded in DUT
+
+- **Hardware Bring-up: LED Blink Program** (2026-02-21)
+  - Added `software/rv32i/led_blink.py` — standalone FPGA hardware bring-up tool (523 lines)
+    - Sends LED blink RV32I program via UART to AXIUART/VexRiscv SoC
+    - Configurable blink rate, address, and repeat count; works with any serial port
+  - Updated `software/rv32i/README.md` with `led_blink.py` usage examples and corrected register addresses
+  - Added `AGENTS.md` at repository root for OpenAI Codex CLI configuration
+
 ### Fixed
 - **VexRiscv Hazard Module Bug** (2026-01-20)
   - **Issue**: Pipeline stalls indefinitely on first instruction (ADDI x1, x0, 1)
