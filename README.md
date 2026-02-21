@@ -273,10 +273,6 @@ AXIUART_RV32I/
 │   └── rv32i/                 # FPGA bring-up tools
 │       ├── led_blink.py       # HW bring-up: LED blink via UART
 │       └── README.md
-├── docs/                   # Documentation
-│   ├── CHANGELOG.md
-│   ├── vexriscv_test_plan.md
-│   └── plan/                  # Implementation plans
 └── register_map/           # Single source of truth for registers
     └── axiuart_registers.json
 ```
