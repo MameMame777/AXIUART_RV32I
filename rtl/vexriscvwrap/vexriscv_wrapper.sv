@@ -158,6 +158,8 @@ module vexriscv_wrapper (
     logic        cpu_effective_halted;
     logic        cpu_boot_hold_reset;
     logic        cpu_run_pulse;
+    logic        cpu_run_reset_pulse;
+    logic [1:0]  cpu_run_reset_cnt;
     logic        rv32i_cpu_run_d;
     logic        cpu_control_reset;
     logic        cpu_control_running;
@@ -177,6 +179,7 @@ module vexriscv_wrapper (
     
     // Memory crossbar debug
     logic        dbg_mem_busy;
+    logic [3:0]  dbg_bp_hit_comb;
     
     // LED register (MMIO)
     logic [31:0] led_reg_wdata;
@@ -190,21 +193,28 @@ module vexriscv_wrapper (
         if (rst || rv32i_dbg_soft_reset || debug_resetOut) begin
             rv32i_cpu_run_d <= 1'b0;
             cpu_boot_hold_reset <= 1'b1;
+            cpu_run_reset_cnt <= 2'b00;
         end else begin
             rv32i_cpu_run_d <= rv32i_cpu_run;
+            if (rv32i_cpu_run && !rv32i_cpu_run_d) begin
+                cpu_run_reset_cnt <= 2'b11;
+            end else if (cpu_run_reset_cnt != 2'b00) begin
+                cpu_run_reset_cnt <= cpu_run_reset_cnt - 1'b1;
+            end
             if (rv32i_cpu_run && !rv32i_cpu_run_d) begin
                 cpu_boot_hold_reset <= 1'b0;
             end
         end
     end
 
+    assign cpu_run_reset_pulse = (cpu_run_reset_cnt != 2'b00);
     assign cpu_run_pulse = rv32i_cpu_run && !rv32i_cpu_run_d;
     assign cpu_effective_halted = dbg_cpu_halted || ebreak_detected;
     assign rv32i_cpu_halted = cpu_effective_halted;
     assign rv32i_cpu_break = ebreak_detected;
     assign cpu_running = ~cpu_effective_halted;
-    assign cpu_reset = cpu_boot_hold_reset || rv32i_dbg_soft_reset || debug_resetOut;
-    assign clear_break = cpu_run_pulse;
+    assign cpu_reset = cpu_boot_hold_reset || rv32i_dbg_soft_reset || debug_resetOut || cpu_run_reset_pulse;
+    assign clear_break = cpu_run_pulse || rv32i_cpu_halt;
     assign rv32i_dbg_reset_done = ~cpu_reset;
 
     // EBREAK auto-halt: on rising edge of ebreak_detected, latch a halt request.
@@ -444,6 +454,11 @@ module vexriscv_wrapper (
         .iBus_rsp_valid(mem_iBus_rsp_valid),
         .iBus_rsp_payload_inst(mem_iBus_rsp_payload_inst),
         .iBus_cmd_payload_pc(mem_iBus_cmd_payload_pc),
+
+        // WriteBack commit monitoring
+        .wb_valid(cpu_core.writeBack_arbitration_isFiring),
+        .wb_instruction(cpu_core.writeBack_INSTRUCTION),
+        .wb_pc(cpu_core.writeBack_PC),
         
         // Control
         .cpu_running(cpu_running),
@@ -543,12 +558,17 @@ module vexriscv_wrapper (
                                 32'h0000_0000 : cpu_core.RegFilePlugin_regFile[rv32i_dbg_rf_addr];
 
     always_comb begin
-        rv32i_dbg_bp_hit = 4'b0000;
-        if (ebreak_detected) begin
-            rv32i_dbg_bp_hit[0] = rv32i_dbg_bp_enable[0] && (break_pc == rv32i_dbg_bp_addr[0]);
-            rv32i_dbg_bp_hit[1] = rv32i_dbg_bp_enable[1] && (break_pc == rv32i_dbg_bp_addr[1]);
-            rv32i_dbg_bp_hit[2] = rv32i_dbg_bp_enable[2] && (break_pc == rv32i_dbg_bp_addr[2]);
-            rv32i_dbg_bp_hit[3] = rv32i_dbg_bp_enable[3] && (break_pc == rv32i_dbg_bp_addr[3]);
+        dbg_bp_hit_comb[0] = rv32i_dbg_bp_enable[0] && (break_pc == rv32i_dbg_bp_addr[0]);
+        dbg_bp_hit_comb[1] = rv32i_dbg_bp_enable[1] && (break_pc == rv32i_dbg_bp_addr[1]);
+        dbg_bp_hit_comb[2] = rv32i_dbg_bp_enable[2] && (break_pc == rv32i_dbg_bp_addr[2]);
+        dbg_bp_hit_comb[3] = rv32i_dbg_bp_enable[3] && (break_pc == rv32i_dbg_bp_addr[3]);
+    end
+
+    always_ff @(posedge clk) begin
+        if (rst || cpu_reset || clear_break || !ebreak_detected) begin
+            rv32i_dbg_bp_hit <= 4'b0000;
+        end else begin
+            rv32i_dbg_bp_hit <= dbg_bp_hit_comb;
         end
     end
     

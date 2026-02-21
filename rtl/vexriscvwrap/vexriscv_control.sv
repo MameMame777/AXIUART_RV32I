@@ -140,7 +140,6 @@ module vexriscv_control (
         cpu_halted  = 1'b0;
         cpu_running = 1'b0;
         cpu_break   = 1'b0;
-        clear_break = 1'b0;
         
         case (state)
             STATE_RESET: begin

@@ -91,6 +91,7 @@ set_false_path -from [get_ports rst] -to [all_clocks]
 
 # Optional: False paths for status output LEDs if implemented
 set_false_path -to [get_ports {led[*]}]
+set_false_path -to [get_ports {led5_r led5_g led5_b}]
 
 ###################################################################################
 # Physical Constraints
