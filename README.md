@@ -10,7 +10,12 @@ UART-AXI4 bridge with integrated VexRiscv RISC-V CPU, comprehensive verification
 ✅ **EBREAK Detection** (Automatic halt on breakpoint)  
 ✅ **Dual-Port Block RAM** (8KB unified memory, Read-First mode)  
 ✅ **MMIO LED Register** (Memory-mapped I/O at 0x407C)  
-✅ **Production ready** (4-stage pipeline, ~0.82 DMIPS/MHz)
+✅ **Production ready** (4-stage pipeline, ~0.82 DMIPS/MHz)  
+✅ **Stage 1 UVM Test Suite** — regfile / ALU / pipeline / memory / debug/control tests all PASS  
+✅ **Debug & Control Bridge** (Issue #55) — step/breakpoint/reset register path verified via UVM  
+✅ **Exception Handler Tests** (Issue #75) — EBREAK/ECALL CSR encoding fixed; tests PASS  
+✅ **Stage 3 Assertion Modules** (Issue #53) — 5 non-intrusive SVA modules implemented  
+✅ **Hardware Bring-up Tool** — `software/rv32i/led_blink.py` for FPGA bring-up via UART
 
 ## Project Overview
 
@@ -133,33 +138,33 @@ python software/axiuart_driver/tools/gen_registers.py \
 - `axiuart_basic_test` - Basic connectivity and reset test
 - `axiuart_reset_test` - Reset functionality verification
 - `axiuart_reg_rw_test` - Register read/write verification
-- `vexriscv_smoke_test` - **VexRiscv basic functionality (coming soon)**
-  - Load NOP program via UART
-  - Start CPU execution
-  - Halt CPU and verify PC advancement
-- `vexriscv_memory_test` - **Memory access test (coming soon)**
-  - Load/store instructions
-  - Verify data integrity
-  - MMIO LED register access
+- `vexriscv_smoke_test` - VexRiscv basic functionality (NOP program, PC advancement)
+- `vexriscv_regfile_test` - Register file read/write correctness
+- `vexriscv_alu_test` - ALU instruction coverage (ADD/SUB/AND/OR/XOR/SLT/shifts)
+- `vexriscv_pipeline_flow_test` - Pipeline hazard and forwarding
+- `vexriscv_memory_access_test` - Load/store and MMIO LED register access
+- `vexriscv_control_test` - CPU run/halt/step control register path (Issue #55)
+- `vexriscv_debug_bridge_test` - Debug bridge FSM: step/breakpoint/reset (Issue #55)
+- `rv32i_ebreak_simple_test` - EBREAK trap → halt flow (Issue #75)
+- `rv32i_exception_handler_test` - EBREAK/ECALL trap handler via CSR (Issue #75)
 
 **Regression Suites:**
-- `smoke` - Quick validation (2 tests, ~68s)
+- `stage1` - Foundation tests (smoke + core instruction tests)
+- `vexriscv_debug_control` - Debug/control bridge tests (Issue #55)
 - `full` - Complete regression (all tests)
 
-**Simulation Infrastructure:**
-- Altair DSim 2025.1 with UVM support
-- MXD waveform generation for debugging
-- FastMCP server for automated test execution
-- JSON-based result analysis and reporting
-- HTML regression reports
-
-**Documentation:** [sim/README.md](sim/README.md) | [sim/uvm/UVM_ARCHITECTURE.md](sim/uvm/UVM_ARCHITECTURE.md)
+**Assertion Modules (Stage 3, Issue #53):**
+- `sim/assertions/spec/vexriscv_hazard_plugin_spec.sv` - RAW hazard, bypass priority, load-use stall
+- `sim/assertions/spec/vexriscv_pipeline_arbitration_spec.sv` - Decode/EX/MEM/WB arbitration flags
+- `sim/assertions/spec/vexriscv_regfile_bypass_spec.sv` - EX/MEM/WB forwarding correctness
+- `sim/assertions/spec/vexriscv_jump_arbitration_spec.sv` - Jump/branch taken vs PC correction
+- `sim/assertions/spec/vexriscv_stream_fifo_spec.sv` - IBus/DBus stream FIFO handshake
 
 **Simulation Infrastructure:**
 - Altair DSim 2025.1 with UVM support
 - MXD waveform generation for debugging
-- FastMCP server for automated test execution
-- JSON-based result analysis and reporting
+- PowerShell scripts for single test and regression execution (`scripts/`)
+- JSON-based regression inventory (`sim/regression_tests.json`)
 
 **Documentation:** [sim/README.md](sim/README.md) | [sim/uvm/UVM_ARCHITECTURE.md](sim/uvm/UVM_ARCHITECTURE.md)
 
@@ -200,15 +205,20 @@ with LEDController('COM3') as led:
 ### Hardware Simulation
 
 ```powershell
-# Run UVM test (compile + simulate)
-.\scripts\run_test.ps1 axiuart_reg_rw_test -Verbosity UVM_MEDIUM -Waves
+# Run a single UVM test
+.\scripts\run_test.ps1 vexriscv_regfile_test -Verbosity UVM_LOW
 
-# Run regression suite
-.\scripts\run_regression.ps1 -Stage 1
+# Run with waveforms (MXD format, open with DSim viewer)
+.\scripts\run_test.ps1 vexriscv_regfile_test -Verbosity UVM_LOW -Waves
 
-# View results
+# Run Stage 1 regression suite
+.\scripts\run_regression.ps1 -Stage 1 -Verbosity UVM_LOW
+
+# Run a specific subset of tests
+.\scripts\run_regression.ps1 -Suite vexriscv_debug_control -Verbosity UVM_LOW
+
 # Logs: sim/exec/logs/
-# Waveforms: sim/exec/wave/ (MXD format, use Metrics DSim viewer)
+# Waveforms: sim/exec/wave/
 ```
 
 ### Python Driver
@@ -216,6 +226,9 @@ with LEDController('COM3') as led:
 ```bash
 # Install dependencies
 pip install pyserial
+
+# LED blink hardware bring-up (requires FPGA connected via UART)
+python software/rv32i/led_blink.py --port COM3
 
 # LED control demo (interactive mode)
 cd software
@@ -232,32 +245,40 @@ python -m axiuart_driver.examples.example_basic
 ## Directory Structure
 
 ```
-AXIUART_/
+AXIUART_RV32I/
 ├── rtl/                    # SystemVerilog RTL design
-│   ├── README.md          # RTL specifications
-│   ├── AXIUART_Top.sv     # Top-level (4-bit LED)
-│   ├── register_block/    # AXI4-Lite registers
-│   └── uart_axi4_bridge/  # Protocol conversion
-├── sim/                   # UVM verification
-│   ├── README.md          # Simulation guide
-│   ├── uvm/               # UVM testbench
-│   │   ├── UVM_ARCHITECTURE.md
-│   │   ├── tb/            # Tests and sequences
-│   │   └── sv/            # UVM components
-│   └── exec/              # Simulation outputs
-├── software/              # Python control software
-│   └── axiuart_driver/
-│       ├── axiuart_driver.md    # Driver documentation
-│       ├── axiuart_driver.py    # Core driver
-│       ├── protocol.py          # UART protocol
-│       └── examples/
-│           ├── led_control.py          # LED application
-│           ├── LED_CONTROL_README.md   # Usage guide
-│           └── example_basic.py        # Basic example
-├── mcp_server/            # FastMCP automation
-│   ├── dsim_uvm_server.py
-│   └── mcp_client.py
-└── docs/                  # Documentation
+│   ├── README.md
+│   ├── AXIUART_Top.sv         # Top-level integration
+│   ├── cpu/                   # VexRiscv CPU modules
+│   ├── register_block/        # AXI4-Lite registers
+│   ├── vexriscvwrap/          # Wrapper + debug bridge
+│   └── uart_axi4_bridge/      # Protocol conversion
+├── sim/                    # UVM verification
+│   ├── README.md
+│   ├── assertions/            # Non-intrusive SVA modules (Stage 3)
+│   │   ├── spec/              # Assertion spec files
+│   │   └── bind/              # Bind attachment files
+│   ├── tests/                 # UVM test classes
+│   ├── uvm/                   # UVM testbench components
+│   │   ├── tb/                # Top-level TB and sequences
+│   │   └── sv/                # Agents, scoreboard, coverage
+│   ├── regression_tests.json  # Regression suite definitions
+│   └── exec/                  # Simulation outputs (logs, waves)
+├── scripts/                # PowerShell workflow scripts
+│   ├── run_test.ps1           # Single test runner
+│   ├── run_regression.ps1     # Regression runner
+│   └── clean_logs.ps1         # Log cleanup
+├── software/               # Python control software
+│   ├── axiuart_driver/        # UART driver library
+│   └── rv32i/                 # FPGA bring-up tools
+│       ├── led_blink.py       # HW bring-up: LED blink via UART
+│       └── README.md
+├── docs/                   # Documentation
+│   ├── CHANGELOG.md
+│   ├── vexriscv_test_plan.md
+│   └── plan/                  # Implementation plans
+└── register_map/           # Single source of truth for registers
+    └── axiuart_registers.json
 ```
 
 ## Development Environment
@@ -282,21 +303,20 @@ pip install pyserial
 
 ## Verification Status
 
-| Component | Tests | Status | Coverage |
-|-----------|-------|--------|----------|
-| UART Protocol | Basic + Register R/W | ✅ PASS | 95% |
-| AXI4-Lite Interface | Write/Read sequences | ✅ PASS | 92% |
-| VexRiscv RTL | Compilation test | ✅ PASS | 100% |
-| VexRiscv Wrapper | Standalone compile | ✅ PASS | - |
-| Memory Crossbar | 7-deep IBus FIFO | ✅ PASS | - |
-| EBREAK Monitor | Instruction decode | ✅ PASS | - |
-| Python Driver | Hardware verified | ✅ PASS | - |
+| Component | Tests | Status |
+|-----------|-------|--------|
+| UART Protocol | Basic + Register R/W | ✅ PASS |
+| AXI4-Lite Interface | Write/Read sequences | ✅ PASS |
+| VexRiscv RTL | Full pipeline (regfile/ALU/memory/branch) | ✅ PASS |
+| VexRiscv Hazard | EX/MEM/WB bypass + load-use stall | ✅ PASS |
+| Exception Handling | EBREAK/ECALL + trap handler (Issue #75) | ✅ PASS |
+| Debug & Control Bridge | Step/breakpoint/reset path (Issue #55) | ✅ PASS |
+| Stage 3 SVA Assertions | 5 modules: hazard / pipeline / bypass / jump / FIFO | ✅ IMPLEMENTED |
+| Python Driver | UART driver library | ✅ PASS |
+| HW Bring-up Tool | `led_blink.py` via UART | ✅ IMPLEMENTED |
 
-**Latest Compilation Results:**
-- VexRiscv modules: 7 modules, 1,867 basic blocks (DSim 2025.1)
-- Integration test: AXIUART_Top + VexRiscv wrapper compiled successfully
-- Warnings: 0
-- UVM tests: Pending VexRiscv-specific test development
+**Simulator**: Altair DSim 2025.1 — 0 compilation warnings  
+**Last full regression**: Stage 1 all PASS (2026-02-15)
 
 ## License
 
