@@ -159,7 +159,7 @@ module vexriscv_wrapper (
     logic        cpu_boot_hold_reset;
     logic        cpu_run_pulse;
     logic        cpu_run_reset_pulse;
-    logic [1:0]  cpu_run_reset_cnt;
+    logic [3:0]  cpu_run_reset_cnt;
     logic        rv32i_cpu_run_d;
     logic        cpu_control_reset;
     logic        cpu_control_running;
@@ -168,8 +168,10 @@ module vexriscv_wrapper (
     
     // EBREAK monitor
     logic        ebreak_detected;
+    logic        ebreak_detected_raw;
     logic [31:0] break_pc;
     logic        clear_break;
+    localparam logic [31:0] EBREAK_OPCODE = 32'h0010_0073;
 
     // EBREAK auto-halt: latch that generates a halt edge for the debug bridge
     // when EBREAK is first detected, ensuring VexRiscv actually stops.
@@ -186,6 +188,18 @@ module vexriscv_wrapper (
     logic        led_reg_we;
     logic [31:0] led_reg_rdata;
     logic [31:0] led_register;
+    logic [31:0] dbg_rf_rdata_reg;
+    logic [31:0] dbg_rf_shadow [0:31];
+
+    // Hierarchical probe signals (declared early for EBREAK logic use)
+    logic [31:0] probe_writeBack_PC;
+    logic [31:0] probe_writeBack_INSTRUCTION;
+    logic        probe_writeBack_REGFILE_WRITE_VALID;
+    logic [4:0]  probe_writeBack_REGFILE_WRITE_ADDR;
+    logic [31:0] probe_writeBack_REGFILE_WRITE_DATA;
+    logic        probe_writeBack_arbitration_isFiring;
+    logic        probe_decode_arbitration_isStuckByOthers;
+    logic        probe_decode_arbitration_flushNext;
     
     // Debug bridge is the control owner for run/halt/step/reset.
     // Keep core in reset until first RUN pulse so code load completes deterministically.
@@ -193,12 +207,16 @@ module vexriscv_wrapper (
         if (rst || rv32i_dbg_soft_reset || debug_resetOut) begin
             rv32i_cpu_run_d <= 1'b0;
             cpu_boot_hold_reset <= 1'b1;
-            cpu_run_reset_cnt <= 2'b00;
+            cpu_run_reset_cnt <= 4'b0000;
         end else begin
             rv32i_cpu_run_d <= rv32i_cpu_run;
             if (rv32i_cpu_run && !rv32i_cpu_run_d) begin
-                cpu_run_reset_cnt <= 2'b11;
-            end else if (cpu_run_reset_cnt != 2'b00) begin
+                if (ebreak_detected) begin
+                    cpu_run_reset_cnt <= 4'hF;
+                end else begin
+                    cpu_run_reset_cnt <= 4'h3;
+                end
+            end else if (cpu_run_reset_cnt != 4'b0000) begin
                 cpu_run_reset_cnt <= cpu_run_reset_cnt - 1'b1;
             end
             if (rv32i_cpu_run && !rv32i_cpu_run_d) begin
@@ -207,15 +225,29 @@ module vexriscv_wrapper (
         end
     end
 
-    assign cpu_run_reset_pulse = (cpu_run_reset_cnt != 2'b00);
+    assign cpu_run_reset_pulse = (cpu_run_reset_cnt != 4'b0000);
     assign cpu_run_pulse = rv32i_cpu_run && !rv32i_cpu_run_d;
     assign cpu_effective_halted = dbg_cpu_halted || ebreak_detected;
     assign rv32i_cpu_halted = cpu_effective_halted;
     assign rv32i_cpu_break = ebreak_detected;
     assign cpu_running = ~cpu_effective_halted;
     assign cpu_reset = cpu_boot_hold_reset || rv32i_dbg_soft_reset || debug_resetOut || cpu_run_reset_pulse;
-    assign clear_break = cpu_run_pulse || rv32i_cpu_halt;
+    assign clear_break = cpu_run_pulse;
     assign rv32i_dbg_reset_done = ~cpu_reset;
+
+    // Detect EBREAK when instruction reaches execute stage with ENV=EBREAK.
+    assign ebreak_detected_raw = cpu_core.execute_arbitration_isValid &&
+                                 (cpu_core.execute_ENV_CTRL == 2'd3);
+
+    always_ff @(posedge clk) begin
+        if (rst || clear_break) begin
+            ebreak_detected <= 1'b0;
+            break_pc <= 32'h0000_0000;
+        end else if (ebreak_detected_raw && cpu_running) begin
+            ebreak_detected <= 1'b1;
+            break_pc <= cpu_core.execute_PC;
+        end
+    end
 
     // EBREAK auto-halt: on rising edge of ebreak_detected, latch a halt request.
     // This creates a rising edge on combined_cpu_halt, which the debug bridge
@@ -434,55 +466,8 @@ module vexriscv_wrapper (
     );
 
     //=================================================================
-    // EBREAK Monitor
-    //=================================================================
-    
-    vexriscv_ebreak_monitor ebreak_monitor (
-        .clk(clk),
-        .rst(rst),
-        
-        // DBus monitoring
-        .dBus_cmd_valid(mem_dBus_cmd_valid),
-        .dBus_cmd_ready(mem_dBus_cmd_ready),
-        .dBus_cmd_payload_wr(mem_dBus_cmd_payload_wr),
-        .dBus_cmd_payload_data(mem_dBus_cmd_payload_data),
-        .dBus_cmd_payload_address(mem_dBus_cmd_payload_address),
-        .dBus_rsp_ready(mem_dBus_rsp_ready),
-        .dBus_rsp_data(mem_dBus_rsp_data),
-        
-        // IBus monitoring
-        .iBus_rsp_valid(mem_iBus_rsp_valid),
-        .iBus_rsp_payload_inst(mem_iBus_rsp_payload_inst),
-        .iBus_cmd_payload_pc(mem_iBus_cmd_payload_pc),
-
-        // WriteBack commit monitoring
-        .wb_valid(cpu_core.writeBack_arbitration_isFiring),
-        .wb_instruction(cpu_core.writeBack_INSTRUCTION),
-        .wb_pc(cpu_core.writeBack_PC),
-        
-        // Control
-        .cpu_running(cpu_running),
-        .clear_break(clear_break),
-        
-        // Status
-        .cpu_break(ebreak_detected),
-        .break_pc(break_pc)
-    );
-    
-    //=================================================================
     // Trace Probe (Internal Signal Taps)
     //=================================================================
-    
-    // Hierarchical references to VexRiscv internal signals
-    // These signals are internal to the generated VexRiscv module
-    logic [31:0] probe_writeBack_PC;
-    logic [31:0] probe_writeBack_INSTRUCTION;
-    logic        probe_writeBack_REGFILE_WRITE_VALID;
-    logic [4:0]  probe_writeBack_REGFILE_WRITE_ADDR;
-    logic [31:0] probe_writeBack_REGFILE_WRITE_DATA;
-    logic        probe_writeBack_arbitration_isFiring;
-    logic        probe_decode_arbitration_isStuckByOthers;
-    logic        probe_decode_arbitration_flushNext;
     
     // Connect via hierarchical references
     // Note: These are internal wires in VexRiscv.v
@@ -554,8 +539,31 @@ module vexriscv_wrapper (
     // Register file snapshot / breakpoint hit reporting
     //=================================================================
 
-    assign rv32i_dbg_rf_rdata = (rv32i_dbg_rf_addr == 5'd0) ?
-                                32'h0000_0000 : cpu_core.RegFilePlugin_regFile[rv32i_dbg_rf_addr];
+    integer dbg_rf_idx;
+
+    always_ff @(posedge clk) begin
+        if (rst || rv32i_dbg_soft_reset || debug_resetOut || cpu_reset) begin
+            for (dbg_rf_idx = 0; dbg_rf_idx < 32; dbg_rf_idx = dbg_rf_idx + 1) begin
+                dbg_rf_shadow[dbg_rf_idx] <= 32'h0000_0000;
+            end
+        end else if (probe_writeBack_arbitration_isFiring &&
+                     probe_writeBack_REGFILE_WRITE_VALID &&
+                     (probe_writeBack_REGFILE_WRITE_ADDR != 5'd0)) begin
+            dbg_rf_shadow[probe_writeBack_REGFILE_WRITE_ADDR] <= probe_writeBack_REGFILE_WRITE_DATA;
+        end
+    end
+
+    always_ff @(posedge clk) begin
+        if (rst || rv32i_dbg_soft_reset || debug_resetOut) begin
+            dbg_rf_rdata_reg <= 32'h0000_0000;
+        end else if (rv32i_dbg_rf_addr == 5'd0) begin
+            dbg_rf_rdata_reg <= 32'h0000_0000;
+        end else begin
+            dbg_rf_rdata_reg <= dbg_rf_shadow[rv32i_dbg_rf_addr];
+        end
+    end
+
+    assign rv32i_dbg_rf_rdata = dbg_rf_rdata_reg;
 
     always_comb begin
         dbg_bp_hit_comb[0] = rv32i_dbg_bp_enable[0] && (break_pc == rv32i_dbg_bp_addr[0]);

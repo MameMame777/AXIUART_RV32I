@@ -139,6 +139,7 @@ module Register_Block #(
     logic [31:0] dbg_bp3_addr_reg;     // Hardware breakpoint 3 address
     logic [31:0] dbg_bp_ctrl_reg;      // Breakpoint control (enable + hit flags)
     logic [31:0] dbg_rf_addr_reg;      // Register file address register
+    logic [31:0] dbg_rf_data_reg;      // Registered register file data
     logic [31:0] trace_addr_reg;       // Trace buffer read address
     logic [31:0] dbg_reset_ctrl_reg;   // Debug reset control register
     
@@ -464,6 +465,7 @@ module Register_Block #(
             dbg_bp3_addr_reg <= 32'h0000_0000;
             dbg_bp_ctrl_reg <= 32'h0000_0000;  // All breakpoints disabled
             dbg_rf_addr_reg <= 32'h0000_0000;
+            dbg_rf_data_reg <= 32'h0000_0000;
             trace_addr_reg <= 32'h0000_0000;
             dbg_reset_ctrl_reg <= 32'h0000_0000;
             
@@ -475,6 +477,7 @@ module Register_Block #(
             rv32i_mem_re <= 1'b0;
         end else begin
             reset_stats_pulse <= 1'b0;
+            dbg_rf_data_reg <= rv32i_dbg_rf_rdata;
             
             // RV32I memory access busy tracking (registered BlockRAM with Read-First)
             // BlockRAM timing: RE asserted cycle N → data valid cycle N+1
@@ -858,7 +861,7 @@ module Register_Block #(
                 end
                 
                 REG_DBG_RF_DATA: begin
-                    read_data = rv32i_dbg_rf_rdata;
+                    read_data = dbg_rf_data_reg;
                 end
                 
                 REG_TRACE_ADDR: begin
