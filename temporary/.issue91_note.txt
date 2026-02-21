@@ -1,1 +1,1 @@
-Issue #91: simulation repro now PASS with Stage1 PASS; pending real hardware confirmation.
+Issue #91 updated in local debug session: simulation parity PASS and Stage1 PASS after wrapper break-detection/refined reset policy. Pending hardware validation.
