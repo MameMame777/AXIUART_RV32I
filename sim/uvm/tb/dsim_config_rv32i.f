@@ -92,6 +92,20 @@
 # ../../assertions/spec/rv32i_regfile_forward_debug_spec.sv  # Disabled for now
 # ../../assertions/bind_rv32i_regfile_debug.sv  # Disabled for now
 
+# Stage 3 VexRiscv Assertions (Issue #53)
+# Enable with +define+ENABLE_ASSERTIONS on dsim command line
+# All files are guarded by `ifdef ENABLE_ASSERTIONS internally
+../../assertions/spec/vexriscv_pipeline_arbitration_spec.sv
+../../assertions/bind/bind_vexriscv_pipeline_arbitration_spec.sv
+../../assertions/spec/vexriscv_hazard_plugin_spec.sv
+../../assertions/bind/bind_vexriscv_hazard_plugin_spec.sv
+../../assertions/spec/vexriscv_stream_fifo_spec.sv
+../../assertions/bind/bind_vexriscv_stream_fifo_spec.sv
+../../assertions/spec/vexriscv_jump_arbitration_spec.sv
+../../assertions/bind/bind_vexriscv_jump_arbitration_spec.sv
+../../assertions/spec/vexriscv_regfile_bypass_spec.sv
+../../assertions/bind/bind_vexriscv_regfile_bypass_spec.sv
+
 # UVM Environment and Base Test Classes
 ../sv/axiuart_pkg.sv
 # ../sv/axiuart_base_test.sv  # Not needed for VexRiscv tests
