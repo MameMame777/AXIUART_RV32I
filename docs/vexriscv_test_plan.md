@@ -59,18 +59,18 @@ Stage 2: VexRiscv Integration (3-4 weeks)
 ├── Exception Tests: EBREAK/ECALL/MRET/Interrupts
 └── Control Flow: Branches/Jumps/Penalties
 
-Stage 3: Assertion Coverage (Ongoing)
-├── Pipeline Arbitration Assertions
-├── Hazard Plugin Assertions
-├── Stream FIFO Protocol Assertions
-├── Jump Interface Assertions
-└── RegFile Bypass Assertions
+Stage 3: Assertion Coverage (COMPLETE - 2026-02-21)
+├── Pipeline Arbitration Assertions  ✅
+├── Hazard Plugin Assertions  ✅
+├── Stream FIFO Protocol Assertions  ✅
+├── Jump Interface Assertions  ✅
+└── RegFile Bypass Assertions  ✅
 ```
 
 **Timeline**:
 - **Stage 1**: 2-3 weeks (build UVM test infrastructure)
 - **Stage 2**: 3-4 weeks (integrate 180+ ISA tests)
-- **Stage 3**: Ongoing (add assertions as bugs discovered)
+- **Stage 3**: **COMPLETE** 2026-02-21 (5 assertion modules implemented; expand as new bugs discovered)
 - **Total**: ~8 weeks to full coverage
 
 ---
@@ -932,6 +932,8 @@ python mcp_server/run_regression.py --suite vexriscv_compliance
 
 ## 5. Stage 3: Assertion Strategy
 
+**Status**: ✅ IMPLEMENTED (2026-02-21, Issue #53)
+
 **Objective**: Non-intrusive debug assertions
 
 ### 5.1 Assertion Principles
@@ -943,7 +945,7 @@ python mcp_server/run_regression.py --suite vexriscv_compliance
 4. **Conditional Compilation** - `+define+ENABLE_ASSERTIONS`
 5. **One-Intent-One-Assertion** - Clear messages
 
-### 5.2 Required Assertion Modules
+### 5.2 Implemented Assertion Modules
 
 #### Module 1: Pipeline Arbitration
 **File**: `sim/assertions/spec/vexriscv_pipeline_arbitration_spec.sv`
@@ -991,9 +993,9 @@ python mcp_server/run_regression.py --suite vexriscv_compliance
 
 **Enable Assertions** (debug only):
 ```powershell
-python mcp_server/mcp_client.py --tool run_uvm_simulation \
-    --test-name vexriscv_smoke_test --mode compile \
-    --plusarg +define+ENABLE_ASSERTIONS
+# Run with assertions enabled via PowerShell script
+.\scripts\run_test.ps1 vexriscv_smoke_test -Verbosity UVM_LOW
+# Note: ENABLE_ASSERTIONS define is set in dsim_config_rv32i.f for rv32i sim runs
 ```
 
 **Performance Impact**: +19% compilation overhead
