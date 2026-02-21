@@ -18,8 +18,11 @@ module rv32i_tb_top;
     // Include AXIUART test classes
     `include "axiuart_test_pkg.sv"
 
-    // Include VexRiscv tests
-    // `include "vexriscv_smoke_test.sv"  // TODO: File not yet created
+    // Include VexRiscv test classes (base + all stages)
+    `include "vexriscv_test_pkg.sv"
+
+    // Include RV32I exception/perf test classes (extend vexriscv_base_test)
+    `include "rv32i_test_pkg.sv"
     
     //==========================================================================
     // CLOCK GENERATION
