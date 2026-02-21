@@ -66,6 +66,7 @@ vivado*
 
 # IDE and Editor Files
 .vscode/
+.worktrees/
 *.swp
 *.swo
 *~
@@ -178,3 +179,8 @@ vexriscv_reference/
 
 # Claude Code local settings (personal permissions - do not commit)
 .claude/settings.local.json
+
+# Agent/assistant instruction files (local operation only)
+AGENTS.md
+.github/copilot-instructions.md
+.claude/

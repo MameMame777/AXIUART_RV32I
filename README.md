@@ -290,8 +290,8 @@ AXIUART_RV32I/
 
 ```powershell
 # Windows
-$env:DSIM_HOME = "C:\Program Files\Altair\DSim\2025.1"
-$env:DSIM_LICENSE = "%LOCALAPPDATA%\metrics-ca\dsim-license.json"
+$env:DSIM_HOME = "<DSIM installation path>"
+$env:DSIM_LICENSE = "$env:LOCALAPPDATA\\metrics-ca\\dsim-license.json"
 
 # Install Python dependencies
 pip install pyserial
