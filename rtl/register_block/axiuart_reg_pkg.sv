@@ -4,7 +4,7 @@
 //
 // AUTO-GENERATED FILE - DO NOT EDIT MANUALLY
 // Generated from: register_map/axiuart_registers.json
-// Generation time: 2026-02-04T04:42:25.227793
+// Generation time: 2026-02-21T20:45:42.867412
 //
 // To regenerate:
 //     python software/axiuart_driver/tools/gen_registers.py --in register_map/axiuart_registers.json
