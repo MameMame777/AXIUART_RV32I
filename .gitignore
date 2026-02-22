@@ -189,3 +189,7 @@ software/rv32i/c/*.map
 AGENTS.md
 .github/copilot-instructions.md
 .claude/
+
+PandR/axi4_rv32i.tcl
+
+PandR/axi4_rv32i/axi4_rv32i.xpr
