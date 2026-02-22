@@ -177,6 +177,11 @@ vexriscv_reference/generated/VexRiscv.v
 
 vexriscv_reference/
 
+# C ビルド生成物 (バイナリはコミットしない)
+software/rv32i/c/*.elf
+software/rv32i/c/*.bin
+software/rv32i/c/*.map
+
 # Claude Code local settings (personal permissions - do not commit)
 .claude/settings.local.json
 
