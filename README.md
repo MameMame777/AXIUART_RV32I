@@ -15,7 +15,9 @@ UART-AXI4 bridge with integrated VexRiscv RISC-V CPU, comprehensive verification
 ✅ **Debug & Control Bridge** (Issue #55) — step/breakpoint/reset register path verified via UVM  
 ✅ **Exception Handler Tests** (Issue #75) — EBREAK/ECALL CSR encoding fixed; tests PASS  
 ✅ **Stage 3 Assertion Modules** (Issue #53) — 5 non-intrusive SVA modules implemented  
-✅ **Hardware Bring-up Tool** — `software/rv32i/led_blink.py` for FPGA bring-up via UART
+✅ **Hardware Bring-up Tool** — `software/rv32i/led_blink.py` for FPGA bring-up via UART  
+✅ **RV32I Instruction Coverage Tests** — `software/exec/coverage_test.py` covers ~79% of RV32I ISA  
+✅ **C Toolchain Pipeline** — GCC (xPack riscv-none-elf-gcc) → ELF → .bin → FPGA execution via `scripts/build_c.ps1`
 
 ## Project Overview
 
@@ -230,6 +232,9 @@ pip install pyserial
 # LED blink hardware bring-up (requires FPGA connected via UART)
 python software/rv32i/led_blink.py --port COM3
 
+# RV32I instruction coverage test (~79% ISA coverage)
+python software/exec/coverage_test.py --port COM3
+
 # LED control demo (interactive mode)
 cd software
 python -m axiuart_driver.examples.led_control interactive
@@ -241,6 +246,24 @@ python -m axiuart_driver.examples.led_control count
 # Basic register test
 python -m axiuart_driver.examples.example_basic
 ```
+
+### C Toolchain
+
+```powershell
+# Prerequisites: xPack riscv-none-elf-gcc (see docs/vexriscv_c_quickstart.md)
+
+# 1. Compile C program to raw binary
+pwsh scripts/build_c.ps1 led_blink
+# Output: software/rv32i/c/led_blink.bin (152 bytes, 1.9% BRAM)
+
+# 2. Load and run on FPGA (with read-back verification)
+python software/exec/c_blink.py --port COM3 --verify
+
+# One-shot: auto-build then run
+python software/exec/c_blink.py --port COM3 --build --verify
+```
+
+**Documentation:** [docs/vexriscv_c_quickstart.md](docs/vexriscv_c_quickstart.md)
 
 ## Directory Structure
 
@@ -264,15 +287,25 @@ AXIUART_RV32I/
 │   │   └── sv/                # Agents, scoreboard, coverage
 │   ├── regression_tests.json  # Regression suite definitions
 │   └── exec/                  # Simulation outputs (logs, waves)
+├── software/               # Python control software
+│   ├── axiuart_driver/        # UART driver library
+│   ├── exec/                  # Host-side execution scripts
+│   │   ├── computation_test.py  # RV32I assembly-level tests
+│   │   ├── coverage_test.py     # RV32I instruction coverage (~79%)
+│   │   └── c_blink.py           # C program loader & FPGA runner
+│   └── rv32i/                 # FPGA bring-up tools
+│       ├── led_blink.py       # HW bring-up: LED blink via UART
+│       ├── bin_loader.py      # .bin → list[int] loader
+│       ├── c/                 # C source files
+│       │   ├── crt0.s         # Bare-metal startup (SP init, .bss clear)
+│       │   ├── rv32i_bram.ld  # Linker script (8KB BRAM @ 0x80000000)
+│       │   └── led_blink.c    # LED knight rider demo
+│       └── README.md
 ├── scripts/                # PowerShell workflow scripts
+│   ├── build_c.ps1            # C toolchain: GCC → ELF → .bin (auto-detects xPack GCC)
 │   ├── run_test.ps1           # Single test runner
 │   ├── run_regression.ps1     # Regression runner
 │   └── clean_logs.ps1         # Log cleanup
-├── software/               # Python control software
-│   ├── axiuart_driver/        # UART driver library
-│   └── rv32i/                 # FPGA bring-up tools
-│       ├── led_blink.py       # HW bring-up: LED blink via UART
-│       └── README.md
 └── register_map/           # Single source of truth for registers
     └── axiuart_registers.json
 ```
@@ -285,6 +318,7 @@ AXIUART_RV32I/
 - **Python**: 3.8+ with pyserial
 - **SystemVerilog**: IEEE 1800-2017 compliant
 - **UVM**: Version 1.2
+- **riscv-none-elf-gcc**: xPack GNU RISC-V Embedded GCC (for C compilation)
 
 ### Environment Setup
 
@@ -310,6 +344,8 @@ pip install pyserial
 | Stage 3 SVA Assertions | 5 modules: hazard / pipeline / bypass / jump / FIFO | ✅ IMPLEMENTED |
 | Python Driver | UART driver library | ✅ PASS |
 | HW Bring-up Tool | `led_blink.py` via UART | ✅ IMPLEMENTED |
+| RV32I Coverage Tests | `coverage_test.py` — 37/47 instructions (~79%) | ✅ PASS |
+| C Toolchain | GCC → .bin → FPGA (152 bytes `led_blink.c`) | ✅ IMPLEMENTED |
 
 **Simulator**: Altair DSim 2025.1 — 0 compilation warnings  
 **Last full regression**: Stage 1 all PASS (2026-02-15)
@@ -325,3 +361,4 @@ See [LICENSE](LICENSE) file for details.
 - [Simulation Environment](sim/README.md)
 - [Python Driver Documentation](software/axiuart_driver/axiuart_driver.md)
 - [LED Control Guide](software/axiuart_driver/examples/LED_CONTROL_README.md)
+- [C Toolchain Quickstart](docs/vexriscv_c_quickstart.md)
